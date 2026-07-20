@@ -102,7 +102,19 @@ def test_production_rejects_open_registration():
         Settings(
             environment="production",
             jwt_secret="s" * 40,
+            dashscope_api_key="production-embedding-key",
             registration_mode="open",
+            _env_file=None,
+        )
+
+
+def test_production_rejects_missing_embedding_configuration():
+    with pytest.raises(ValidationError, match="DASHSCOPE_API_KEY"):
+        Settings(
+            environment="production",
+            jwt_secret="s" * 40,
+            registration_mode="closed",
+            dashscope_api_key=None,
             _env_file=None,
         )
 
@@ -132,6 +144,7 @@ def test_production_accepts_invite_or_closed_registration_with_secure_settings()
     invited = Settings(
         environment="production",
         jwt_secret="s" * 40,
+        dashscope_api_key="production-embedding-key",
         registration_mode="invite",
         registration_invite_secret=VALID_INVITE_SECRET,
         _env_file=None,
@@ -139,6 +152,7 @@ def test_production_accepts_invite_or_closed_registration_with_secure_settings()
     closed = Settings(
         environment="production",
         jwt_secret="s" * 40,
+        dashscope_api_key="production-embedding-key",
         registration_mode="closed",
         _env_file=None,
     )

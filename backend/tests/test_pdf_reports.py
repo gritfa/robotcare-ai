@@ -1,4 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 import re
+
+from pypdf import PdfReader
 
 from conftest import auth, image_bytes, register, submit_feedback
 
@@ -73,6 +76,31 @@ def test_unresolved_pdf_report_is_valid_nonempty_and_idempotent(client):
     assert text_report.status_code == 200
     assert "故障截图.png" in text_report.json()["content"]
     assert "来源：" in text_report.json()["content"]
+
+
+def test_concurrent_pdf_creation_is_idempotent_complete_and_cleans_temporaries(client):
+    token = register(client, "pdf-concurrent@example.com")["access_token"]
+    diagnostic_id = create_diagnostic(client, token)
+    finish(client, token, diagnostic_id, "not_resolved")
+    endpoint = f"/api/v1/diagnostics/{diagnostic_id}/report/pdf"
+
+    def create_pdf(_index: int):
+        return client.post(endpoint, headers=auth(token))
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(create_pdf, range(2)))
+
+    assert [response.status_code for response in responses] == [201, 201]
+    assert responses[0].json() == responses[1].json()
+
+    stored_files = list(client.app.state.report_dir.iterdir())
+    assert len(stored_files) == 1
+    pdf_path = stored_files[0]
+    assert pdf_path.suffix == ".pdf"
+    assert pdf_path.read_bytes().startswith(b"%PDF-")
+    assert len(PdfReader(str(pdf_path)).pages) >= 1
+    assert not list(client.app.state.report_dir.glob("*.tmp"))
+    assert not list(client.app.state.report_dir.glob(".*.tmp"))
 
 
 def test_resolved_diagnostic_cannot_generate_pdf_report(client):

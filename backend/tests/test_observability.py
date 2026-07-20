@@ -170,6 +170,19 @@ def test_ready_rejects_an_unversioned_but_reachable_database(client):
     assert payload["components"]["alembic"]["at_head"] is False
 
 
+def test_ready_requires_embedding_configuration_in_production(tmp_path, monkeypatch):
+    client, app = _migrated_client(tmp_path, monkeypatch)
+    app.state.environment = "production"
+    app.state.embedding_configured = False
+
+    with client:
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    component = response.json()["components"]["embedding"]
+    assert component == {"status": "error", "configured": False, "required": True}
+
+
 def test_redact_recursively_covers_identity_credentials_and_image_content():
     value = {
         "profile": {

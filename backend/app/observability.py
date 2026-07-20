@@ -284,6 +284,15 @@ def readiness_status(application: FastAPI, trace_id: str) -> tuple[int, dict[str
 
     components["attachments"] = _storage_component(application.state.attachment_dir)
     components["reports"] = _storage_component(application.state.report_dir)
+    production = getattr(application.state, "environment", "development") == "production"
+    embedding_configured = bool(
+        getattr(application.state, "embedding_configured", False)
+    )
+    components["embedding"] = {
+        "status": "ok" if embedding_configured or not production else "error",
+        "configured": embedding_configured,
+        "required": production,
+    }
     is_ready = all(component["status"] == "ok" for component in components.values())
     return (
         200 if is_ready else 503,

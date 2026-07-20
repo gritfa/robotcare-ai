@@ -8,23 +8,25 @@
 
 | 子系统 | 状态 | 说明 |
 | --- | --- | --- |
-| FastAPI 后端 | `【已验证】` | 认证生命周期、邀请码注册策略、设备、诊断、安全、版本化流程、Alembic、附件、报告、检索、管理员与可观测性全量回归为 `111 passed, 1 skipped`；唯一跳过项是真实 PostgreSQL 集成测试 |
-| Vue 3 前端 | `【已验证】` | 用户主链路、邀请码传递、管理员控制台与认证恢复共 `28 passed`；`vue-tsc` 和生产构建通过，Vite 转换 1702 个模块 |
-| Microsoft Edge E2E | `【已验证：本机关键链路】` | 本机真实 Edge 完成注册→设备→诊断→报告/PDF、诊断刷新恢复、跨用户隔离与普通用户管理员拒绝，共 `3 passed`；使用隔离 SQLite 测试库，不代表 PostgreSQL/Docker/HTTPS |
+| FastAPI 后端 | `【已验证】` | 分类冲突、知识安全/健康、并发报告/附件、认证及既有主链路全量回归为 `137 passed, 1 skipped`；唯一跳过项是真实 PostgreSQL 集成测试 |
+| Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、分类确认、安全卡片、知识健康及认证恢复共 `33 passed`；生产构建通过，Vite 转换 1705 个模块 |
+| Microsoft Edge E2E | `【已验证：本机关键链路】` | 本机真实 Edge 完成原 3 条闭环，并新增分类冲突改选和持久安全阻断，共 `5 passed (38.4s)`；命令以 0 正常退出，隔离 SQLite 不代表 PostgreSQL/Docker/HTTPS |
+| 分类与流程一致性 | `【已验证】` | 型号级确定性关键词/错误码候选；明显冲突拒绝创建，模糊场景要求用户确认；用户选择、系统候选和最终类别写入会话与报告 |
+| 知识安全与业务健康 | `【已验证：本地】` | 高风险检索在 Embedding 前阻断；普通用户不能覆盖阈值；`/knowledge/health` 区分正常、知识降级和外部模型不可用；版本化发布清单支持 SHA256 校验、幂等与事务回滚 |
 | 认证生命周期 | `【已验证】` | HttpOnly 刷新 Cookie、访问令牌会话绑定、轮换/重放撤销、自然并发宽限、退出失效、用户状态和原子数据库限流均有后端测试；前端覆盖同标签单飞、跨标签 Web Lock 与冲突重试 |
 | 可观测性基线 | `【已验证】` | `X-Request-ID`、JSON 请求/领域事件日志、递归脱敏、带 `trace_id` 的安全错误响应以及数据库/Alembic/存储就绪检查均通过测试；尚未接入外部日志、告警或 OpenTelemetry |
-| 高风险输入阻断 | `【已验证】` | 后端确定性规则覆盖冒烟、焦味、异常发热、电池损坏、内部进水、拆机、内部维修、短接、绕过保护和非官方改装；17 个安全测试通过 |
+| 高风险输入阻断 | `【已验证】` | 诊断和知识检索共享确定性规则；覆盖主要高风险类别和“没有冒烟”等否定语义；前端使用持久安全卡片而非仅 Toast |
 | 反馈幂等与并发 | `【已验证】` | 请求携带当前 `step_id`；重复、旧步骤和两请求并发只允许一条执行记录，冲突返回 409 |
-| 图片上传安全 | `【已验证】` | Pillow 真实解码，校验格式/MIME/扩展名、5MB、2500 万像素、每会话 5 张和会话状态；删除失败进入可追踪清理记录 |
+| 图片上传安全 | `【已验证】` | Pillow 真实解码及既有限制不变；SQLite 进程锁/PostgreSQL 会话行锁保证并发上传最多 5 张，失败不遗留数据库记录或孤立文件 |
 | 官方说明书证据 | `【已验证】` | JH69U1、VC35U1 官方 PDF 已下载、校验 SHA256、按页解析并完成指定页面目视检查；原始 PDF 不提交公开仓库 |
 | 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；4 条逐步骤说明书复核流程已发布，1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
-| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；发布版本不可原地修改；Alembic head `20260720_0003` 和生产启动 revision 门禁通过测试 |
+| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；发布版本不可原地修改；Alembic head `20260720_0004` 新增分类决策证据并通过零漂移检查 |
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
 | RAG/安全评测数据与离线审计 | `【已验证】` | 已形成 113 条分项用例；离线实际执行 `safety_block 15/15`、`source_page 14/14`、`step_selection 14/14`，JSON/Markdown 报告已保存；113 条均为 `needs_human_review` |
 | 完整 RAG 在线评测 | `【计划】` | `model_isolation`、`retrieval_recall`、`refusal`、`classification`、`faithfulness` 均为 `not_run`；当前不生成自然语言答案，也不能称评测集已人工审核 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 双方言 256 维字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚已通过单元、静态编译与 SQLite 回归 |
 | PostgreSQL + pgvector 真实运行 | `【待验证】` | 集成测试与 smoke 脚本已编写，但本机无 Docker/psql，远端 CI 尚未运行，不能声称 PostgreSQL 迁移、索引命中或运行健康已完成 |
-| PDF 售后报告 | `【已验证】` | 未解决会话可幂等生成和受权下载中文 PDF；跨用户访问、无效状态、文件头与随机存储名测试通过，示例已渲染目视检查 |
+| PDF 售后报告 | `【已验证】` | 并发请求返回同一报告；PDF 采用目标锁、临时文件和原子替换，验证 `%PDF-`/`%%EOF`；Edge 下载校验文件存在、非空和文件头 |
 | 管理员后端与审计 | `【已验证】` | 后端 RBAC、`AuditLog`、7 个管理员接口、安全管理员 CLI、型号停用语义均通过单元/API/迁移测试 |
 | 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；本机 Edge 已验证普通用户访问管理员页面被拒绝，管理员内容运营 E2E 仍为【计划】 |
 | 管理员完整内容运营 | `【计划】` | 知识上传/重建/停用、流程审核发布、评测执行与结果持久化尚未实现，不能称管理后台全部完成 |
@@ -39,7 +41,7 @@
 cd backend
 $base = Join-Path $env:TEMP ('robotcare_pytest_' + [guid]::NewGuid().ToString('N'))
 python -m pytest -q -p no:cacheprovider --basetemp $base
-# 111 passed, 1 skipped
+# 137 passed, 1 skipped
 ```
 
 前端：
@@ -49,7 +51,7 @@ cd frontend
 npm.cmd ci --cache .npm-cache
 npm.cmd run test
 npm.cmd run build
-# 28 passed；vue-tsc 与 Vite production build 通过，1702 modules transformed
+# 33 passed；vue-tsc 与 Vite production build 通过，1705 modules transformed
 ```
 
 本机 Microsoft Edge 关键链路：
@@ -57,7 +59,7 @@ npm.cmd run build
 ```powershell
 cd frontend
 npm.cmd run test:e2e:edge
-# 3 passed
+# 5 passed (38.4s)，命令正常退出
 ```
 
 知识数据：
@@ -98,9 +100,20 @@ cd backend
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 
-API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260720_0003`：`0002` 新增管理员审计日志，`0003` 新增用户状态、认证会话、刷新令牌与登录限流表；`create_all()` 仅保留给显式开启的隔离测试。
+API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260720_0004`：`0003` 新增认证生命周期表，`0004` 新增诊断分类决策证据；`create_all()` 仅保留给显式开启的隔离测试。
 
-本地旧开发库已通过迁移升级，并保留 `robotcare.db.pre-alembic-20260720.bak`、`robotcare.db.pre-admin-0002-20260720.bak` 与本轮 `robotcare.db.pre-auth-0003-20260720.bak` 备份；4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留。
+本地开发库已备份为 `robotcare.db.pre-category-0004-20260720.bak` 并升级到 `0004`；4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留。
+
+## 生产知识发布
+
+Web Worker 不自动抓取或重建知识。运维人员将两份官方 PDF 和发布清单放入外部只读挂载目录，确认 SHA256 后执行：
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.knowledge_cli release --manifest <外部目录>\release.json
+```
+
+清单格式参考 `knowledge/release_manifest.example.json`。命令要求数据库已处于 Alembic head，校验型号、来源、SHA256、`text-embedding-v4` 和 256 维；重复发布幂等，整包失败回滚。生产环境缺少 DashScope Key 时配置门禁拒绝启动完整知识能力；这些实现/测试证据不等于真实 PostgreSQL 或 Docker 发布已经运行。
 
 ## 认证与可观测性基线
 
@@ -108,7 +121,7 @@ API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝
 - 【已验证】访问 JWT 含 `sid` 并绑定服务器端 `AuthSession`。刷新采用条件更新轮换；默认 5 秒内的自然并发重复消费返回 `409 + Retry-After` 且不撤销会话，超过宽限的旧令牌重放返回 401 并撤销整个会话。`POST /api/v1/auth/logout` 返回 204、删除 Cookie 并撤销会话。
 - 【已验证】用户状态为 `active/disabled`；停用用户不能登录、刷新或继续使用既有访问令牌，前端收到对应 403 会清理认证状态。登录失败计数使用 SQLite/PostgreSQL 方言原子 UPSERT，并在密码校验前用事务锁按账户串行化门禁；8 路登录 API 并发测试仍严格在第 5 次失败时锁定。默认窗口/锁定时间均为 15 分钟，返回 `429` 与 `Retry-After`。键值使用 JWT 密钥派生的 HMAC，不保存原邮箱或 IP。
 - 【已验证】所有响应带 `X-Request-ID`；HTTP/校验错误的 JSON 顶层包含 `trace_id`，422 不回显 Pydantic 的 `input/ctx`，未处理异常统一返回通用 500。请求日志只记录方法、路径、状态和耗时，不记录请求头、查询参数或正文；敏感键递归脱敏。
-- 【已验证】`GET /health` 是存活探针；`GET /ready` 检查数据库连通、Alembic 是否处于 head、附件和报告目录是否可写，任一失败返回 503。本地迁移库实际启动已获得 `/health 200` 与 `/ready 200`。
+- 【已验证】`GET /health` 只表示存活；`GET /ready` 检查数据库、Alembic、存储和生产 Embedding 配置；`GET /api/v1/knowledge/health` 另检查两个必做型号的文档、分片、向量和 SHA256，不能用进程存活冒充业务知识就绪。
 - 【已验证】领域日志覆盖安全阻断、诊断创建/状态变化、知识检索来源/文档 SHA256/页码/分数/耗时，以及 embedding 模型/条数/维度/耗时/结果；不记录用户故障描述、检索文本、分片内容或模型输入。
 - 【已验证】注册策略支持 `open/invite/closed`。生产环境禁止 `open`，邀请码模式要求至少 16 字符且拒绝示例占位值；缺失或错误邀请码与关闭注册统一返回通用 403，避免泄露策略细节。Compose 默认使用 `invite`，真实邀请码必须由部署环境注入。
 - 【计划】邀请码生命周期管理/轮换、独立注册限流、邮箱验证、垃圾账户清理、修改密码、找回密码、账户删除/个人数据清理，以及外部日志平台、指标告警、分布式 Trace/OTel 仍未实现。

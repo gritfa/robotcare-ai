@@ -146,6 +146,7 @@ class DiagnosticCreate(BaseModel):
     issue_category_code: str
     issue_description: str = Field(min_length=3, max_length=4000)
     error_code: str | None = Field(default=None, max_length=100)
+    confirm_category_mismatch: bool = False
 
 
 class StepRead(ORMModel):
@@ -174,6 +175,7 @@ class DiagnosticRead(ORMModel):
     device_id: int
     issue_description: str
     error_code: str | None
+    category_decision: dict[str, object] = Field(default_factory=dict)
     status: str
     current_position: int | None
     resolved: bool | None
@@ -221,10 +223,11 @@ class AttachmentRead(ORMModel):
 
 
 class KnowledgeSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     robot_model_id: int = Field(gt=0)
     query: str = Field(min_length=1, max_length=2000)
     top_k: int = Field(default=5, ge=1, le=20)
-    min_score: float = Field(default=0.25, ge=0, le=1)
 
 
 class KnowledgeSearchResult(BaseModel):
@@ -241,3 +244,15 @@ class KnowledgeStatusRead(BaseModel):
     document_count: int
     chunk_count: int
     vector_count: int
+
+
+class KnowledgeModelHealthRead(KnowledgeStatusRead):
+    document_sha256s: list[str]
+    ready: bool
+
+
+class KnowledgeHealthRead(BaseModel):
+    status: Literal["normal", "knowledge_degraded", "external_model_unavailable"]
+    ready: bool
+    embedding_configured: bool
+    models: list[KnowledgeModelHealthRead]

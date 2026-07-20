@@ -46,6 +46,18 @@ export interface KnowledgeModelStatus {
   vector_count: number
 }
 
+export interface KnowledgeModelHealth extends KnowledgeModelStatus {
+  document_sha256s: string[]
+  ready: boolean
+}
+
+export interface KnowledgeHealth {
+  status: 'normal' | 'knowledge_degraded' | 'external_model_unavailable'
+  ready: boolean
+  embedding_configured: boolean
+  models: KnowledgeModelHealth[]
+}
+
 export interface AdminOverview {
   user_count: number
   active_model_count: number

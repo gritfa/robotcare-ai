@@ -240,6 +240,7 @@ class DiagnosticSession(Base):
     flow_id: Mapped[int] = mapped_column(ForeignKey("diagnostic_flows.id"))
     issue_description: Mapped[str] = mapped_column(Text)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    category_decision: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(30), default="in_progress")
     current_position: Mapped[int | None] = mapped_column(Integer, default=1)
     resolved: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

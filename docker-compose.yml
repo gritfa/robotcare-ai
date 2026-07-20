@@ -41,6 +41,8 @@ services:
       ROBOTCARE_REPORT_DIR: /app/data/reports
       ROBOTCARE_AUTO_CREATE_SCHEMA: "false"
       ROBOTCARE_DASHSCOPE_API_KEY: ${ROBOTCARE_DASHSCOPE_API_KEY:-}
+      ROBOTCARE_KNOWLEDGE_MIN_SCORE: ${ROBOTCARE_KNOWLEDGE_MIN_SCORE:-0.25}
+      ROBOTCARE_KNOWLEDGE_MIN_SCORE_OVERRIDES: ${ROBOTCARE_KNOWLEDGE_MIN_SCORE_OVERRIDES:-{}}
       ROBOTCARE_PDF_FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
     ports:
       # Keep the application server off public interfaces. A host-level HTTPS
@@ -62,6 +64,7 @@ services:
       start_period: 30s
     volumes:
       - backend_data:/app/data
+      - ${ROBOTCARE_KNOWLEDGE_RELEASE_DIR:-./knowledge/external}:/knowledge-release:ro
 
   frontend:
     build:

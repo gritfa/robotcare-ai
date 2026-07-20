@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
-import type { AdminAuditLog, AdminModel, AdminOverview, AdminSafetyBlock, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeModelStatus, KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
+import type { AdminAuditLog, AdminModel, AdminOverview, AdminSafetyBlock, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
 
 export { TOKEN_KEY } from './authSession'
@@ -140,12 +140,124 @@ http.interceptors.response.use(undefined, async (error: AxiosError) => {
   }
 })
 
-export function apiError(error: unknown, fallback = '请求失败，请稍后重试') {
-  if (axios.isAxiosError(error)) {
-    const data = error.response?.data as { detail?: string; message?: string } | undefined
-    return data?.detail || data?.message || fallback
+export type ApiErrorCode =
+  | 'SAFETY_BLOCKED'
+  | 'ISSUE_CATEGORY_MISMATCH'
+  | 'STALE_DIAGNOSTIC_STEP'
+  | 'FEEDBACK_CONFLICT'
+  | 'AUTHENTICATION_REQUIRED'
+  | 'RATE_LIMITED'
+  | (string & {})
+
+export interface ApiValidationIssue {
+  location: Array<string | number>
+  message: string
+  type?: string
+}
+
+export interface ApiErrorInfo {
+  code?: ApiErrorCode
+  message: string
+  status?: number
+  validationIssues: ApiValidationIssue[]
+  selectedCategory?: string
+  suggestedCategories: string[]
+  requiresConfirmation: boolean
+  blocked: boolean
+  category?: string
+  riskLevel?: string
+  reason?: string
+  officialServiceAdvice?: string
+  shouldPowerOff?: boolean
+  retryAfterSeconds?: number
+  raw: unknown
+}
+
+type ErrorObject = Record<string, unknown>
+
+function record(value: unknown): ErrorObject | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as ErrorObject
+    : null
+}
+
+function text(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function validationIssues(value: unknown): ApiValidationIssue[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const issue = record(item)
+    const message = text(issue?.msg) || text(issue?.message)
+    if (!issue || !message) return []
+    return [{
+      location: Array.isArray(issue.loc) ? issue.loc.filter(part => ['string', 'number'].includes(typeof part)) as Array<string | number> : [],
+      message,
+      type: text(issue.type),
+    }]
+  })
+}
+
+function suggestedCategoryCodes(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.flatMap((item) => {
+    if (typeof item === 'string' && item.trim()) return [item.trim()]
+    const candidate = record(item)
+    const code = text(candidate?.code) || text(candidate?.issue_category_code) || text(candidate?.category)
+    return code ? [code] : []
+  }))]
+}
+
+function retryAfterSeconds(error: unknown) {
+  if (!axios.isAxiosError(error)) return undefined
+  const headers = error.response?.headers as { get?: (name: string) => unknown; [name: string]: unknown } | undefined
+  const raw = headers?.get?.('retry-after') ?? headers?.['retry-after']
+  const seconds = Number(raw)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined
+}
+
+export function parseApiError(error: unknown, fallback = '请求失败，请稍后重试'): ApiErrorInfo {
+  const status = axios.isAxiosError(error) ? error.response?.status : undefined
+  const responseBody = axios.isAxiosError(error) ? error.response?.data : undefined
+  const body = record(responseBody)
+  const detail = body && 'detail' in body ? body.detail : responseBody
+  const business = record(detail) || body
+  const issues = validationIssues(detail)
+  const explicitCode = text(business?.code)
+  const code: ApiErrorCode | undefined = explicitCode
+    || (status === 401 ? 'AUTHENTICATION_REQUIRED' : status === 429 ? 'RATE_LIMITED' : undefined)
+  const objectMessage = text(business?.message) || text(business?.reason) || text(body?.message)
+  const arrayMessage = issues.map(issue => issue.message).join('；')
+  const message = text(detail)
+    || objectMessage
+    || arrayMessage
+    || (error instanceof Error && !axios.isAxiosError(error) ? error.message : undefined)
+    || fallback
+
+  return {
+    code,
+    message,
+    status,
+    validationIssues: issues,
+    selectedCategory: text(business?.selected_category) || text(business?.selected),
+    suggestedCategories: suggestedCategoryCodes(business?.suggested_categories).length
+      ? suggestedCategoryCodes(business?.suggested_categories)
+      : suggestedCategoryCodes([business?.suggested]),
+    requiresConfirmation: business?.requires_confirmation === true,
+    blocked: business?.blocked === true || code === 'SAFETY_BLOCKED',
+    category: text(business?.category),
+    riskLevel: text(business?.risk_level),
+    reason: text(business?.reason),
+    officialServiceAdvice: text(business?.official_service_advice) || text(business?.advice),
+    shouldPowerOff: typeof business?.should_power_off === 'boolean' ? business.should_power_off : undefined,
+    retryAfterSeconds: retryAfterSeconds(error),
+    raw: detail,
   }
-  return error instanceof Error ? error.message : fallback
+}
+
+export function apiError(error: unknown, fallback = '请求失败，请稍后重试') {
+  return parseApiError(error, fallback).message
 }
 function payload<T>(value: unknown): T {
   const body = value as { data?: unknown }
@@ -190,7 +302,7 @@ export const deviceApi = {
 export const diagnosticApi = {
   list: async () => listPayload<Diagnostic>((await http.get('/diagnostics')).data),
   get: async (id: EntityId) => payload<Diagnostic>((await http.get(`/diagnostics/${id}`)).data),
-  create: async (body: { device_id: EntityId; issue_category_code: string; issue_description: string; error_code?: string }) => payload<Diagnostic>((await http.post('/diagnostics', body)).data),
+  create: async (body: { device_id: EntityId; issue_category_code: string; issue_description: string; error_code?: string; confirm_category_mismatch?: boolean }) => payload<Diagnostic>((await http.post('/diagnostics', body)).data),
   currentStep: async (id: EntityId) => payload<DiagnosticStep | null>((await http.get(`/diagnostics/${id}/steps/current`)).data),
   feedback: async (id: EntityId, stepId: EntityId, resolved: boolean) => payload<{diagnostic:Diagnostic;current_step:DiagnosticStep|null}>((await http.post(`/diagnostics/${id}/feedback`, { step_id: stepId, outcome: resolved ? 'resolved' : 'not_resolved' })).data),
   attachments: async (id: EntityId) => listPayload<Attachment>((await http.get(`/diagnostics/${id}/attachments`)).data),
@@ -213,6 +325,7 @@ export const knowledgeApi = {
     const response = await http.post('/knowledge/search', body)
     return listPayload<KnowledgeSearchResult>(response.data)
   },
+  health: async () => payload<KnowledgeHealth>((await http.get('/knowledge/health')).data),
   status: async () => listPayload<KnowledgeModelStatus>((await http.get('/knowledge/status')).data),
 }
 

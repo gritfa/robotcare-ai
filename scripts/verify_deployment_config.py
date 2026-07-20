@@ -63,6 +63,23 @@ def main() -> None:
         "registration invite secret must come from the external environment",
     )
     require(
+        backend_env["ROBOTCARE_DASHSCOPE_API_KEY"]
+        == "${ROBOTCARE_DASHSCOPE_API_KEY:-}",
+        "embedding key must come from the external environment",
+    )
+    require(
+        backend_env["ROBOTCARE_KNOWLEDGE_MIN_SCORE"]
+        == "${ROBOTCARE_KNOWLEDGE_MIN_SCORE:-0.25}",
+        "knowledge threshold must be controlled by the server environment",
+    )
+    require(
+        any(
+            isinstance(item, str) and ":/knowledge-release:ro" in item
+            for item in backend["volumes"]
+        ),
+        "knowledge release source must be mounted read-only",
+    )
+    require(
         backend_env["ROBOTCARE_REFRESH_COOKIE_SECURE"]
         == "${ROBOTCARE_REFRESH_COOKIE_SECURE:-true}",
         "refresh cookies must default to Secure",

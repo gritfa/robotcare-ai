@@ -3,7 +3,8 @@ import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Camera, Close, InfoFilled, Plus, Warning } from '@element-plus/icons-vue'
-import { apiError, deviceApi, diagnosticApi, modelApi } from '../api'
+import { apiError, deviceApi, diagnosticApi, modelApi, parseApiError, type ApiErrorInfo } from '../api'
+import SafetyBlockCard from '../components/SafetyBlockCard.vue'
 import { diagnosticOptionKey, robotModelIdForDevice, visibleDiagnosticOptions } from '../diagnosticOptions'
 import type { Device, DiagnosticOption } from '../types'
 
@@ -26,6 +27,8 @@ const submitting = ref(false)
 const initialLoading = ref(true)
 const optionsLoading = ref(false)
 const optionsError = ref('')
+const safetyError = ref<ApiErrorInfo | null>(null)
+const categoryMismatch = ref<ApiErrorInfo | null>(null)
 const route = useRoute()
 const router = useRouter()
 const form = reactive({ device_id: '', issue_category_code: '', issue_description: '', error_code: '' })
@@ -78,6 +81,8 @@ onBeforeUnmount(() => selectedImages.value.forEach(image => URL.revokeObjectURL(
 function selectDiagnosticOption(option: DiagnosticOption) {
   selectedOptionKey.value = diagnosticOptionKey(option)
   form.issue_category_code = option.issue_category_code
+  categoryMismatch.value = null
+  safetyError.value = null
 }
 
 function openFilePicker() {
@@ -119,18 +124,37 @@ function removeImage(id: string) {
   selectedImages.value.splice(index, 1)
 }
 
-async function submit() {
+function categoryLabel(code: string) {
+  const option = diagnosticOptions.value.find(item => item.issue_category_code === code)
+  return option ? `${option.issue_category_name} · ${option.title}` : code
+}
+
+async function retryWithCategory(code: string) {
+  const option = diagnosticOptions.value.find(item => item.issue_category_code === code)
+  if (!option) {
+    ElMessage.error('建议的诊断类型当前不可用，请刷新页面或联系售后')
+    return
+  }
+  selectedOptionKey.value = diagnosticOptionKey(option)
+  form.issue_category_code = option.issue_category_code
+  categoryMismatch.value = null
+  await submit(false)
+}
+
+async function submit(confirmCategoryMismatch = false) {
   if (!form.device_id || !form.issue_category_code || form.issue_description.trim().length < 3) {
     return ElMessage.warning('请选择设备和问题类型，并至少输入 3 个字的问题描述')
   }
 
   submitting.value = true
+  safetyError.value = null
   try {
     const diagnostic = await diagnosticApi.create({
       device_id: form.device_id,
       issue_category_code: form.issue_category_code,
       issue_description: form.issue_description.trim(),
       error_code: form.error_code.trim() || undefined,
+      confirm_category_mismatch: confirmCategoryMismatch || undefined,
     })
 
     let failedUploads = 0
@@ -144,7 +168,15 @@ async function submit() {
     if (failedUploads) ElMessage.warning(`诊断已创建，但有 ${failedUploads} 张图片上传失败`)
     await router.push(`/diagnostics/${diagnostic.id}`)
   } catch (error) {
-    ElMessage.error(apiError(error, '诊断创建失败，请确认当前流程仍然可用'))
+    const parsed = parseApiError(error, '诊断创建失败，请确认当前流程仍然可用')
+    if (parsed.code === 'SAFETY_BLOCKED') {
+      safetyError.value = parsed
+      categoryMismatch.value = null
+    } else if (parsed.code === 'ISSUE_CATEGORY_MISMATCH') {
+      categoryMismatch.value = parsed
+    } else {
+      ElMessage.error(parsed.message)
+    }
   } finally {
     submitting.value = false
   }
@@ -159,6 +191,8 @@ async function submit() {
         <p>选择你的设备后，系统只展示该型号已经发布的安全诊断流程。</p>
       </div>
     </div>
+
+    <SafetyBlockCard v-if="safetyError" :error="safetyError" />
 
     <div v-if="devices.length" class="form-grid">
       <section class="panel form-panel">
@@ -239,12 +273,40 @@ async function submit() {
             </button>
           </div>
 
+          <section v-if="categoryMismatch" class="category-confirmation" role="alert">
+            <div>
+              <el-icon><Warning /></el-icon>
+              <div>
+                <h3>问题描述与所选类型可能不一致</h3>
+                <p>为避免执行错误流程，请改选建议类型，或明确确认仍使用原类型。</p>
+              </div>
+            </div>
+            <div v-if="categoryMismatch.suggestedCategories.length" class="suggestions">
+              <span>系统候选</span>
+              <el-button
+                v-for="code in categoryMismatch.suggestedCategories"
+                :key="code"
+                plain
+                type="warning"
+                :disabled="submitting"
+                @click="retryWithCategory(code)"
+              >改选“{{ categoryLabel(code) }}”并重试</el-button>
+            </div>
+            <el-button
+              v-if="categoryMismatch.requiresConfirmation"
+              type="danger"
+              plain
+              :loading="submitting"
+              @click="submit(true)"
+            >我已核对，仍使用“{{ categoryLabel(categoryMismatch.selectedCategory || form.issue_category_code) }}”</el-button>
+          </section>
+
           <el-button
             class="brand-button submit"
             type="primary"
             :loading="submitting"
             :disabled="optionsLoading || !diagnosticOptions.length"
-            @click="submit"
+            @click="submit()"
           >创建诊断并查看第一步</el-button>
         </el-form>
       </section>
@@ -275,4 +337,5 @@ async function submit() {
 
 <style scoped>
 .narrow{max-width:1220px}.form-grid{display:grid;grid-template-columns:1fr 300px;gap:20px}.form-panel{padding:30px}.option-state{width:100%;min-height:90px}.categories{display:grid;grid-template-columns:1fr 1fr;gap:9px;width:100%}.categories button{background:#fff;border:1px solid var(--line);padding:12px;text-align:left;border-radius:9px;color:#53655e;cursor:pointer;display:grid;grid-template-columns:16px 1fr;align-items:center}.categories button span{grid-row:1/3;display:inline-block;width:8px;height:8px;border-radius:50%;background:#cad6d1;margin-right:8px}.categories button b{font-size:13px}.categories button small{grid-column:2;color:var(--muted);margin-top:3px}.categories button.active{border-color:var(--brand);background:var(--soft);color:var(--brand);font-weight:700}.categories button.active span{background:var(--brand)}.upload-box{border:1px dashed #becdc7;border-radius:12px;padding:17px;background:#f8faf9}.upload-heading{display:grid;grid-template-columns:32px 1fr auto;gap:12px;align-items:center;color:#84908b}.upload-heading>.el-icon{font-size:24px}.upload-heading b{font-size:13px;color:#53655e}.upload-heading p{font-size:11px;margin:5px 0 0;line-height:1.5}.upload-heading>span{font-size:12px}.file-input{display:none}.upload-trigger{width:100%;min-height:105px;margin-top:15px;border:1px dashed #b8c8c1;border-radius:9px;background:#fff;color:var(--brand);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}.upload-trigger .el-icon{font-size:23px}.upload-trigger span{font-size:11px;color:var(--muted)}.preview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:15px}.preview-item,.add-image{height:118px;border-radius:9px;overflow:hidden;position:relative;background:#fff;border:1px solid var(--line)}.preview-item img{width:100%;height:88px;object-fit:cover;display:block}.preview-item button{position:absolute;right:5px;top:5px;width:25px;height:25px;padding:0;border:0;border-radius:50%;background:rgba(20,32,27,.72);color:#fff;display:grid;place-items:center;cursor:pointer}.preview-item small{display:block;padding:7px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}.add-image{border-style:dashed;color:var(--brand);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}.add-image .el-icon{font-size:22px}.add-image span{font-size:11px}.submit{width:100%;margin-top:24px}.notice{padding:24px}.notice>.el-icon{font-size:25px;color:var(--brand)}.notice h3{margin:15px 0 8px}.notice p,.stop p{font-size:12px;line-height:1.7;color:var(--muted)}.stop{margin-top:14px;padding:18px;border:1px solid #ffd1d1;background:#fff5f5;border-radius:12px;display:flex;gap:12px;color:#c92a2a}.stop p{color:#8f5555;margin:6px 0 0}@media(max-width:850px){.form-grid{grid-template-columns:1fr}.preview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.categories{grid-template-columns:1fr}}
+.category-confirmation{margin-top:20px;padding:18px;border:1px solid #e6a23c;border-radius:12px;background:#fff8eb}.category-confirmation>div:first-child{display:flex;gap:10px;color:#9a5b00}.category-confirmation .el-icon{font-size:24px;flex:none}.category-confirmation h3{margin:0 0 6px;font-size:15px}.category-confirmation p{margin:0;color:#7a6545;font-size:12px;line-height:1.6}.suggestions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.suggestions>span{width:100%;font-size:11px;font-weight:800;color:#8a682e}
 </style>

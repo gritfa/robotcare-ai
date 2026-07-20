@@ -62,11 +62,25 @@ RULES = (
     ),
 )
 
+NEGATION_PREFIXES = ("没有", "并无", "未见", "不存在", "不是", "没", "无", "未")
+
+
+def _match_is_negated(text: str, match: re.Match[str]) -> bool:
+    prefix = text[max(0, match.start() - 6) : match.start()]
+    matched_text = match.group(0)
+    return any(
+        prefix.endswith(marker) or marker in matched_text
+        for marker in NEGATION_PREFIXES
+    )
+
 
 def detect_safety_block(text: str) -> SafetyBlock | None:
     normalized = re.sub(r"\s+", "", text).lower()
     for rule in RULES:
-        if rule.pattern.search(normalized):
+        if any(
+            not _match_is_negated(normalized, match)
+            for match in rule.pattern.finditer(normalized)
+        ):
             return SafetyBlock(
                 category=rule.category,
                 risk_level="critical",

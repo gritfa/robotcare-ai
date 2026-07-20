@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -167,6 +169,17 @@ class KnowledgeStatus:
     vector_count: int
 
 
+@dataclass(frozen=True)
+class KnowledgeModelHealth:
+    robot_model_id: int
+    model_code: str
+    document_count: int
+    chunk_count: int
+    vector_count: int
+    document_sha256s: list[str]
+    ready: bool
+
+
 def extract_pdf_pages(pdf_path: str | Path) -> tuple[list[PageText], str | None]:
     reader = PdfReader(str(pdf_path))
     metadata_title = reader.metadata.title if reader.metadata else None
@@ -226,6 +239,7 @@ def ingest_pdf(
     source_url: str,
     provider: EmbeddingProvider,
     title: str | None = None,
+    commit: bool = True,
 ) -> IngestResult:
     path = Path(pdf_path)
     file_hash = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -281,7 +295,10 @@ def ingest_pdf(
                 for chunk, vector in zip(chunks, vectors, strict=True)
             ]
         )
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         db.refresh(document)
     except Exception:
         db.rollback()
@@ -294,6 +311,80 @@ def ingest_pdf(
         chunk_count=len(chunks),
         sha256=file_hash,
     )
+
+
+def release_knowledge_package(
+    db: Session,
+    *,
+    manifest_path: str | Path,
+    provider: EmbeddingProvider,
+) -> dict[str, object]:
+    manifest_file = Path(manifest_path)
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if (
+        not isinstance(manifest, dict)
+        or not isinstance(manifest.get("release_version"), str)
+        or manifest.get("embedding_model") != EMBEDDING_MODEL
+        or manifest.get("embedding_dimension") != EMBEDDING_DIMENSION
+        or not isinstance(manifest.get("created_at"), str)
+        or not isinstance(manifest.get("documents"), list)
+        or not manifest["documents"]
+    ):
+        raise ValueError("Invalid knowledge release manifest")
+
+    results: list[dict[str, object]] = []
+    try:
+        for entry in manifest["documents"]:
+            if not isinstance(entry, dict):
+                raise ValueError("Knowledge release document entry must be an object")
+            model_code = entry.get("model_code")
+            relative_pdf = entry.get("pdf")
+            expected_sha256 = entry.get("sha256")
+            source_url = entry.get("source_url")
+            if not all(
+                isinstance(value, str) and value
+                for value in (model_code, relative_pdf, expected_sha256, source_url)
+            ):
+                raise ValueError("Knowledge release document metadata is incomplete")
+            pdf_path = (manifest_file.parent / relative_pdf).resolve()
+            if not pdf_path.is_file():
+                raise ValueError(f"Knowledge release PDF is missing: {relative_pdf}")
+            actual_sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+            if not hmac.compare_digest(actual_sha256, expected_sha256.lower()):
+                raise ValueError(f"Knowledge release SHA256 mismatch: {model_code}")
+            robot_model = db.scalar(select(RobotModel).where(RobotModel.code == model_code))
+            if robot_model is None:
+                raise ValueError(f"Unknown robot model: {model_code}")
+            result = ingest_pdf(
+                db,
+                robot_model_id=robot_model.id,
+                pdf_path=pdf_path,
+                source_url=source_url,
+                title=entry.get("title") if isinstance(entry.get("title"), str) else None,
+                provider=provider,
+                commit=False,
+            )
+            results.append(
+                {
+                    "model_code": model_code,
+                    "document_id": result.document_id,
+                    "sha256": result.sha256,
+                    "chunk_count": result.chunk_count,
+                    "created": result.created,
+                    "changed": result.changed,
+                }
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {
+        "release_version": manifest["release_version"],
+        "embedding_model": EMBEDDING_MODEL,
+        "embedding_dimension": EMBEDDING_DIMENSION,
+        "created_at": manifest["created_at"],
+        "documents": results,
+    }
 
 
 def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float | None:
@@ -438,3 +529,52 @@ def get_knowledge_status(db: Session) -> list[KnowledgeStatus]:
         )
         for model_id, model_code, document_count, chunk_count, vector_count in rows
     ]
+
+
+def get_knowledge_health(
+    db: Session, required_model_codes: Sequence[str] = ("JH69U1", "VC35U1")
+) -> list[KnowledgeModelHealth]:
+    required = set(required_model_codes)
+    statuses = get_knowledge_status(db)
+    health: list[KnowledgeModelHealth] = []
+    for item in statuses:
+        if item.model_code not in required:
+            continue
+        sha256s = list(
+            db.scalars(
+                select(KnowledgeDocument.sha256)
+                .where(KnowledgeDocument.robot_model_id == item.robot_model_id)
+                .order_by(KnowledgeDocument.id)
+            )
+        )
+        ready = (
+            item.document_count >= 1
+            and item.chunk_count >= 1
+            and item.vector_count == item.chunk_count
+            and len(sha256s) == item.document_count
+        )
+        health.append(
+            KnowledgeModelHealth(
+                robot_model_id=item.robot_model_id,
+                model_code=item.model_code,
+                document_count=item.document_count,
+                chunk_count=item.chunk_count,
+                vector_count=item.vector_count,
+                document_sha256s=sha256s,
+                ready=ready,
+            )
+        )
+    present = {item.model_code for item in health}
+    for missing_code in sorted(required - present):
+        health.append(
+            KnowledgeModelHealth(
+                robot_model_id=0,
+                model_code=missing_code,
+                document_count=0,
+                chunk_count=0,
+                vector_count=0,
+                document_sha256s=[],
+                ready=False,
+            )
+        )
+    return sorted(health, key=lambda item: item.model_code)

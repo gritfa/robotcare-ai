@@ -18,6 +18,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .models import ServiceReport
+from .resource_locks import resource_lock
 
 PDF_FONT_NAME = "RobotCareCJK"
 
@@ -54,6 +55,33 @@ def report_pdf_path(report_dir: Path, report: ServiceReport, secret: str) -> Pat
     target = (root / f"{digest}.pdf").resolve()
     if target.parent != root:
         raise RuntimeError("Invalid PDF report path")
+    return target
+
+
+def is_complete_pdf(target: Path) -> bool:
+    if not target.is_file() or target.stat().st_size < 10:
+        return False
+    with target.open("rb") as stream:
+        if stream.read(5) != b"%PDF-":
+            return False
+        stream.seek(max(0, target.stat().st_size - 2048))
+        return b"%%EOF" in stream.read()
+
+
+def ensure_report_pdf(
+    report_dir: Path,
+    report: ServiceReport,
+    secret: str,
+) -> Path:
+    """Create a complete PDF once per process; replacement is atomic cross-process."""
+
+    target = report_pdf_path(report_dir, report, secret)
+    with resource_lock("report-pdf", str(target)):
+        if not is_complete_pdf(target):
+            render_report_pdf(report, target)
+        if not is_complete_pdf(target):
+            target.unlink(missing_ok=True)
+            raise RuntimeError("Generated PDF failed the completeness check")
     return target
 
 

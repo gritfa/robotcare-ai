@@ -2,8 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Document, InfoFilled, Link, Reading, Refresh, Search } from '@element-plus/icons-vue'
-import { apiError, deviceApi, knowledgeApi, modelApi } from '../api'
-import type { Device, KnowledgeModelStatus, KnowledgeSearchResult, RobotModel } from '../types'
+import { apiError, deviceApi, knowledgeApi, modelApi, parseApiError, type ApiErrorInfo } from '../api'
+import SafetyBlockCard from '../components/SafetyBlockCard.vue'
+import type { Device, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, RobotModel } from '../types'
 
 const TOP_K = 3
 const devices = ref<Device[]>([])
@@ -19,11 +20,23 @@ const statusLoading = ref(false)
 const searchAttempted = ref(false)
 const searchError = ref('')
 const statusError = ref('')
+const safetyError = ref<ApiErrorInfo | null>(null)
+const knowledgeHealth = ref<KnowledgeHealth | null>(null)
 
 const selectedModel = computed(() => models.value.find(model => String(model.id) === selectedModelId.value))
 const selectedStatus = computed(() => statuses.value.find(status => String(status.robot_model_id) === selectedModelId.value))
 const statusByModelId = computed(() => new Map(statuses.value.map(status => [String(status.robot_model_id), status])))
 const canSearch = computed(() => Boolean(selectedModelId.value && query.value.trim().length >= 2 && !searching.value))
+const healthPresentation = computed(() => {
+  if (!knowledgeHealth.value) return null
+  if (knowledgeHealth.value.status === 'normal') {
+    return { title: '知识检索正常', type: 'success' as const, description: '资料索引与外部向量模型均已就绪。' }
+  }
+  if (knowledgeHealth.value.status === 'knowledge_degraded') {
+    return { title: '知识库降级', type: 'warning' as const, description: '部分型号资料尚未完整就绪，检索结果可能为空或不完整。' }
+  }
+  return { title: '外部模型不可用', type: 'error' as const, description: '向量模型尚未配置，系统不会生成替代结果；请稍后重试或使用安全诊断流程。' }
+})
 
 onMounted(async () => {
   try {
@@ -62,16 +75,23 @@ function clearSearch() {
   results.value = []
   searchAttempted.value = false
   searchError.value = ''
+  safetyError.value = null
 }
 
 async function loadStatus() {
   statusLoading.value = true
   statusError.value = ''
   try {
-    statuses.value = await knowledgeApi.status()
+    knowledgeHealth.value = await knowledgeApi.health()
+    statuses.value = knowledgeHealth.value.models
   } catch (error) {
-    statuses.value = []
-    statusError.value = apiError(error, '暂时无法读取知识库状态')
+    knowledgeHealth.value = null
+    try {
+      statuses.value = await knowledgeApi.status()
+    } catch {
+      statuses.value = []
+      statusError.value = apiError(error, '暂时无法读取知识库状态')
+    }
   } finally {
     statusLoading.value = false
   }
@@ -85,12 +105,18 @@ async function searchKnowledge() {
   searching.value = true
   searchAttempted.value = true
   searchError.value = ''
+  safetyError.value = null
   results.value = []
   try {
     const found = await knowledgeApi.search({ robot_model_id: robotModelId, query: normalizedQuery, top_k: TOP_K })
     results.value = [...found].sort((a, b) => b.score - a.score)
   } catch (error) {
-    searchError.value = apiError(error, '资料检索服务暂不可用，请稍后重试')
+    const parsed = parseApiError(error, '资料检索服务暂不可用，请稍后重试')
+    if (parsed.code === 'SAFETY_BLOCKED') {
+      safetyError.value = parsed
+    } else {
+      searchError.value = parsed.message
+    }
   } finally {
     searching.value = false
   }
@@ -126,6 +152,8 @@ function safeSourceUrl(value: string) {
       <template #title>检索结果不是官方诊断</template>
       本页仅展示第三方系统检索到的资料片段，不能替代海尔官方售后判断。涉及拆机、异味、冒烟、异常高温、电池鼓包或进液时，请立即停止操作并联系官方售后。
     </el-alert>
+
+    <SafetyBlockCard v-if="safetyError" :error="safetyError" />
 
     <div class="workspace-grid">
       <section class="panel search-panel">
@@ -163,6 +191,15 @@ function safeSourceUrl(value: string) {
 
       <aside class="panel status-panel">
         <div class="status-head"><div><h2>知识库状态</h2><p>当前所选型号</p></div><el-button text circle :icon="Refresh" :loading="statusLoading" aria-label="刷新知识库状态" @click="loadStatus" /></div>
+        <el-alert
+          v-if="healthPresentation"
+          class="health-alert"
+          :title="healthPresentation.title"
+          :description="healthPresentation.description"
+          :type="healthPresentation.type"
+          :closable="false"
+          show-icon
+        />
         <template v-if="selectedModel">
           <div class="model-code">{{ selectedModel.code }}</div>
           <strong>{{ selectedModel.name }}</strong>
@@ -213,5 +250,5 @@ function safeSourceUrl(value: string) {
 </template>
 
 <style scoped>
-.guide-page{max-width:1320px}.disclaimer-alert{margin-bottom:20px}.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px}.search-panel{padding:28px}.section-title{display:flex;gap:14px;align-items:center;margin-bottom:25px}.section-title h2,.status-head h2,.results-head h2{margin:0;font-size:19px}.section-title p,.status-head p,.results-head p{margin:5px 0 0;color:var(--muted);font-size:12px}.title-icon{width:45px;height:45px;border-radius:12px;background:var(--soft);color:var(--brand);display:grid;place-items:center;font-size:22px}.selector-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.option-count{float:right;margin-left:24px;color:var(--muted)}.search-actions{display:flex;align-items:center;justify-content:space-between;gap:20px}.search-actions>span{font-size:11px;color:var(--muted)}.status-panel{padding:24px;align-self:start}.status-head{display:flex;justify-content:space-between;align-items:start;padding-bottom:19px;border-bottom:1px solid var(--line)}.model-code{display:inline-block;margin:20px 0 8px;padding:4px 9px;border-radius:6px;background:var(--soft);color:var(--brand);font-size:12px;font-weight:800;letter-spacing:.6px}.status-panel>strong{display:block;font-size:14px}.status-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:18px 0}.status-stats div{background:#f6f9f8;border-radius:10px;padding:12px 5px;text-align:center}.status-stats b,.status-stats span{display:block}.status-stats b{font-size:19px;color:var(--brand)}.status-stats span{font-size:10px;color:var(--muted);margin-top:4px}.status-note{display:flex;align-items:flex-start;gap:7px;color:var(--muted);font-size:11px;line-height:1.6;margin:18px 0 0}.status-note .el-icon{margin-top:2px;color:var(--brand);flex:none}.results-section{margin-top:25px}.results-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.result-list{display:grid;gap:12px}.result-card{display:grid;grid-template-columns:42px 1fr;padding:22px;gap:15px}.result-rank{width:34px;height:34px;border-radius:10px;background:#153e33;color:#fff;display:grid;place-items:center;font-weight:800}.result-meta,.source-row{display:flex;align-items:center;justify-content:space-between;gap:14px}.result-meta>span{display:flex;align-items:center;gap:7px;font-weight:750;font-size:13px}.result-meta .el-icon{color:var(--brand)}.result-content>p{margin:14px 0;color:#40534b;line-height:1.85;white-space:pre-wrap}.source-row{justify-content:flex-start;padding-top:13px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}.source-row a{display:flex;align-items:center;gap:4px;color:var(--brand);font-weight:700}.missing-source{color:#a26a13}.empty-result,.result-placeholder{min-height:150px;display:flex;align-items:center;justify-content:center;gap:17px;padding:28px;color:var(--muted);text-align:left}.empty-result{flex-direction:column;text-align:center}.empty-result>.el-icon,.result-placeholder>.el-icon{font-size:34px;color:#8eb6a7}.empty-result h3,.result-placeholder h3{margin:0;color:var(--ink);font-size:16px}.empty-result p,.result-placeholder p{margin:6px 0 0;font-size:12px;line-height:1.7;max-width:650px}@media(max-width:1000px){.workspace-grid{grid-template-columns:1fr}.status-panel{width:100%}}@media(max-width:760px){.selector-grid{grid-template-columns:1fr}.search-actions{align-items:flex-start;flex-direction:column}.search-actions .el-button{width:100%}}
+.guide-page{max-width:1320px}.disclaimer-alert{margin-bottom:20px}.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px}.search-panel{padding:28px}.section-title{display:flex;gap:14px;align-items:center;margin-bottom:25px}.section-title h2,.status-head h2,.results-head h2{margin:0;font-size:19px}.section-title p,.status-head p,.results-head p{margin:5px 0 0;color:var(--muted);font-size:12px}.title-icon{width:45px;height:45px;border-radius:12px;background:var(--soft);color:var(--brand);display:grid;place-items:center;font-size:22px}.selector-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.option-count{float:right;margin-left:24px;color:var(--muted)}.search-actions{display:flex;align-items:center;justify-content:space-between;gap:20px}.search-actions>span{font-size:11px;color:var(--muted)}.status-panel{padding:24px;align-self:start}.status-head{display:flex;justify-content:space-between;align-items:start;padding-bottom:19px;border-bottom:1px solid var(--line)}.health-alert{margin-top:16px}.model-code{display:inline-block;margin:20px 0 8px;padding:4px 9px;border-radius:6px;background:var(--soft);color:var(--brand);font-size:12px;font-weight:800;letter-spacing:.6px}.status-panel>strong{display:block;font-size:14px}.status-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:18px 0}.status-stats div{background:#f6f9f8;border-radius:10px;padding:12px 5px;text-align:center}.status-stats b,.status-stats span{display:block}.status-stats b{font-size:19px;color:var(--brand)}.status-stats span{font-size:10px;color:var(--muted);margin-top:4px}.status-note{display:flex;align-items:flex-start;gap:7px;color:var(--muted);font-size:11px;line-height:1.6;margin:18px 0 0}.status-note .el-icon{margin-top:2px;color:var(--brand);flex:none}.results-section{margin-top:25px}.results-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.result-list{display:grid;gap:12px}.result-card{display:grid;grid-template-columns:42px 1fr;padding:22px;gap:15px}.result-rank{width:34px;height:34px;border-radius:10px;background:#153e33;color:#fff;display:grid;place-items:center;font-weight:800}.result-meta,.source-row{display:flex;align-items:center;justify-content:space-between;gap:14px}.result-meta>span{display:flex;align-items:center;gap:7px;font-weight:750;font-size:13px}.result-meta .el-icon{color:var(--brand)}.result-content>p{margin:14px 0;color:#40534b;line-height:1.85;white-space:pre-wrap}.source-row{justify-content:flex-start;padding-top:13px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}.source-row a{display:flex;align-items:center;gap:4px;color:var(--brand);font-weight:700}.missing-source{color:#a26a13}.empty-result,.result-placeholder{min-height:150px;display:flex;align-items:center;justify-content:center;gap:17px;padding:28px;color:var(--muted);text-align:left}.empty-result{flex-direction:column;text-align:center}.empty-result>.el-icon,.result-placeholder>.el-icon{font-size:34px;color:#8eb6a7}.empty-result h3,.result-placeholder h3{margin:0;color:var(--ink);font-size:16px}.empty-result p,.result-placeholder p{margin:6px 0 0;font-size:12px;line-height:1.7;max-width:650px}@media(max-width:1000px){.workspace-grid{grid-template-columns:1fr}.status-panel{width:100%}}@media(max-width:760px){.selector-grid{grid-template-columns:1fr}.search-actions{align-items:flex-start;flex-direction:column}.search-actions .el-button{width:100%}}
 </style>

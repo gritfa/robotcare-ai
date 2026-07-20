@@ -44,6 +44,24 @@ def test_safe_external_operations_are_not_blocked(text):
     assert detect_safety_block(text) is None
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "机器没有冒烟，只是主刷卡住",
+        "目前并无焦味，想清洁外部传感器",
+        "电池未见鼓包，设备只是无法回充",
+    ],
+)
+def test_negated_high_risk_symptoms_are_not_false_positive(text):
+    assert detect_safety_block(text) is None
+
+
+def test_negated_smoke_does_not_hide_another_real_risk():
+    result = detect_safety_block("机器没有冒烟，但是电池已经鼓包")
+    assert result is not None
+    assert result.category == "battery_damage"
+
+
 def test_api_blocks_before_creating_diagnostic_and_records_minimal_event(client):
     token = register(client, "safety-block@example.com")["access_token"]
     model_id = next(item["id"] for item in client.get("/api/v1/models").json() if item["code"] == "JH69U1")

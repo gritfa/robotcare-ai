@@ -23,6 +23,7 @@ frontend/*.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
 knowledge/raw/
+knowledge/external/
 tmp/
 .idea/
 .vscode/

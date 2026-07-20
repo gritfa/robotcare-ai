@@ -1,0 +1,22 @@
+{
+  "release_version": "2026-07-20.1",
+  "created_at": "2026-07-20T17:00:00+08:00",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 256,
+  "documents": [
+    {
+      "model_code": "JH69U1",
+      "pdf": "external/JH69U1_manual.pdf",
+      "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+      "title": "海尔 JH69U1 使用说明书",
+      "sha256": "672c614516feb428f3dd6090d1f7835c4ce0eacbfca3b12c6b59e954e5c49171"
+    },
+    {
+      "model_code": "VC35U1",
+      "pdf": "external/VC35U1_manual.pdf",
+      "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+      "title": "海尔 VC35U1 使用说明书",
+      "sha256": "67604668d578e166935a0e6a4e0cb9443d5b028bceb15f55dcfb31fbd2b71614"
+    }
+  ]
+}

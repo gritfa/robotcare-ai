@@ -1,4 +1,5 @@
 from functools import lru_cache
+import json
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -39,12 +40,29 @@ class Settings(BaseSettings):
     attachment_dir: str = "./data/attachments"
     report_dir: str = "./data/reports"
     dashscope_api_key: str | None = None
+    knowledge_min_score: float = Field(default=0.25, ge=0, le=1)
+    knowledge_min_score_overrides: str = "{}"
     auto_create_schema: bool = False
 
     model_config = SettingsConfigDict(env_prefix="ROBOTCARE_", env_file=".env", extra="ignore")
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
+        try:
+            overrides = json.loads(self.knowledge_min_score_overrides)
+        except json.JSONDecodeError as exc:
+            raise ValueError("ROBOTCARE_KNOWLEDGE_MIN_SCORE_OVERRIDES must be valid JSON") from exc
+        if not isinstance(overrides, dict) or any(
+            not isinstance(key, str)
+            or isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not 0 <= float(value) <= 1
+            for key, value in overrides.items()
+        ):
+            raise ValueError(
+                "ROBOTCARE_KNOWLEDGE_MIN_SCORE_OVERRIDES must map model or "
+                "model:knowledge-version keys to scores between 0 and 1"
+            )
         if self.registration_mode == "invite":
             invite_secret = (self.registration_invite_secret or "").strip()
             lowered_invite_secret = invite_secret.lower()
@@ -59,6 +77,11 @@ class Settings(BaseSettings):
             return self
         if self.registration_mode == "open":
             raise ValueError("ROBOTCARE_REGISTRATION_MODE must not be open in production")
+        if not (self.dashscope_api_key or "").strip():
+            raise ValueError(
+                "ROBOTCARE_DASHSCOPE_API_KEY is required in production; "
+                "knowledge capability must not start silently disabled"
+            )
         secret = self.jwt_secret.strip()
         lowered_secret = secret.lower()
         if (
@@ -75,6 +98,18 @@ class Settings(BaseSettings):
         if self.refresh_cookie_secure is False:
             raise ValueError("ROBOTCARE_REFRESH_COOKIE_SECURE must not be false in production")
         return self
+
+    def knowledge_score_threshold(
+        self, model_code: str, knowledge_version: str | None = None
+    ) -> float:
+        overrides = json.loads(self.knowledge_min_score_overrides)
+        if knowledge_version is not None:
+            version_key = f"{model_code}:{knowledge_version}"
+            if version_key in overrides:
+                return float(overrides[version_key])
+        if model_code in overrides:
+            return float(overrides[model_code])
+        return self.knowledge_min_score
 
     @property
     def cors_origin_list(self) -> list[str]:

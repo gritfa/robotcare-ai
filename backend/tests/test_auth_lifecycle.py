@@ -304,6 +304,7 @@ def test_production_settings_reject_weak_secret_or_unsafe_schema_and_default_sec
     common = {
         "environment": "production",
         "registration_mode": "closed",
+        "dashscope_api_key": "production-embedding-key",
         "_env_file": None,
     }
     for overrides in (

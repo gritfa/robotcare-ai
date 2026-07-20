@@ -116,6 +116,7 @@ jobs:
   frontend-e2e:
     name: Critical browser E2E (Chromium)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
 from PIL import Image
@@ -178,6 +179,45 @@ def test_attachment_limit_and_finished_session_upload_block(client):
         files={"file": ("after-end.png", image_bytes("PNG"), "image/png")},
     )
     assert ended.status_code == 409
+
+
+def test_concurrent_attachment_uploads_enforce_limit_without_orphans(client):
+    token = register(client, "upload-concurrent-limit@example.com")["access_token"]
+    diagnostic_id = create_diagnostic(client, token)
+    endpoint = f"/api/v1/diagnostics/{diagnostic_id}/attachments"
+
+    for index in range(4):
+        response = client.post(
+            endpoint,
+            headers=auth(token),
+            files={"file": (f"existing-{index}.png", image_bytes("PNG"), "image/png")},
+        )
+        assert response.status_code == 201, response.text
+
+    def upload(index: int):
+        return client.post(
+            endpoint,
+            headers=auth(token),
+            files={"file": (f"concurrent-{index}.png", image_bytes("PNG"), "image/png")},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(upload, range(2)))
+
+    assert sorted(response.status_code for response in responses) == [201, 409]
+    rejected = next(response for response in responses if response.status_code == 409)
+    assert rejected.json()["detail"] == "A diagnostic can contain at most five images"
+
+    with client.app.state.session_factory() as db:
+        attachments = list(
+            db.scalars(select(Attachment).where(Attachment.session_id == diagnostic_id))
+        )
+    stored_names = {attachment.stored_filename for attachment in attachments}
+    physical_names = {
+        path.name for path in client.app.state.attachment_dir.iterdir() if path.is_file()
+    }
+    assert len(attachments) == 5
+    assert physical_names == stored_names
 
 
 def test_failed_physical_delete_is_tracked_for_cleanup(client, monkeypatch):

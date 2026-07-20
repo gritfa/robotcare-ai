@@ -32,7 +32,8 @@ from .auth_service import (
 from .config import Settings, get_settings
 from .database import get_db
 from .diagnostic_graph import feedback_decision_graph
-from .knowledge_service import get_knowledge_status, search_knowledge
+from .issue_classifier import classify_issue
+from .knowledge_service import get_knowledge_health, get_knowledge_status, search_knowledge
 from .models import (
     Attachment,
     AuditLog,
@@ -51,7 +52,9 @@ from .models import (
     UserDevice,
 )
 from .observability import emit_json_log, request_trace_id
-from .pdf_report import render_report_pdf, report_pdf_path
+from .attachment_service import create_attachment as persist_attachment
+from .pdf_report import ensure_report_pdf as ensure_stored_report_pdf, report_pdf_path
+from .report_service import get_or_create_service_report as persist_service_report
 from .safety import detect_safety_block
 from .schemas import (
     AttachmentRead,
@@ -76,6 +79,8 @@ from .schemas import (
     LoginRequest,
     KnowledgeSearchRequest,
     KnowledgeSearchResult,
+    KnowledgeHealthRead,
+    KnowledgeModelHealthRead,
     KnowledgeStatusRead,
     ModelRead,
     RegisterRequest,
@@ -283,8 +288,37 @@ def knowledge_search(
     user: User = Depends(get_current_user),
 ) -> list[KnowledgeSearchResult]:
     del user
-    if db.scalar(select(RobotModel.id).where(RobotModel.id == payload.robot_model_id)) is None:
+    robot_model = db.scalar(select(RobotModel).where(RobotModel.id == payload.robot_model_id))
+    if robot_model is None:
         raise HTTPException(status_code=404, detail="Robot model not found")
+    safety_block = detect_safety_block(payload.query)
+    if safety_block is not None:
+        emit_json_log(
+            logging.WARNING,
+            "knowledge_safety_block",
+            trace_id=request_trace_id(request),
+            robot_model_id=payload.robot_model_id,
+            category=safety_block.category,
+            risk_level=safety_block.risk_level,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "SAFETY_BLOCKED",
+                "blocked": True,
+                "category": safety_block.category,
+                "risk_level": safety_block.risk_level,
+                "reason": safety_block.reason,
+                "official_service_advice": safety_block.advice,
+            },
+        )
+    knowledge_version = db.scalar(
+        select(KnowledgeDocument.sha256)
+        .where(KnowledgeDocument.robot_model_id == payload.robot_model_id)
+        .order_by(KnowledgeDocument.id.desc())
+        .limit(1)
+    )
+    min_score = get_settings().knowledge_score_threshold(robot_model.code, knowledge_version)
     started_at = perf_counter()
     try:
         raw_results = search_knowledge(
@@ -292,7 +326,7 @@ def knowledge_search(
             robot_model_id=payload.robot_model_id,
             query=payload.query,
             top_k=payload.top_k,
-            min_score=payload.min_score,
+            min_score=min_score,
             provider=request.app.state.embedding_provider,
         )
         results = [
@@ -305,7 +339,7 @@ def knowledge_search(
             trace_id=request_trace_id(request),
             robot_model_id=payload.robot_model_id,
             top_k=payload.top_k,
-            min_score=payload.min_score,
+            min_score=min_score,
             result_count=len(results),
             duration_ms=round((perf_counter() - started_at) * 1000, 3),
             sources=[
@@ -337,6 +371,32 @@ def knowledge_status(
 ) -> list[KnowledgeStatusRead]:
     del user
     return [KnowledgeStatusRead(**item.__dict__) for item in get_knowledge_status(db)]
+
+
+@router.get("/knowledge/health", response_model=KnowledgeHealthRead)
+def knowledge_health(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> KnowledgeHealthRead:
+    del user
+    model_health = get_knowledge_health(db)
+    embedding_configured = bool(
+        getattr(request.app.state, "embedding_configured", False)
+    )
+    knowledge_ready = bool(model_health) and all(item.ready for item in model_health)
+    if not embedding_configured:
+        health_status = "external_model_unavailable"
+    elif not knowledge_ready:
+        health_status = "knowledge_degraded"
+    else:
+        health_status = "normal"
+    return KnowledgeHealthRead(
+        status=health_status,
+        ready=knowledge_ready and embedding_configured,
+        embedding_configured=embedding_configured,
+        models=[KnowledgeModelHealthRead(**item.__dict__) for item in model_health],
+    )
 
 
 @router.get("/models", response_model=list[ModelRead])
@@ -692,12 +752,52 @@ def create_diagnostic(
     )
     if flow is None or not flow.steps:
         raise HTTPException(status_code=404, detail="No diagnostic flow for this model and issue")
+    available_category_codes = set(
+        db.scalars(
+            select(IssueCategory.code)
+            .join(DiagnosticFlow)
+            .where(
+                DiagnosticFlow.robot_model_id == device.robot_model_id,
+                DiagnosticFlow.status == "published",
+                DiagnosticFlow.active.is_(True),
+            )
+        )
+    )
+    category_decision = classify_issue(
+        model_code=device.robot_model.code,
+        selected_category_code=payload.issue_category_code,
+        issue_description=payload.issue_description,
+        error_code=payload.error_code,
+        available_category_codes=available_category_codes,
+    )
+    confirmed_ambiguous = (
+        category_decision.kind == "ambiguous"
+        and payload.confirm_category_mismatch
+    )
+    if category_decision.kind == "conflict" or (
+        category_decision.kind == "ambiguous" and not confirmed_ambiguous
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ISSUE_CATEGORY_MISMATCH",
+                "selected": payload.issue_category_code,
+                "suggested": category_decision.suggested_category_code,
+                "suggested_categories": [
+                    candidate.category_code for candidate in category_decision.candidates
+                ],
+                "requires_confirmation": category_decision.kind == "ambiguous",
+            },
+        )
     diagnostic = DiagnosticSession(
         user_id=user.id,
         device_id=device.id,
         flow_id=flow.id,
         issue_description=payload.issue_description,
         error_code=payload.error_code,
+        category_decision=category_decision.metadata(
+            confirmation="keep_selected" if confirmed_ambiguous else None
+        ),
         status="in_progress",
         current_position=flow.steps[0].position,
     )
@@ -833,11 +933,16 @@ def submit_feedback(
 
 
 def make_report(diagnostic: DiagnosticSession) -> str:
+    category_decision = diagnostic.category_decision or {}
+    candidates = category_decision.get("candidate_category_codes") or []
     lines = [
         "RobotCare AI 第三方售后诊断报告",
         f"设备型号：{diagnostic.device.robot_model.code}",
         f"用户问题：{diagnostic.issue_description}",
         f"错误码：{diagnostic.error_code or '未提供'}",
+        f"用户选择类别：{category_decision.get('selected_category_code', diagnostic.flow.issue_category.code)}",
+        f"规则候选类别：{', '.join(str(item) for item in candidates) or '无明确候选'}",
+        f"最终类别：{category_decision.get('final_category_code', diagnostic.flow.issue_category.code)}",
         "已执行的安全排查步骤：",
     ]
     for index, execution in enumerate(diagnostic.executions, start=1):
@@ -860,35 +965,15 @@ def make_report(diagnostic: DiagnosticSession) -> str:
 
 
 def get_or_create_service_report(db: Session, diagnostic: DiagnosticSession) -> ServiceReport:
-    if diagnostic.status != "unresolved":
-        raise HTTPException(status_code=409, detail="Report is available only after all steps fail")
-    existing = db.scalar(select(ServiceReport).where(ServiceReport.session_id == diagnostic.id))
-    if existing is not None:
-        return existing
-    report = ServiceReport(
-        session_id=diagnostic.id,
-        report_number=f"RC-{diagnostic.id:06d}-{uuid4().hex[:8].upper()}",
-        content=make_report(diagnostic),
-    )
-    db.add(report)
-    db.commit()
-    db.refresh(report)
-    return report
+    return persist_service_report(db, diagnostic, make_report)
 
 
 def ensure_report_pdf(request: Request, report: ServiceReport) -> Path:
-    target = report_pdf_path(
+    return ensure_stored_report_pdf(
         request.app.state.report_dir,
         report,
         request.app.state.report_filename_secret,
     )
-    has_pdf_header = False
-    if target.is_file() and target.stat().st_size >= 5:
-        with target.open("rb") as existing_pdf:
-            has_pdf_header = existing_pdf.read(5) == b"%PDF-"
-    if not has_pdf_header:
-        render_report_pdf(report, target)
-    return target
 
 
 def report_pdf_response(diagnostic_id: int, report: ServiceReport, target: Path) -> ReportPdfRead:
@@ -938,24 +1023,16 @@ async def upload_attachment(
         raise HTTPException(status_code=400, detail="Empty attachment is not allowed")
     validate_image_content(content, expected_content_type)
 
-    stored_filename = f"{uuid4().hex}{extension}"
-    target = request.app.state.attachment_dir / stored_filename
-    target.write_bytes(content)
-    attachment = Attachment(
-        session_id=diagnostic.id,
+    return persist_attachment(
+        db,
+        diagnostic,
+        request.app.state.attachment_dir,
         original_filename=original_filename,
-        stored_filename=stored_filename,
+        extension=extension,
         content_type=expected_content_type,
-        size_bytes=len(content),
+        content=content,
+        maximum_per_diagnostic=MAX_ATTACHMENTS_PER_DIAGNOSTIC,
     )
-    try:
-        db.add(attachment)
-        db.commit()
-        db.refresh(attachment)
-    except Exception:
-        target.unlink(missing_ok=True)
-        raise
-    return attachment
 
 
 @router.get("/diagnostics/{diagnostic_id}/attachments", response_model=list[AttachmentRead])

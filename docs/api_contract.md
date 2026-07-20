@@ -1,6 +1,6 @@
 # RobotCare AI API 契约
 
-> 契约版本：`0.9.0`；统一前缀：`/api/v1`。本文按 2026-07-20 的后端源码和完整回归 `111 passed, 1 skipped` 整理；唯一跳过项为真实 PostgreSQL 集成测试，未被运行验证的边界明确标为【待验证】或【计划】。
+> 契约版本：`0.10.0`；统一前缀：`/api/v1`。本文按 2026-07-20 的后端源码和完整回归 `137 passed, 1 skipped` 整理；唯一跳过项为真实 PostgreSQL 集成测试。
 
 ## 1. 通用约定
 
@@ -162,14 +162,15 @@
 
 ### `POST /api/v1/diagnostics`
 
-创建诊断会话。后端用用户设备的型号和 `issue_category_code` 查找启用流程；找不到流程返回 `404`。
+创建诊断会话。后端只在用户设备型号的已发布流程中做确定性候选判断，错误码优先于关键词；LLM 不决定最终流程。
 
 ```json
 {
   "device_id": 1,
   "issue_category_code": "return_to_dock_failure",
   "issue_description": "机器人多次尝试后仍找不到基站",
-  "error_code": null
+  "error_code": null,
+  "confirm_category_mismatch": false
 }
 ```
 
@@ -181,6 +182,22 @@
 - `VC35U1` + `cleaning_noise`
 
 `VC35U1 + navigation_abnormal` 当前为草稿，普通用户创建时返回 `404`。
+
+描述与选择明显冲突时不创建会话，返回 `409`：
+
+```json
+{
+  "detail": {
+    "code": "ISSUE_CATEGORY_MISMATCH",
+    "selected": "cleaning_noise",
+    "suggested": "wifi_setup_failure",
+    "suggested_categories": ["wifi_setup_failure"],
+    "requires_confirmation": false
+  }
+}
+```
+
+只有多个候选并列的模糊场景会返回 `requires_confirmation=true`，用户明确确认后可用 `confirm_category_mismatch=true` 重试；明显冲突不能靠该字段绕过。成功响应的 `category_decision` 记录用户选择、系统候选、最终类别和确认方式，报告也保存这三类信息。
 
 创建前会执行【已验证】确定性安全规则。命中高风险时不创建诊断会话，返回 `422`：
 
@@ -236,16 +253,27 @@
 {
   "robot_model_id": 1,
   "query": "机器人无法自动回充怎么办",
-  "top_k": 5,
-  "min_score": 0.25
+  "top_k": 5
 }
 ```
 
-成功返回 `200 KnowledgeSearchResult[]`，每项包含 `score`、`content`、`document_title`、`source_url` 和 `page_number`。检索严格按 `robot_model_id` 过滤；低于阈值的结果不会返回。SQLite 分支读取 JSON Text 并在 Python 中计算余弦相似度；PostgreSQL 分支使用 `vector(256)` 和数据库 `<=>` 查询完成型号过滤、阈值、排序与 Top-K，SQL 形态已通过方言编译/单元断言。真实 PostgreSQL 执行仍为【待验证】，默认阈值 `0.25` 也尚未完成完整评测校准。
+普通用户请求禁止 `min_score`，传入该字段返回 422。阈值由服务端 `ROBOTCARE_KNOWLEDGE_MIN_SCORE` 控制，并可按型号或 `型号:知识SHA256` 覆盖。成功返回 `200 KnowledgeSearchResult[]`；低于阈值返回空数组，前端明确显示无匹配资料。
+
+检索前执行与诊断相同的安全规则。高风险查询返回结构化 `422 SAFETY_BLOCKED`，不会调用 Embedding 或返回说明书片段。“没有冒烟”等否定表达有单独策略和测试。
 
 ### `GET /api/v1/knowledge/status`
 
 成功返回各型号的 `document_count`、`chunk_count` 和 `vector_count`。2026-07-20 本地入库证据为 JH69U1 `1/31/31`、VC35U1 `1/22/22`。
+
+### `GET /api/v1/knowledge/health`
+
+返回两个必做型号的文档/分片/向量数量、文档 SHA256 和 `ready`，并给出：
+
+- `normal`：两型号知识与 Embedding 配置均就绪。
+- `knowledge_degraded`：缺文档、缺向量或数量不一致。
+- `external_model_unavailable`：Embedding 配置不可用。
+
+该接口表示业务知识状态；`/health` 只表示进程存活。
 
 ## 7. 附件接口
 
@@ -253,7 +281,7 @@
 
 | 方法与路径 | 请求/响应 | 约束 |
 | --- | --- | --- |
-| `POST /api/v1/diagnostics/{diagnostic_id}/attachments` | multipart 单文件字段 `file`；返回 `201 AttachmentRead` | 只允许真实可解码 JPG/JPEG、PNG、WebP；最大 5MB、2500 万像素、每会话 5 张，仅进行中可上传 |
+| `POST /api/v1/diagnostics/{diagnostic_id}/attachments` | multipart 单文件字段 `file`；返回 `201 AttachmentRead` | 既有限制不变；并发超出 5 张返回 409，不遗留 DB 记录或孤儿文件 |
 | `GET /api/v1/diagnostics/{diagnostic_id}/attachments` | `200 AttachmentRead[]` | 只列出当前用户该会话附件 |
 | `DELETE /api/v1/diagnostics/{diagnostic_id}/attachments/{attachment_id}` | `204` | 同时删除数据库记录和本地文件 |
 
@@ -265,7 +293,7 @@
 
 | 方法与路径 | 成功响应 | 约束 |
 | --- | --- | --- |
-| `POST /api/v1/diagnostics/{diagnostic_id}/report` | `201 ReportRead` | 仅 `unresolved` 会话可生成，否则 `409`；已存在时返回同一报告对象 |
+| `POST /api/v1/diagnostics/{diagnostic_id}/report` | `201 ReportRead` | 仅 `unresolved` 会话可生成；并发请求返回同一报告，不产生 500 |
 | `GET /api/v1/diagnostics/{diagnostic_id}/report` | `200 ReportRead` | 报告不存在返回 `404` |
 | `POST /api/v1/diagnostics/{diagnostic_id}/report/pdf` | `201 ReportPdfRead` | 仅 `unresolved` 会话可生成；重复调用返回同一文件元数据 |
 | `GET /api/v1/diagnostics/{diagnostic_id}/report/pdf` | PDF 文件流 | 需要 Bearer JWT 和诊断所有权；PDF 尚未生成时返回 `404` |
@@ -449,11 +477,12 @@ Remove-Item Env:ROBOTCARE_ADMIN_PASSWORD
     "alembic": {
       "status": "ok",
       "at_head": true,
-      "current_revision": "20260720_0003",
-      "expected_revision": "20260720_0003"
+      "current_revision": "20260720_0004",
+      "expected_revision": "20260720_0004"
     },
     "attachments": {"status": "ok", "exists": true, "is_directory": true, "writable": true},
-    "reports": {"status": "ok", "exists": true, "is_directory": true, "writable": true}
+    "reports": {"status": "ok", "exists": true, "is_directory": true, "writable": true},
+    "embedding": {"status": "ok", "configured": true, "required": true}
   }
 }
 ```

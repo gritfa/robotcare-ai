@@ -1,4 +1,5 @@
 import json
+import hashlib
 import pytest
 
 from pypdf import PdfWriter
@@ -9,10 +10,12 @@ from app.knowledge_service import (
     extract_pdf_pages,
     get_knowledge_status,
     ingest_pdf,
+    release_knowledge_package,
     search_knowledge,
     postgres_search_statement,
     split_pages,
 )
+from app.config import Settings
 from app.models import KnowledgeChunk, KnowledgeDocument, RobotModel
 from conftest import auth, register
 
@@ -20,6 +23,7 @@ from conftest import auth, register
 class FakeEmbeddingProvider:
     def __init__(self, query_vector=None):
         self.document_batches: list[list[str]] = []
+        self.query_texts: list[str] = []
         self.query_vector = query_vector or vector(1.0)
 
     def embed_documents(self, texts):
@@ -27,6 +31,7 @@ class FakeEmbeddingProvider:
         return [vector(float(len(text)), 1.0) for text in texts]
 
     def embed_query(self, text):
+        self.query_texts.append(text)
         return list(self.query_vector)
 
 
@@ -235,6 +240,239 @@ def test_knowledge_api_requires_auth_and_returns_real_sources_and_status(client)
     with client.app.state.session_factory() as db:
         status = {item.model_code: item for item in get_knowledge_status(db)}
         assert status["JH69U1"].document_count == 1
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "我想拆机检查主板",
+        "电池已经鼓包",
+        "机器正在冒烟还有焦味",
+        "怎么短接充电触点",
+        "基站内部进水了",
+        "如何绕过安全保护",
+    ],
+)
+def test_knowledge_api_blocks_high_risk_queries_before_embedding(client, query):
+    provider = FakeEmbeddingProvider()
+    client.app.state.embedding_provider = provider
+    token = register(client, f"safety-{abs(hash(query))}@example.com")["access_token"]
+    with client.app.state.session_factory() as db:
+        robot_model_id = model_id(db, "JH69U1")
+
+    response = client.post(
+        "/api/v1/knowledge/search",
+        headers=auth(token),
+        json={"robot_model_id": robot_model_id, "query": query},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "SAFETY_BLOCKED"
+    assert provider.query_texts == []
+
+
+def test_knowledge_api_allows_safe_external_cleaning_and_negated_smoke(client):
+    provider = FakeEmbeddingProvider()
+    client.app.state.embedding_provider = provider
+    token = register(client, "safe-knowledge@example.com")["access_token"]
+    with client.app.state.session_factory() as db:
+        robot_model_id = model_id(db, "JH69U1")
+
+    for query in ("如何清洁外部主刷", "机器没有冒烟，只是主刷缠了头发"):
+        response = client.post(
+            "/api/v1/knowledge/search",
+            headers=auth(token),
+            json={"robot_model_id": robot_model_id, "query": query},
+        )
+        assert response.status_code == 200, response.text
+
+    assert provider.query_texts == ["如何清洁外部主刷", "机器没有冒烟，只是主刷缠了头发"]
+
+
+def test_public_knowledge_api_rejects_threshold_override_and_uses_server_setting(
+    client, monkeypatch
+):
+    provider = FakeEmbeddingProvider()
+    client.app.state.embedding_provider = provider
+    token = register(client, "threshold@example.com")["access_token"]
+    with client.app.state.session_factory() as db:
+        robot_model_id = model_id(db, "JH69U1")
+        document = KnowledgeDocument(
+            robot_model_id=robot_model_id,
+            title="Threshold manual",
+            source_url="https://example.com/threshold.pdf",
+            sha256="d" * 64,
+            page_count=1,
+        )
+        db.add(document)
+        db.flush()
+        db.add(
+            KnowledgeChunk(
+                document_id=document.id,
+                chunk_index=0,
+                page_number=1,
+                content="low quality candidate",
+                embedding=json.dumps(vector(0.8, 0.6)),
+            )
+        )
+        db.commit()
+
+    monkeypatch.setattr(
+        "app.api.get_settings",
+        lambda: Settings(knowledge_min_score=0.9, _env_file=None),
+    )
+    forbidden = client.post(
+        "/api/v1/knowledge/search",
+        headers=auth(token),
+        json={
+            "robot_model_id": robot_model_id,
+            "query": "普通清洁问题",
+            "min_score": 0,
+        },
+    )
+    assert forbidden.status_code == 422
+
+    response = client.post(
+        "/api/v1/knowledge/search",
+        headers=auth(token),
+        json={"robot_model_id": robot_model_id, "query": "普通清洁问题"},
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_knowledge_health_distinguishes_external_model_and_vector_readiness(client):
+    token = register(client, "knowledge-health@example.com")["access_token"]
+    headers = auth(token)
+
+    unavailable = client.get("/api/v1/knowledge/health", headers=headers)
+    assert unavailable.status_code == 200
+    assert unavailable.json()["status"] == "external_model_unavailable"
+    assert unavailable.json()["ready"] is False
+
+    client.app.state.embedding_provider = FakeEmbeddingProvider()
+    client.app.state.embedding_configured = True
+    degraded = client.get("/api/v1/knowledge/health", headers=headers)
+    assert degraded.status_code == 200
+    assert degraded.json()["status"] == "knowledge_degraded"
+    assert {item["model_code"] for item in degraded.json()["models"]} == {
+        "JH69U1",
+        "VC35U1",
+    }
+
+    with client.app.state.session_factory() as db:
+        for code, sha in (("JH69U1", "e" * 64), ("VC35U1", "f" * 64)):
+            robot_model_id = model_id(db, code)
+            document = KnowledgeDocument(
+                robot_model_id=robot_model_id,
+                title=f"{code} official manual",
+                source_url=f"https://example.com/{code}.pdf",
+                sha256=sha,
+                page_count=1,
+            )
+            db.add(document)
+            db.flush()
+            db.add(
+                KnowledgeChunk(
+                    document_id=document.id,
+                    chunk_index=0,
+                    page_number=1,
+                    content="approved content",
+                    embedding=json.dumps(vector(1.0)),
+                )
+            )
+        db.commit()
+
+    normal = client.get("/api/v1/knowledge/health", headers=headers)
+    assert normal.status_code == 200
+    assert normal.json()["status"] == "normal"
+    assert normal.json()["ready"] is True
+    assert all(item["ready"] for item in normal.json()["models"])
+    assert {item["document_sha256s"][0] for item in normal.json()["models"]} == {
+        "e" * 64,
+        "f" * 64,
+    }
+
+
+def test_versioned_knowledge_release_is_atomic_and_idempotent(
+    client, tmp_path, monkeypatch
+):
+    pdf_path = tmp_path / "jh69u1.pdf"
+    pdf_path.write_bytes(b"approved-manual")
+    sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+    manifest_path = tmp_path / "release.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "release_version": "2026-07-20.1",
+                "created_at": "2026-07-20T17:00:00+08:00",
+                "embedding_model": "text-embedding-v4",
+                "embedding_dimension": 256,
+                "documents": [
+                    {
+                        "model_code": "JH69U1",
+                        "pdf": "jh69u1.pdf",
+                        "source_url": "https://example.com/jh69u1.pdf",
+                        "title": "JH69U1 official manual",
+                        "sha256": sha256,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "app.knowledge_service.extract_pdf_pages",
+        lambda _path: ([PageText(1, "approved knowledge")], "Manual"),
+    )
+    provider = FakeEmbeddingProvider()
+    with client.app.state.session_factory() as db:
+        first = release_knowledge_package(
+            db, manifest_path=manifest_path, provider=provider
+        )
+        second = release_knowledge_package(
+            db, manifest_path=manifest_path, provider=provider
+        )
+        assert first["release_version"] == "2026-07-20.1"
+        assert first["documents"][0]["created"] is True
+        assert second["documents"][0]["created"] is False
+        assert second["documents"][0]["changed"] is False
+        assert db.scalar(select(func.count()).select_from(KnowledgeDocument)) == 1
+        assert db.scalar(select(func.count()).select_from(KnowledgeChunk)) == 1
+
+
+def test_knowledge_release_rejects_sha_mismatch_before_embedding(
+    client, tmp_path
+):
+    pdf_path = tmp_path / "manual.pdf"
+    pdf_path.write_bytes(b"unexpected")
+    manifest_path = tmp_path / "release.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "release_version": "bad-release",
+                "created_at": "2026-07-20T17:00:00+08:00",
+                "embedding_model": "text-embedding-v4",
+                "embedding_dimension": 256,
+                "documents": [
+                    {
+                        "model_code": "JH69U1",
+                        "pdf": "manual.pdf",
+                        "source_url": "https://example.com/manual.pdf",
+                        "sha256": "0" * 64,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    provider = FakeEmbeddingProvider()
+    with client.app.state.session_factory() as db:
+        with pytest.raises(ValueError, match="SHA256 mismatch"):
+            release_knowledge_package(
+                db, manifest_path=manifest_path, provider=provider
+            )
+    assert provider.document_batches == []
 
 
 def test_failed_replacement_rolls_back_and_preserves_previous_chunks(client, tmp_path, monkeypatch):

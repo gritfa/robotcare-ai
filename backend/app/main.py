@@ -42,6 +42,10 @@ def create_app(
     application.state.embedding_provider = embedding_provider or DashScopeEmbeddingProvider(
         settings.dashscope_api_key
     )
+    application.state.environment = settings.environment.strip().lower()
+    application.state.embedding_configured = bool(
+        embedding_provider is not None or (settings.dashscope_api_key or "").strip()
+    )
     application.state.attachment_dir = Path(attachment_dir or settings.attachment_dir).resolve()
     application.state.attachment_dir.mkdir(parents=True, exist_ok=True)
     application.state.report_dir = Path(report_dir or settings.report_dir).resolve()

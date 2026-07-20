@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-07-20",
+  "entry_checked_at": "2026-07-20",
+  "status_legend": {
+    "【已验证】": "仅表示当前字段描述的事实已有可复现证据，不自动推导其他处理阶段已经完成。",
+    "【计划】": "尚需实施并提供运行证据后才能改为【已验证】。"
+  },
+  "sources": [
+    {
+      "source_id": "haier-product-jh69u1",
+      "brand": "海尔",
+      "model_code": "JH69U1",
+      "source_type": "official_product_entry",
+      "title": "海尔 JH69U1 官方产品资料入口",
+      "url": "https://www.haier.com/xjd/sdjqr/20241029_252007.shtml",
+      "entry_status": "【已验证】",
+      "verification_scope": "只验证为可访问的 haier.com 官方资料入口",
+      "manual_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+      "manual_local_path": "knowledge/raw/JH69U1_manual.pdf",
+      "manual_sha256": "672c614516feb428f3dd6090d1f7835c4ce0eacbfca3b12c6b59e954e5c49171",
+      "manual_size_bytes": 27364132,
+      "page_count": 20,
+      "text_chars": 9539,
+      "download_status": "【已验证】",
+      "download_verification": "官方 PDF 直链返回 application/pdf；下载 27364132 字节，SHA256 与本地忽略文件一致。",
+      "extraction_status": "【已验证】",
+      "extraction_verification": "使用 pypdf 6.8.0 成功读取 20 页并提取 9539 个字符；PDF 第 15-16 页已渲染并完成人工可见性抽检。",
+      "vector_ingestion_status": "【已验证】",
+      "vector_ingestion_verification": "2026-07-20 使用 text-embedding-v4 生成 256 维向量；入库 1 个文档、31 个分页分片、31 个非空向量，SHA256 与本地说明书一致。",
+      "content_ingestion_status": "【已验证】",
+      "content_ingestion_note": "已完成分页提取、500 字切片、80 字重叠、向量化和 SQLite 持久化；原始 PDF 继续保持本地忽略，不提交公开仓库。"
+    },
+    {
+      "source_id": "haier-product-vc35u1",
+      "brand": "海尔",
+      "model_code": "VC35U1",
+      "source_type": "official_product_entry",
+      "title": "海尔 VC35U1 官方产品资料入口",
+      "url": "https://www.haier.com/xjd/sdjqr/20200902_146632.shtml",
+      "entry_status": "【已验证】",
+      "verification_scope": "只验证为可访问的 haier.com 官方资料入口",
+      "manual_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+      "manual_local_path": "knowledge/raw/VC35U1_manual.pdf",
+      "manual_sha256": "67604668d578e166935a0e6a4e0cb9443d5b028bceb15f55dcfb31fbd2b71614",
+      "manual_size_bytes": 12920954,
+      "page_count": 20,
+      "text_chars": 4667,
+      "download_status": "【已验证】",
+      "download_verification": "官方 PDF 直链返回 application/pdf；下载 12920954 字节，SHA256 与本地忽略文件一致。",
+      "extraction_status": "【已验证】",
+      "extraction_verification": "使用 pypdf 6.8.0 成功读取 20 页并提取 4667 个字符；PDF 第 15 页已渲染并完成人工可见性抽检。",
+      "vector_ingestion_status": "【已验证】",
+      "vector_ingestion_verification": "2026-07-20 使用 text-embedding-v4 生成 256 维向量；入库 1 个文档、22 个分页分片、22 个非空向量，SHA256 与本地说明书一致。",
+      "content_ingestion_status": "【已验证】",
+      "content_ingestion_note": "已完成分页提取、500 字切片、80 字重叠、向量化和 SQLite 持久化；原始 PDF 继续保持本地忽略，不提交公开仓库。"
+    },
+    {
+      "source_id": "haier-product-p50u1",
+      "brand": "海尔",
+      "model_code": "P50U1",
+      "source_type": "official_product_entry",
+      "title": "海尔 P50U1 官方产品资料入口",
+      "url": "https://www.haier.com/xjd/sdjqr/20200831_146586.shtml",
+      "entry_status": "【已验证】",
+      "verification_scope": "只验证为可访问的 haier.com 官方资料入口",
+      "content_ingestion_status": "【计划】",
+      "content_ingestion_note": "P50U1 是扩展型号；尚未声称已抓取说明书正文或完成知识入库。"
+    },
+    {
+      "source_id": "haier-support-home",
+      "brand": "海尔",
+      "model_code": null,
+      "source_type": "official_support_entry",
+      "title": "海尔官方服务支持入口",
+      "url": "https://www.haier.com/support/",
+      "entry_status": "【已验证】",
+      "verification_scope": "只验证为可访问的 haier.com 官方支持入口",
+      "content_ingestion_status": "【计划】",
+      "content_ingestion_note": "后续用于展示官方报修入口和人工核验服务信息；不得将第三方产品描述为海尔官方服务。"
+    }
+  ]
+}

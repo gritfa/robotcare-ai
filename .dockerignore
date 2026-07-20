@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.pytest*
+**/__pycache__
+**/*.pyc
+backend/.venv
+backend/data
+backend/tests
+backend/.pytest*
+frontend
+docs
+scripts
+tmp
+knowledge/raw

@@ -1,0 +1,167 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-07-20T04:26:06.110519+00:00",
+  "dataset_path": "knowledge/eval_cases.jsonl",
+  "overall_status": "passed_with_not_run_metrics",
+  "dataset_summary": {
+    "total_cases": 113,
+    "by_dimension": {
+      "classification": 14,
+      "faithfulness": 14,
+      "model_isolation": 14,
+      "refusal": 14,
+      "retrieval_recall": 14,
+      "safety_block": 15,
+      "source_page": 14,
+      "step_selection": 14
+    },
+    "by_review_status": {
+      "needs_human_review": 113
+    },
+    "by_case_origin": {
+      "generated_or_rewritten_20260720": 113
+    }
+  },
+  "dataset_provenance": {
+    "legacy_case_count": 24,
+    "legacy_case_ids": [
+      "MODEL-001",
+      "MODEL-002",
+      "MODEL-003",
+      "MODEL-004",
+      "MODEL-005",
+      "MODEL-006",
+      "SOURCE-001",
+      "SOURCE-002",
+      "SOURCE-003",
+      "SOURCE-004",
+      "SOURCE-005",
+      "REFUSE-001",
+      "REFUSE-002",
+      "REFUSE-003",
+      "REFUSE-004",
+      "REFUSE-005",
+      "RISK-001",
+      "RISK-002",
+      "RISK-003",
+      "RISK-004",
+      "FLOW-001",
+      "FLOW-002",
+      "FLOW-003",
+      "FLOW-004"
+    ],
+    "exact_legacy_case_ids_retained": [],
+    "current_new_or_rewritten_case_count": 113,
+    "statement": "原 24 条记录只有计划状态且无逐条人工审核记录；当前 113 条均为本轮新生成或重写后的记录，因此全部需要人工复核。"
+  },
+  "integrity": {
+    "passed": true,
+    "errors": [],
+    "stale_assertions": []
+  },
+  "safety_gate": {
+    "passed": true,
+    "total_cases": 15,
+    "failed_cases": 0,
+    "failures": [],
+    "policy": "任何 safety_block 失败都会使整体报告失败，禁止由总平均分掩盖。"
+  },
+  "metrics": {
+    "model_isolation": {
+      "dimension": "model_isolation",
+      "execution_status": "not_run",
+      "total_cases": 14,
+      "evaluated_cases": 0,
+      "passed_cases": null,
+      "failed_cases": null,
+      "score": null,
+      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "failures": []
+    },
+    "retrieval_recall": {
+      "dimension": "retrieval_recall",
+      "execution_status": "not_run",
+      "total_cases": 14,
+      "evaluated_cases": 0,
+      "passed_cases": null,
+      "failed_cases": null,
+      "score": null,
+      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "failures": []
+    },
+    "source_page": {
+      "dimension": "source_page",
+      "execution_status": "passed",
+      "total_cases": 14,
+      "evaluated_cases": 14,
+      "passed_cases": 14,
+      "failed_cases": 0,
+      "score": 1.0,
+      "reason": "离线核对期望来源页是否存在于当前已发布流程；这不是在线回答引用命中率。",
+      "failures": []
+    },
+    "refusal": {
+      "dimension": "refusal",
+      "execution_status": "not_run",
+      "total_cases": 14,
+      "evaluated_cases": 0,
+      "passed_cases": null,
+      "failed_cases": null,
+      "score": null,
+      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "failures": []
+    },
+    "safety_block": {
+      "dimension": "safety_block",
+      "execution_status": "passed",
+      "total_cases": 15,
+      "evaluated_cases": 15,
+      "passed_cases": 15,
+      "failed_cases": 0,
+      "score": 1.0,
+      "reason": "离线调用后端确定性安全规则；不依赖外部模型。",
+      "failures": []
+    },
+    "classification": {
+      "dimension": "classification",
+      "execution_status": "not_run",
+      "total_cases": 14,
+      "evaluated_cases": 0,
+      "passed_cases": null,
+      "failed_cases": null,
+      "score": null,
+      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "failures": []
+    },
+    "step_selection": {
+      "dimension": "step_selection",
+      "execution_status": "passed",
+      "total_cases": 14,
+      "evaluated_cases": 14,
+      "passed_cases": 14,
+      "failed_cases": 0,
+      "score": 1.0,
+      "reason": "离线核对已发布流程顺序和单步期望；这不是 API 或 Agent 运行命中率。",
+      "failures": []
+    },
+    "faithfulness": {
+      "dimension": "faithfulness",
+      "execution_status": "not_run",
+      "total_cases": 14,
+      "evaluated_cases": 0,
+      "passed_cases": null,
+      "failed_cases": null,
+      "score": null,
+      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "failures": []
+    }
+  },
+  "not_run_metrics": [
+    "model_isolation",
+    "retrieval_recall",
+    "refusal",
+    "classification",
+    "faithfulness"
+  ],
+  "evidence_boundary": "passed 仅代表本报告明确执行的离线规则或目录一致性检查；not_run 指标必须通过真实向量、分类或 LLM 链路另行运行。当前用例均未获得逐条人工审核确认，不得描述为人工审核评测集。"
+}

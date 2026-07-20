@@ -1,0 +1,385 @@
+from __future__ import annotations
+
+import hashlib
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
+
+import numpy as np
+from pypdf import PdfReader
+from pgvector.sqlalchemy import VECTOR
+from sqlalchemy import Float, bindparam, case, delete, distinct, func, select
+from sqlalchemy.orm import Session
+
+from .db_types import EMBEDDING_DIMENSION, normalize_embedding
+from .models import KnowledgeChunk, KnowledgeDocument, RobotModel
+
+EMBEDDING_MODEL = "text-embedding-v4"
+EMBEDDING_BATCH_SIZE = 10
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 80
+
+
+class EmbeddingProvider(Protocol):
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
+
+    def embed_query(self, text: str) -> list[float]: ...
+
+
+class DashScopeEmbeddingProvider:
+    """DashScope TextEmbedding v4 adapter with the product's fixed settings."""
+
+    def __init__(self, api_key: str | None = None) -> None:
+        self.api_key = api_key
+
+    def _embed(self, texts: Sequence[str], text_type: str) -> list[list[float]]:
+        if not texts:
+            return []
+        if len(texts) > EMBEDDING_BATCH_SIZE:
+            raise ValueError(f"DashScope embedding batch cannot exceed {EMBEDDING_BATCH_SIZE}")
+
+        import dashscope
+
+        kwargs: dict[str, object] = {
+            "model": EMBEDDING_MODEL,
+            "input": list(texts),
+            "dimension": EMBEDDING_DIMENSION,
+            "text_type": text_type,
+        }
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
+        try:
+            response = dashscope.TextEmbedding.call(**kwargs)
+        except Exception as exc:
+            raise RuntimeError("DashScope embedding request failed") from exc
+        if getattr(response, "status_code", None) != 200:
+            message = getattr(response, "message", "DashScope embedding request failed")
+            raise RuntimeError(str(message))
+
+        output = getattr(response, "output", None)
+        if output is None and isinstance(response, dict):
+            output = response.get("output")
+        embeddings = output.get("embeddings", []) if isinstance(output, dict) else []
+        ordered = sorted(embeddings, key=lambda item: item.get("text_index", 0))
+        vectors = [list(map(float, item["embedding"])) for item in ordered]
+        if len(vectors) != len(texts):
+            raise RuntimeError("DashScope returned an unexpected embedding count")
+        return vectors
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        return self._embed(texts, text_type="document")
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed([text], text_type="query")[0]
+
+
+@dataclass(frozen=True)
+class PageText:
+    page_number: int
+    text: str
+
+
+@dataclass(frozen=True)
+class ChunkText:
+    chunk_index: int
+    page_number: int
+    content: str
+
+
+@dataclass(frozen=True)
+class IngestResult:
+    document_id: int
+    created: bool
+    changed: bool
+    chunk_count: int
+    sha256: str
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    score: float
+    content: str
+    document_title: str
+    source_url: str
+    page_number: int
+
+
+@dataclass(frozen=True)
+class KnowledgeStatus:
+    robot_model_id: int
+    model_code: str
+    document_count: int
+    chunk_count: int
+    vector_count: int
+
+
+def extract_pdf_pages(pdf_path: str | Path) -> tuple[list[PageText], str | None]:
+    reader = PdfReader(str(pdf_path))
+    metadata_title = reader.metadata.title if reader.metadata else None
+    pages = [
+        PageText(page_number=index, text=(page.extract_text() or "").strip())
+        for index, page in enumerate(reader.pages, start=1)
+    ]
+    return pages, metadata_title
+
+
+def split_pages(
+    pages: Sequence[PageText], chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
+) -> list[ChunkText]:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if overlap < 0 or overlap >= chunk_size:
+        raise ValueError("overlap must be between zero and chunk_size")
+
+    chunks: list[ChunkText] = []
+    step = chunk_size - overlap
+    for page in pages:
+        text = page.text.strip()
+        if not text:
+            continue
+        for start in range(0, len(text), step):
+            content = text[start : start + chunk_size].strip()
+            if not content:
+                continue
+            chunks.append(
+                ChunkText(
+                    chunk_index=len(chunks),
+                    page_number=page.page_number,
+                    content=content,
+                )
+            )
+            if start + chunk_size >= len(text):
+                break
+    return chunks
+
+
+def _embed_in_batches(provider: EmbeddingProvider, texts: Sequence[str]) -> list[list[float]]:
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+        batch = texts[start : start + EMBEDDING_BATCH_SIZE]
+        batch_vectors = provider.embed_documents(batch)
+        if len(batch_vectors) != len(batch):
+            raise RuntimeError("Embedding provider returned an unexpected vector count")
+        vectors.extend(batch_vectors)
+    return vectors
+
+
+def ingest_pdf(
+    db: Session,
+    *,
+    robot_model_id: int,
+    pdf_path: str | Path,
+    source_url: str,
+    provider: EmbeddingProvider,
+    title: str | None = None,
+) -> IngestResult:
+    path = Path(pdf_path)
+    file_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    existing = db.scalar(
+        select(KnowledgeDocument).where(
+            KnowledgeDocument.robot_model_id == robot_model_id,
+            KnowledgeDocument.source_url == source_url,
+        )
+    )
+    if existing is not None and existing.sha256 == file_hash:
+        count = db.scalar(
+            select(func.count()).select_from(KnowledgeChunk).where(KnowledgeChunk.document_id == existing.id)
+        )
+        return IngestResult(existing.id, created=False, changed=False, chunk_count=count or 0, sha256=file_hash)
+
+    if db.scalar(select(RobotModel.id).where(RobotModel.id == robot_model_id)) is None:
+        raise ValueError(f"Robot model {robot_model_id} does not exist")
+
+    pages, metadata_title = extract_pdf_pages(path)
+    chunks = split_pages(pages)
+    if not chunks:
+        raise ValueError("PDF contains no extractable text")
+    vectors = _embed_in_batches(provider, [chunk.content for chunk in chunks])
+
+    created = existing is None
+    try:
+        if existing is None:
+            document = KnowledgeDocument(
+                robot_model_id=robot_model_id,
+                title=title or metadata_title or path.stem,
+                source_url=source_url,
+                sha256=file_hash,
+                page_count=len(pages),
+            )
+            db.add(document)
+            db.flush()
+        else:
+            document = existing
+            db.execute(delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id))
+            document.title = title or metadata_title or path.stem
+            document.sha256 = file_hash
+            document.page_count = len(pages)
+
+        db.add_all(
+            [
+                KnowledgeChunk(
+                    document_id=document.id,
+                    chunk_index=chunk.chunk_index,
+                    page_number=chunk.page_number,
+                    content=chunk.content,
+                    embedding=normalize_embedding(vector),
+                )
+                for chunk, vector in zip(chunks, vectors, strict=True)
+            ]
+        )
+        db.commit()
+        db.refresh(document)
+    except Exception:
+        db.rollback()
+        raise
+
+    return IngestResult(
+        document_id=document.id,
+        created=created,
+        changed=not created,
+        chunk_count=len(chunks),
+        sha256=file_hash,
+    )
+
+
+def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float | None:
+    left_vector = np.asarray(left, dtype=np.float64)
+    right_vector = np.asarray(right, dtype=np.float64)
+    if left_vector.ndim != 1 or right_vector.ndim != 1 or left_vector.shape != right_vector.shape:
+        return None
+    denominator = float(np.linalg.norm(left_vector) * np.linalg.norm(right_vector))
+    if denominator == 0:
+        return None
+    return float(np.dot(left_vector, right_vector) / denominator)
+
+
+def search_knowledge(
+    db: Session,
+    *,
+    robot_model_id: int,
+    query: str,
+    top_k: int,
+    min_score: float = 0.25,
+    provider: EmbeddingProvider,
+) -> list[SearchResult]:
+    query_vector = normalize_embedding(provider.embed_query(query))
+    if query_vector is None:
+        return []
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        return _search_knowledge_postgresql(
+            db,
+            robot_model_id=robot_model_id,
+            query_vector=query_vector,
+            top_k=top_k,
+            min_score=min_score,
+        )
+    rows = db.execute(
+        select(KnowledgeChunk, KnowledgeDocument)
+        .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
+        .where(
+            KnowledgeDocument.robot_model_id == robot_model_id,
+            KnowledgeChunk.embedding.is_not(None),
+        )
+    ).all()
+
+    results: list[SearchResult] = []
+    for chunk, document in rows:
+        try:
+            stored_vector = normalize_embedding(chunk.embedding)
+        except (TypeError, ValueError):
+            continue
+        if stored_vector is None:
+            continue
+        score = _cosine_similarity(query_vector, stored_vector)
+        if score is None or score < min_score:
+            continue
+        results.append(
+            SearchResult(
+                score=score,
+                content=chunk.content,
+                document_title=document.title,
+                source_url=document.source_url,
+                page_number=chunk.page_number,
+            )
+        )
+    results.sort(key=lambda item: item.score, reverse=True)
+    return results[:top_k]
+
+
+def _search_knowledge_postgresql(
+    db: Session,
+    *,
+    robot_model_id: int,
+    query_vector: list[float],
+    top_k: int,
+    min_score: float,
+) -> list[SearchResult]:
+    statement = postgres_search_statement(
+        robot_model_id=robot_model_id,
+        query_vector=query_vector,
+        top_k=top_k,
+        min_score=min_score,
+    )
+    rows = db.execute(statement).all()
+    return [
+        SearchResult(
+            score=max(-1.0, min(1.0, 1.0 - float(distance_value))),
+            content=chunk.content,
+            document_title=document.title,
+            source_url=document.source_url,
+            page_number=chunk.page_number,
+        )
+        for chunk, document, distance_value in rows
+    ]
+
+
+def postgres_search_statement(
+    *, robot_model_id: int, query_vector: list[float], top_k: int, min_score: float
+):
+    query_parameter = bindparam(
+        "query_embedding",
+        value=query_vector,
+        type_=VECTOR(EMBEDDING_DIMENSION),
+    )
+    # Keep the indexed column bare on the left side of <=>. Casting the column
+    # itself would turn this into an expression and can prevent PostgreSQL from
+    # using the HNSW index created by the migration.
+    distance = KnowledgeChunk.embedding.op("<=>", return_type=Float)(query_parameter)
+    return (
+        select(KnowledgeChunk, KnowledgeDocument, distance.label("distance"))
+        .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
+        .where(
+            KnowledgeDocument.robot_model_id == robot_model_id,
+            KnowledgeChunk.embedding.is_not(None),
+            distance <= 1.0 - min_score,
+        )
+        .order_by(distance)
+        .limit(top_k)
+    )
+
+
+def get_knowledge_status(db: Session) -> list[KnowledgeStatus]:
+    rows = db.execute(
+        select(
+            RobotModel.id,
+            RobotModel.code,
+            func.count(distinct(KnowledgeDocument.id)),
+            func.count(KnowledgeChunk.id),
+            func.count(case((KnowledgeChunk.embedding.is_not(None), 1))),
+        )
+        .outerjoin(KnowledgeDocument, KnowledgeDocument.robot_model_id == RobotModel.id)
+        .outerjoin(KnowledgeChunk, KnowledgeChunk.document_id == KnowledgeDocument.id)
+        .group_by(RobotModel.id, RobotModel.code)
+        .order_by(RobotModel.code)
+    ).all()
+    return [
+        KnowledgeStatus(
+            robot_model_id=model_id,
+            model_code=model_code,
+            document_count=document_count,
+            chunk_count=chunk_count,
+            vector_count=vector_count,
+        )
+        for model_id, model_code, document_count, chunk_count, vector_count in rows
+    ]

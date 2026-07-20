@@ -1,0 +1,161 @@
+{
+  "created_at": "2026-07-20T01:59:38.036473+00:00",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 256,
+  "knowledge_status": [
+    {
+      "robot_model_id": 1,
+      "model_code": "JH69U1",
+      "document_count": 1,
+      "chunk_count": 31,
+      "vector_count": 31
+    },
+    {
+      "robot_model_id": 2,
+      "model_code": "VC35U1",
+      "document_count": 1,
+      "chunk_count": 22,
+      "vector_count": 22
+    }
+  ],
+  "total": 5,
+  "passed": 5,
+  "pass_rate": 1.0,
+  "cases": [
+    {
+      "model_code": "JH69U1",
+      "query": "机器人找不到基站，无法自动回充",
+      "expected_pages": [
+        15,
+        16
+      ],
+      "min_score": 0.25,
+      "passed": true,
+      "returned": [
+        {
+          "score": 0.690568,
+          "page_number": 16,
+          "document_title": "海尔 JH69U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书"
+        },
+        {
+          "score": 0.678712,
+          "page_number": 15,
+          "document_title": "海尔 JH69U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书"
+        },
+        {
+          "score": 0.675424,
+          "page_number": 16,
+          "document_title": "海尔 JH69U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书"
+        }
+      ]
+    },
+    {
+      "model_code": "JH69U1",
+      "query": "清水箱缺水，基站红灯闪烁怎么办",
+      "expected_pages": [
+        7,
+        8,
+        9,
+        10,
+        15,
+        16
+      ],
+      "min_score": 0.25,
+      "passed": true,
+      "returned": [
+        {
+          "score": 0.698513,
+          "page_number": 15,
+          "document_title": "海尔 JH69U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书"
+        },
+        {
+          "score": 0.654909,
+          "page_number": 7,
+          "document_title": "海尔 JH69U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书"
+        },
+        {
+          "score": 0.643743,
+          "page_number": 11,
+          "document_title": "海尔 JH69U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书"
+        }
+      ]
+    },
+    {
+      "model_code": "VC35U1",
+      "query": "手机搜索不到设备，配网失败",
+      "expected_pages": [
+        4,
+        7,
+        8,
+        15
+      ],
+      "min_score": 0.25,
+      "passed": true,
+      "returned": [
+        {
+          "score": 0.586214,
+          "page_number": 15,
+          "document_title": "海尔 VC35U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书"
+        },
+        {
+          "score": 0.565538,
+          "page_number": 8,
+          "document_title": "海尔 VC35U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书"
+        },
+        {
+          "score": 0.557322,
+          "page_number": 4,
+          "document_title": "海尔 VC35U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书"
+        }
+      ]
+    },
+    {
+      "model_code": "VC35U1",
+      "query": "清扫时有异响，应该检查什么",
+      "expected_pages": [
+        11,
+        13,
+        15
+      ],
+      "min_score": 0.25,
+      "passed": true,
+      "returned": [
+        {
+          "score": 0.567879,
+          "page_number": 15,
+          "document_title": "海尔 VC35U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书"
+        },
+        {
+          "score": 0.550833,
+          "page_number": 13,
+          "document_title": "海尔 VC35U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书"
+        },
+        {
+          "score": 0.541955,
+          "page_number": 15,
+          "document_title": "海尔 VC35U1 官方说明书",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书"
+        }
+      ]
+    },
+    {
+      "model_code": "VC35U1",
+      "query": "完全无关的烘焙蛋糕配方",
+      "expected_pages": [],
+      "min_score": 0.9,
+      "passed": true,
+      "returned": []
+    }
+  ]
+}

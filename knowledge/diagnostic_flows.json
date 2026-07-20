@@ -1,0 +1,249 @@
+{
+  "schema_version": "2.0",
+  "updated_at": "2026-07-20",
+  "flows": [
+    {
+      "stable_key": "jh69u1-return-to-dock",
+      "version": 1,
+      "status": "published",
+      "model_code": "JH69U1",
+      "model_name": "JH69U1 全能扫拖机器人",
+      "issue_category_code": "return_to_dock_failure",
+      "issue_category_name": "无法回充",
+      "title": "JH69U1 无法回充安全排查",
+      "reviewed_at": "2026-07-20T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260720",
+      "review_note": "官方说明书第 7、14-16 页逐步骤复核；平台安全规则与说明书依据分开记录。",
+      "steps": [
+        {
+          "stable_key": "check-dock-placement",
+          "position": 1,
+          "title": "检查基站供电与摆放",
+          "instruction": "确认基站电源已连接并靠墙平稳放置，前方至少保留约 1.5 米、两侧各至少约 0.5 米空间，收好电源线并移除附近障碍物。",
+          "source_label": "海尔 JH69U1 官方说明书，第 7 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 7,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书明确要求基站靠墙、连接电源，前方 1.5 米和两侧 0.5 米无障碍。",
+          "policy_note": "电源线破损、冒烟或异常发热由平台高风险规则直接停止。"
+        },
+        {
+          "stable_key": "clean-dock-contacts",
+          "position": 2,
+          "title": "清洁充电触点和回充灯",
+          "instruction": "关闭主机并断开基站电源后，检查主机充电极片、基站充电弹片和外露回充灯是否有灰尘或遮挡，只使用干燥软布轻擦。",
+          "source_label": "海尔 JH69U1 官方说明书，第 3、14-15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书要求维护前关机断电、不得湿擦充电弹片，并定期用柔软干布清洁前后回充灯。",
+          "policy_note": "平台额外禁止使用金属工具短接或刮擦触点。"
+        },
+        {
+          "stable_key": "retry-near-dock",
+          "position": 3,
+          "title": "在基站附近重新尝试回充",
+          "instruction": "将主机移到基站附近，在开机状态使用正常回充操作再尝试一次；仍提示回充失败时结束自助排查。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15-16 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "常见问题要求距离过远时将主机放到基站附近尝试，故障排除要求回充失败时搬回基站。",
+          "policy_note": "步骤失败后平台停止继续尝试并建议售后。"
+        }
+      ]
+    },
+    {
+      "stable_key": "jh69u1-mop-washing",
+      "version": 1,
+      "status": "published",
+      "model_code": "JH69U1",
+      "model_name": "JH69U1 全能扫拖机器人",
+      "issue_category_code": "base_station_water_tank_issue",
+      "issue_category_name": "无法清洗拖布",
+      "title": "JH69U1 无法清洗拖布安全排查",
+      "reviewed_at": "2026-07-20T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260720",
+      "review_note": "将原本过宽的基站/水箱异常收窄为说明书明确列出的无法清洗拖布问题。",
+      "steps": [
+        {
+          "stable_key": "check-water-levels",
+          "position": 1,
+          "title": "检查清水量和污水箱",
+          "instruction": "确认清水箱有水且不超过最高水位线，污水箱未满；处理完成后将两个水箱安装到对应位置。",
+          "source_label": "海尔 JH69U1 官方说明书，第 9、15-16 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "常见问题和故障排除明确要求清水箱缺水时加水、污水箱满时倒出并安装到位。",
+          "policy_note": "发现箱体破损或持续漏水时由平台安全规则停止。"
+        },
+        {
+          "stable_key": "clean-washing-slot",
+          "position": 2,
+          "title": "清理清洗槽和污水过滤孔",
+          "instruction": "断开基站电源并移开主机，只按说明书清理清洗槽、清洗支架和污水过滤孔；不要拆卸内部管路。",
+          "source_label": "海尔 JH69U1 官方说明书，第 14-16 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书给出清洗槽、清洗支架的维护方法，并要求清洗槽满时清理污水过滤孔。",
+          "policy_note": "仅允许维护说明书标明的外露部件。"
+        },
+        {
+          "stable_key": "check-washing-support",
+          "position": 3,
+          "title": "确认清洗支架安装到位",
+          "instruction": "将清洗支架清洁干净并重新安装到位，然后只启动一次拖布清洗确认结果；仍无法清洗时联系售后。",
+          "source_label": "海尔 JH69U1 官方说明书，第 11、16 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书列明清洗支架未安装会中断清洗，故障排除要求清洁并确认安装到位。",
+          "policy_note": "只允许一次结果确认，避免故障状态下反复运行。"
+        }
+      ]
+    },
+    {
+      "stable_key": "vc35u1-wifi-setup",
+      "version": 1,
+      "status": "published",
+      "model_code": "VC35U1",
+      "model_name": "VC35U1 扫拖机器人",
+      "issue_category_code": "wifi_setup_failure",
+      "issue_category_name": "配网失败",
+      "title": "VC35U1 配网失败安全排查",
+      "reviewed_at": "2026-07-20T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260720",
+      "review_note": "删除说明书未提及的蓝牙、移动数据和 VPN 步骤，只保留官方网络条件与按键操作。",
+      "steps": [
+        {
+          "stable_key": "check-wifi-coverage",
+          "position": 1,
+          "title": "确认 Wi-Fi 覆盖范围",
+          "instruction": "确认手机、机器人和充电座处于家庭 Wi-Fi 覆盖范围内，并让手机和主机尽可能靠近路由器。",
+          "source_label": "海尔 VC35U1 官方说明书，第 8、15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 8,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书要求手机、主机和充电座处于 Wi-Fi 覆盖范围并尽量靠近路由器。",
+          "policy_note": "平台禁止把 Wi-Fi 明文密码写入故障描述或报告。"
+        },
+        {
+          "stable_key": "check-supported-network",
+          "position": 2,
+          "title": "检查网络兼容条件",
+          "instruction": "确认使用的不是 5G Wi-Fi，并且网络未使用该型号不支持的 WEP 加密方式；近期修改过路由器配置或密码时先重启主机。",
+          "source_label": "海尔 VC35U1 官方说明书，第 8 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 8,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书明确不支持 5G Wi-Fi 和 WEP，并要求路由器配置或密码变化后重启主机重新配网。",
+          "policy_note": null
+        },
+        {
+          "stable_key": "reset-wifi-pairing",
+          "position": 3,
+          "title": "重新进入配网状态",
+          "instruction": "让主机保持待机，同时按下启动键和回充键，听到语音提示后按照 App 提示完成配网；白灯闪烁表示配网中，白灯常亮表示联网成功。",
+          "source_label": "海尔 VC35U1 官方说明书，第 4、8、15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 8,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书明确给出待机状态同时按启动键和回充键的操作及配网灯态。",
+          "policy_note": null
+        }
+      ]
+    },
+    {
+      "stable_key": "vc35u1-cleaning-noise",
+      "version": 1,
+      "status": "published",
+      "model_code": "VC35U1",
+      "model_name": "VC35U1 扫拖机器人",
+      "issue_category_code": "cleaning_noise",
+      "issue_category_name": "清扫异响",
+      "title": "VC35U1 清扫异响安全排查",
+      "reviewed_at": "2026-07-20T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260720",
+      "review_note": "替代因果证据不足的导航异常正式流程；异响与轮刷异物在说明书常见问题中有直接对应。",
+      "steps": [
+        {
+          "stable_key": "inspect-external-moving-parts",
+          "position": 1,
+          "title": "检查轮刷外露异物",
+          "instruction": "关闭主机电源，检查滚刷、边刷、驱动轮和万向轮外露位置是否缠绕毛发、线缆或其他异物。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15-16 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "常见问题明确将清扫异响对应到滚刷、边刷、驱动轮和万向轮上的异物。",
+          "policy_note": "只检查外露位置，不拆机。"
+        },
+        {
+          "stable_key": "clean-roller-and-side-brush",
+          "position": 2,
+          "title": "清理滚刷和边刷",
+          "instruction": "按说明书取出滚刷并清理缠绕物，清理边刷及其轴承外露缠绕物，完成后正确装回。",
+          "source_label": "海尔 VC35U1 官方说明书，第 11 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "产品维护章节给出滚刷和边刷的取出、清理和装回方法。",
+          "policy_note": "部件破损、无法取下或需要内部维修时停止。"
+        },
+        {
+          "stable_key": "clean-bottom-and-bumper",
+          "position": 3,
+          "title": "清洁底盘和防撞条",
+          "instruction": "用干燥软布清洁主机底盘和防撞条后，在无障碍平整地面短距离运行一次确认；仍有明显异响时联系售后。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15-16 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "常见问题要求异响时清洁主机底盘和防撞条，安全信息要求使用干柔毛巾。",
+          "policy_note": "平台只允许一次短距离结果确认。"
+        }
+      ]
+    },
+    {
+      "stable_key": "vc35u1-navigation-basic-check",
+      "version": 1,
+      "status": "draft",
+      "model_code": "VC35U1",
+      "model_name": "VC35U1 扫拖机器人",
+      "issue_category_code": "navigation_abnormal",
+      "issue_category_name": "导航异常",
+      "title": "VC35U1 导航异常外部环境与传感器基础检查",
+      "reviewed_at": "2026-07-20T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260720",
+      "review_note": "维护动作有官方依据，但说明书未直接证明其对路径混乱或反复碰撞的诊断因果关系，因此保持草稿并禁止普通用户调用。",
+      "steps": [
+        {
+          "stable_key": "clear-floor-obstacles",
+          "position": 1,
+          "title": "移除地面障碍和线缆",
+          "instruction": "停止清扫并移除地面散落物、易碎品、线缆和窗帘拉绳。",
+          "source_label": "海尔 VC35U1 官方说明书，第 9、16 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 9,
+          "evidence_level": "partial",
+          "evidence_basis": "说明书支持清扫前清障，但未直接说明该动作可解决导航故障。",
+          "policy_note": null
+        },
+        {
+          "stable_key": "clean-external-sensors",
+          "position": 2,
+          "title": "清洁外露传感器",
+          "instruction": "关闭主机后，用柔软干布擦拭沿墙、碰撞、对位和防坠传感器表面。",
+          "source_label": "海尔 VC35U1 官方说明书，第 13、16 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 13,
+          "evidence_level": "partial",
+          "evidence_basis": "说明书支持传感器维护，但未明确建立传感器灰尘与导航异常的因果关系。",
+          "policy_note": "不使用液体，不拆开外壳。"
+        }
+      ]
+    }
+  ]
+}

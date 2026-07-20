@@ -1,0 +1,74 @@
+name: robotcare-ai
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-robotcare}
+      POSTGRES_USER: ${POSTGRES_USER:-robotcare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the external environment}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    shm_size: 128mb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      ROBOTCARE_DATABASE_URL: ${ROBOTCARE_DATABASE_URL:?Set the PostgreSQL SQLAlchemy URL in the external environment}
+      ROBOTCARE_JWT_SECRET: ${ROBOTCARE_JWT_SECRET:?Set a long random JWT secret in the external environment}
+      ROBOTCARE_ACCESS_TOKEN_MINUTES: ${ROBOTCARE_ACCESS_TOKEN_MINUTES:-60}
+      ROBOTCARE_CORS_ORIGINS: ${ROBOTCARE_CORS_ORIGINS:-http://localhost:5173}
+      ROBOTCARE_ATTACHMENT_DIR: /app/data/attachments
+      ROBOTCARE_REPORT_DIR: /app/data/reports
+      ROBOTCARE_AUTO_CREATE_SCHEMA: "false"
+      ROBOTCARE_DASHSCOPE_API_KEY: ${ROBOTCARE_DASHSCOPE_API_KEY:-}
+      ROBOTCARE_PDF_FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    volumes:
+      - backend_data:/app/data
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget -q -O - http://127.0.0.1/healthz | grep -q '^ok' && wget -q -O - http://127.0.0.1/backend-healthz | grep -q '\"status\":\"ok\"'"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  backend_data:

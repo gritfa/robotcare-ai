@@ -1,6 +1,6 @@
 # RobotCare AI API 契约
 
-> 契约版本：`0.8.0`；统一前缀：`/api/v1`。本文按 2026-07-20 的后端源码和完整回归 `94 passed, 1 skipped` 整理；唯一跳过项为真实 PostgreSQL 集成测试，未被运行验证的边界明确标为【待验证】或【计划】。
+> 契约版本：`0.9.0`；统一前缀：`/api/v1`。本文按 2026-07-20 的后端源码和完整回归 `111 passed, 1 skipped` 整理；唯一跳过项为真实 PostgreSQL 集成测试，未被运行验证的边界明确标为【待验证】或【计划】。
 
 ## 1. 通用约定
 
@@ -25,11 +25,20 @@
 ```json
 {
   "email": "user@example.com",
-  "password": "at-least-8-characters"
+  "password": "at-least-8-characters",
+  "invite_code": "deployment-provided-invite"
 }
 ```
 
 成功：`201 TokenResponse`。邮箱重复或并发唯一键竞争：`409`，不会返回数据库 500。新用户状态为 `active`。
+
+注册由 `ROBOTCARE_REGISTRATION_MODE` 控制：
+
+- `open`：开发或受控环境可不传 `invite_code`；生产环境启动时拒绝该模式。
+- `invite`：必须提供与服务端配置一致的邀请码；缺失或错误邀请码统一返回 `403 Registration is not available`。
+- `closed`：所有注册请求统一返回相同 403。
+
+生产邀请码至少 16 字符，且不能包含示例占位标记；比较使用恒定时间摘要比较。Compose 默认 `invite`，真实密钥只从部署环境注入。邀请码的发放、轮换、撤销和使用次数管理仍为【计划】。
 
 ### `POST /api/v1/auth/login`
 

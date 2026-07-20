@@ -135,6 +135,29 @@ describe('auth store session lifecycle', () => {
     expect(localStorage.getItem('robotcare_access_token')).toBeNull()
   })
 
+  it('passes an optional beta invite code to registration', async () => {
+    authMocks.register.mockResolvedValue({
+      access_token: 'registered-access',
+      user: { id: 1, email: 'invite@example.com', role: 'user' },
+    })
+    const store = useAuthStore()
+
+    await store.register({
+      name: '测试用户',
+      email: 'invite@example.com',
+      password: 'StrongPass123',
+      invite_code: 'beta-invite-code',
+    })
+
+    expect(authMocks.register).toHaveBeenCalledWith({
+      name: '测试用户',
+      email: 'invite@example.com',
+      password: 'StrongPass123',
+      invite_code: 'beta-invite-code',
+    })
+    expect(store.isAuthenticated).toBe(true)
+  })
+
   it('reloads a persisted user profile instead of trusting stale local data', async () => {
     localStorage.setItem('robotcare_access_token', 'access-token')
     localStorage.setItem('robotcare_user', JSON.stringify({ id: 1, email: 'old@example.com', role: 'admin' }))

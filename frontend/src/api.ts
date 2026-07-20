@@ -159,7 +159,11 @@ function listPayload<T>(value: unknown): T[] {
 }
 
 export const authApi = {
-  register: async (body: { email: string; password: string; name?: string }) => payload<AuthResult>((await http.post('/auth/register', { email: body.email, password: body.password })).data),
+  register: async (body: { email: string; password: string; name?: string; invite_code?: string }) => payload<AuthResult>((await http.post('/auth/register', {
+    email: body.email,
+    password: body.password,
+    invite_code: body.invite_code || undefined,
+  })).data),
   login: async (email: string, password: string) => {
     try {
       return payload<AuthResult>((await http.post('/auth/login', { email, password })).data)

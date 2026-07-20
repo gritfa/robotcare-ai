@@ -53,6 +53,16 @@ def main() -> None:
         "Compose must default to the production settings gate",
     )
     require(
+        backend_env["ROBOTCARE_REGISTRATION_MODE"]
+        == "${ROBOTCARE_REGISTRATION_MODE:-invite}",
+        "Compose must default to invite-only registration",
+    )
+    require(
+        backend_env["ROBOTCARE_REGISTRATION_INVITE_SECRET"]
+        == "${ROBOTCARE_REGISTRATION_INVITE_SECRET:-}",
+        "registration invite secret must come from the external environment",
+    )
+    require(
         backend_env["ROBOTCARE_REFRESH_COOKIE_SECURE"]
         == "${ROBOTCARE_REFRESH_COOKIE_SECURE:-true}",
         "refresh cookies must default to Secure",
@@ -132,6 +142,8 @@ def main() -> None:
         "audit_eval_dataset.py",
         "npm run test",
         "npm run build",
+        "npm run test:e2e",
+        "playwright install --with-deps chromium",
         "docker compose config --quiet",
     ):
         require(token in ci, f"CI deployment contract missing: {token}")

@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,12 +13,21 @@ INSECURE_PRODUCTION_JWT_SECRETS = {
     "change-me",
 }
 INSECURE_PRODUCTION_SECRET_MARKERS = ("replace", "change-me", "example", "test-only")
+INSECURE_INVITE_SECRET_MARKERS = (
+    "replace",
+    "change-me",
+    "example",
+    "test-only",
+    "placeholder",
+)
 
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/robotcare.db"
     environment: str = "development"
     jwt_secret: str = DEFAULT_DEVELOPMENT_JWT_SECRET
+    registration_mode: Literal["open", "invite", "closed"] = "open"
+    registration_invite_secret: str | None = None
     access_token_minutes: int = Field(default=60, ge=1, le=1440)
     refresh_token_days: int = Field(default=14, ge=1, le=90)
     refresh_reuse_grace_seconds: int = Field(default=5, ge=0, le=30)
@@ -35,8 +45,20 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
+        if self.registration_mode == "invite":
+            invite_secret = (self.registration_invite_secret or "").strip()
+            lowered_invite_secret = invite_secret.lower()
+            if len(invite_secret) < 16 or any(
+                marker in lowered_invite_secret for marker in INSECURE_INVITE_SECRET_MARKERS
+            ):
+                raise ValueError(
+                    "ROBOTCARE_REGISTRATION_INVITE_SECRET must be at least 16 characters "
+                    "and must not use a documented placeholder in invite mode"
+                )
         if self.environment.strip().lower() != "production":
             return self
+        if self.registration_mode == "open":
+            raise ValueError("ROBOTCARE_REGISTRATION_MODE must not be open in production")
         secret = self.jwt_secret.strip()
         lowered_secret = secret.lower()
         if (

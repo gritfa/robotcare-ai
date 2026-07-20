@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 from io import BytesIO
 import logging
 from pathlib import Path
@@ -28,6 +29,7 @@ from .auth_service import (
     rotate_refresh_token,
     set_refresh_cookie,
 )
+from .config import Settings, get_settings
 from .database import get_db
 from .diagnostic_graph import feedback_decision_graph
 from .knowledge_service import get_knowledge_status, search_knowledge
@@ -176,12 +178,25 @@ def current_step_for(diagnostic: DiagnosticSession) -> DiagnosticStep | None:
     return next((step for step in diagnostic.flow.steps if step.position == diagnostic.current_position), None)
 
 
+def enforce_registration_policy(payload: RegisterRequest, settings: Settings) -> None:
+    if settings.registration_mode == "open":
+        return
+    if settings.registration_mode == "closed":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration is not available")
+
+    supplied_code = payload.invite_code or ""
+    expected_code = settings.registration_invite_secret or ""
+    if not hmac.compare_digest(supplied_code.encode("utf-8"), expected_code.encode("utf-8")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration is not available")
+
+
 @router.post("/auth/register", response_model=TokenResponse, status_code=201)
 def register(
     payload: RegisterRequest,
     response: Response,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
+    enforce_registration_policy(payload, get_settings())
     email = normalize_email(str(payload.email))
     if db.scalar(select(User).where(User.email == email)) is not None:
         raise HTTPException(status_code=409, detail="Email already registered")

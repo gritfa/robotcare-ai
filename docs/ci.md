@@ -2,7 +2,7 @@
 
 ## 状态边界
 
-- `【已验证：静态配置】` 仓库已配置 GitHub Actions 工作流 `.github/workflows/ci.yml`，包含 SQLite 后端回归、PostgreSQL 16 + pgvector 集成、前端测试/构建、部署配置契约和知识数据检查。
+- `【已验证：静态配置】` 仓库已配置 GitHub Actions 工作流 `.github/workflows/ci.yml`，包含 SQLite 后端回归、PostgreSQL 16 + pgvector 集成、前端测试/构建、Playwright Chromium E2E、部署配置契约和知识数据检查。
 - `【待验证：远端运行】` 只有 GitHub Actions 页面出现对应提交的真实成功记录后，才能将该提交的 CI 运行状态改记为 `【已验证】`。
 - 本文不声称 GitHub Actions 已经运行，也不把本地命令成功等同于远端 CI 成功。
 
@@ -18,7 +18,7 @@ python -m pip install -e ".[test]"
 python -m pytest
 ```
 
-本地完整回归的当前证据为 `94 passed, 1 skipped`；覆盖认证会话/刷新轮换/自然并发宽限/重放/退出/原子限流与登录 API 并发门禁、可观测性、管理员 RBAC/API/CLI、Alembic `20260720_0003` 和 113 条评测数据审计。唯一跳过项需要 `ROBOTCARE_TEST_POSTGRES_URL` 和显式破坏性测试开关。
+本地完整回归的当前证据为 `111 passed, 1 skipped`；覆盖认证会话/刷新轮换/自然并发宽限/重放/退出/原子限流与登录 API 并发门禁、生产邀请码注册策略、可观测性、管理员 RBAC/API/CLI、Alembic `20260720_0003` 和 113 条评测数据审计。唯一跳过项需要 `ROBOTCARE_TEST_POSTGRES_URL` 和显式破坏性测试开关。
 
 ### Backend PostgreSQL + pgvector
 
@@ -47,7 +47,23 @@ npm run build
 
 `npm ci` 要求 `package.json` 与 `package-lock.json` 保持同步。构建失败时不应改用 `npm install` 掩盖锁文件不一致。
 
-本地当前证据为 Vitest `27 passed`，`vue-tsc` 与 Vite production build 通过，1702 个模块完成转换。该结果包括管理员状态管理、`withCredentials`、同标签并发 401 单次刷新、跨标签 Web Lock、409 冲突重试、停用账户清理、刷新失败清理和 logout finally 单元测试，但不包括浏览器 E2E。
+本地当前证据为 Vitest `28 passed`，`vue-tsc` 与 Vite production build 通过，1702 个模块完成转换。该结果包括邀请码传递、管理员状态管理、`withCredentials`、同标签并发 401 单次刷新、跨标签 Web Lock、409 冲突重试、停用账户清理、刷新失败清理和 logout finally 单元测试。
+
+### Browser E2E
+
+`【已验证：本机 Edge】` Playwright 使用系统安装的 Microsoft Edge，在隔离 FastAPI、Vite 和 SQLite 测试库上完成 3 条关键链路：
+
+- 邀请码注册 → 添加设备 → 单步诊断全部未解决 → 生成并下载 PDF。
+- 诊断过程中刷新页面后恢复当前步骤。
+- 第二用户不能读取第一用户诊断，普通用户不能进入管理员页面。
+
+```powershell
+Set-Location frontend
+npm run test:e2e:edge
+# 3 passed (32.1s)
+```
+
+E2E 测试仅用 `/health` 等待隔离测试进程启动，并由测试配置显式自动建表；这不替代生产 Alembic revision 门禁，也不证明 PostgreSQL、Docker、HTTPS 或多浏览器兼容。`【已验证：工作流配置】` CI 另配置 Chromium E2E 和失败证据上传；`【待验证：远端运行】` 尚无 GitHub Actions 成功记录。
 
 ### Knowledge
 

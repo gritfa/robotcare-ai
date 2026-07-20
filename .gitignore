@@ -16,6 +16,8 @@ backend/generated_reports/
 backend/data/
 frontend/node_modules/
 frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
 frontend/.npm-cache/
 frontend/*.tsbuildinfo
 frontend/vite.config.js

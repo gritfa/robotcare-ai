@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "test": "vitest run",
+    "test:e2e": "npm run test:e2e:clean && playwright test --project=chromium",
+    "test:e2e:edge": "npm run test:e2e:clean && playwright test --project=edge",
+    "test:e2e:clean": "node scripts/clean-e2e.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -18,6 +21,7 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^22.10.5",
     "@vitejs/plugin-vue": "^5.2.1",
     "typescript": "~5.7.2",

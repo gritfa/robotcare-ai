@@ -29,7 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
     applyAuthResult(await authApi.login(email, password))
     if (!profileLoaded.value) await loadMe()
   }
-  async function register(body: { email: string; password: string; name: string }) {
+  async function register(body: { email: string; password: string; name: string; invite_code?: string }) {
     const result = await authApi.register(body)
     if (result.access_token) {
       applyAuthResult(result)

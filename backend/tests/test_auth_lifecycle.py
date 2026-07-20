@@ -301,7 +301,11 @@ def test_register_integrity_error_is_reported_as_conflict(client, monkeypatch):
 
 
 def test_production_settings_reject_weak_secret_or_unsafe_schema_and_default_secure_cookie():
-    common = {"environment": "production", "_env_file": None}
+    common = {
+        "environment": "production",
+        "registration_mode": "closed",
+        "_env_file": None,
+    }
     for overrides in (
         {"jwt_secret": "short"},
         {"jwt_secret": "development-secret-change-before-deploying"},

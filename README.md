@@ -8,8 +8,9 @@
 
 | 子系统 | 状态 | 说明 |
 | --- | --- | --- |
-| FastAPI 后端 | `【已验证】` | 认证生命周期、设备、诊断、安全、版本化流程、Alembic、附件、报告、检索、管理员与可观测性全量回归为 `94 passed, 1 skipped`；唯一跳过项是真实 PostgreSQL 集成测试 |
-| Vue 3 前端 | `【已验证】` | 用户主链路、管理员控制台与认证恢复共 `27 passed`；`vue-tsc` 和生产构建通过，Vite 转换 1702 个模块 |
+| FastAPI 后端 | `【已验证】` | 认证生命周期、邀请码注册策略、设备、诊断、安全、版本化流程、Alembic、附件、报告、检索、管理员与可观测性全量回归为 `111 passed, 1 skipped`；唯一跳过项是真实 PostgreSQL 集成测试 |
+| Vue 3 前端 | `【已验证】` | 用户主链路、邀请码传递、管理员控制台与认证恢复共 `28 passed`；`vue-tsc` 和生产构建通过，Vite 转换 1702 个模块 |
+| Microsoft Edge E2E | `【已验证：本机关键链路】` | 本机真实 Edge 完成注册→设备→诊断→报告/PDF、诊断刷新恢复、跨用户隔离与普通用户管理员拒绝，共 `3 passed`；使用隔离 SQLite 测试库，不代表 PostgreSQL/Docker/HTTPS |
 | 认证生命周期 | `【已验证】` | HttpOnly 刷新 Cookie、访问令牌会话绑定、轮换/重放撤销、自然并发宽限、退出失效、用户状态和原子数据库限流均有后端测试；前端覆盖同标签单飞、跨标签 Web Lock 与冲突重试 |
 | 可观测性基线 | `【已验证】` | `X-Request-ID`、JSON 请求/领域事件日志、递归脱敏、带 `trace_id` 的安全错误响应以及数据库/Alembic/存储就绪检查均通过测试；尚未接入外部日志、告警或 OpenTelemetry |
 | 高风险输入阻断 | `【已验证】` | 后端确定性规则覆盖冒烟、焦味、异常发热、电池损坏、内部进水、拆机、内部维修、短接、绕过保护和非官方改装；17 个安全测试通过 |
@@ -25,7 +26,7 @@
 | PostgreSQL + pgvector 真实运行 | `【待验证】` | 集成测试与 smoke 脚本已编写，但本机无 Docker/psql，远端 CI 尚未运行，不能声称 PostgreSQL 迁移、索引命中或运行健康已完成 |
 | PDF 售后报告 | `【已验证】` | 未解决会话可幂等生成和受权下载中文 PDF；跨用户访问、无效状态、文件头与随机存储名测试通过，示例已渲染目视检查 |
 | 管理员后端与审计 | `【已验证】` | 后端 RBAC、`AuditLog`、7 个管理员接口、安全管理员 CLI、型号停用语义均通过单元/API/迁移测试 |
-| 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；浏览器 E2E 仍为【计划】 |
+| 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；本机 Edge 已验证普通用户访问管理员页面被拒绝，管理员内容运营 E2E 仍为【计划】 |
 | 管理员完整内容运营 | `【计划】` | 知识上传/重建/停用、流程审核发布、评测执行与结果持久化尚未实现，不能称管理后台全部完成 |
 | Docker 静态部署契约 | `【已验证】` | 部署检查脚本执行与 py_compile 通过；静态检查覆盖启动迁移、外部密钥、认证生产门禁、PostgreSQL/附件/报告持久卷、`/ready` 健康检查和 Noto CJK 字体配置 |
 | Docker 实际部署 | `【待验证】` | 本机没有 Docker，尚未实际构建镜像、启动 Compose、执行迁移或验证重建后数据保持 |
@@ -38,7 +39,7 @@
 cd backend
 $base = Join-Path $env:TEMP ('robotcare_pytest_' + [guid]::NewGuid().ToString('N'))
 python -m pytest -q -p no:cacheprovider --basetemp $base
-# 94 passed, 1 skipped
+# 111 passed, 1 skipped
 ```
 
 前端：
@@ -48,7 +49,15 @@ cd frontend
 npm.cmd ci --cache .npm-cache
 npm.cmd run test
 npm.cmd run build
-# 27 passed；vue-tsc 与 Vite production build 通过，1702 modules transformed
+# 28 passed；vue-tsc 与 Vite production build 通过，1702 modules transformed
+```
+
+本机 Microsoft Edge 关键链路：
+
+```powershell
+cd frontend
+npm.cmd run test:e2e:edge
+# 3 passed
 ```
 
 知识数据：
@@ -101,7 +110,8 @@ API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝
 - 【已验证】所有响应带 `X-Request-ID`；HTTP/校验错误的 JSON 顶层包含 `trace_id`，422 不回显 Pydantic 的 `input/ctx`，未处理异常统一返回通用 500。请求日志只记录方法、路径、状态和耗时，不记录请求头、查询参数或正文；敏感键递归脱敏。
 - 【已验证】`GET /health` 是存活探针；`GET /ready` 检查数据库连通、Alembic 是否处于 head、附件和报告目录是否可写，任一失败返回 503。本地迁移库实际启动已获得 `/health 200` 与 `/ready 200`。
 - 【已验证】领域日志覆盖安全阻断、诊断创建/状态变化、知识检索来源/文档 SHA256/页码/分数/耗时，以及 embedding 模型/条数/维度/耗时/结果；不记录用户故障描述、检索文本、分片内容或模型输入。
-- 【计划】公开注册的邀请制/限流/邮箱验证、修改密码、找回密码、账户删除/个人数据清理，以及外部日志平台、指标告警、分布式 Trace/OTel 仍未实现。
+- 【已验证】注册策略支持 `open/invite/closed`。生产环境禁止 `open`，邀请码模式要求至少 16 字符且拒绝示例占位值；缺失或错误邀请码与关闭注册统一返回通用 403，避免泄露策略细节。Compose 默认使用 `invite`，真实邀请码必须由部署环境注入。
+- 【计划】邀请码生命周期管理/轮换、独立注册限流、邮箱验证、垃圾账户清理、修改密码、找回密码、账户删除/个人数据清理，以及外部日志平台、指标告警、分布式 Trace/OTel 仍未实现。
 
 ## 目录
 

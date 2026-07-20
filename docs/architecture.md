@@ -12,10 +12,12 @@
 
 ```text
 Vue 3 + TypeScript 电脑网页
-        │ HTTPS / JSON / JWT
+        │ HTTPS / JSON / Bearer access JWT
+        │ HttpOnly refresh cookie（仅 /api/v1/auth）
         ▼
 FastAPI /api/v1
-        ├── 认证与资源所有权校验
+        ├── AuthSession / 刷新轮换 / 数据库登录限流
+        ├── 认证、RBAC 与资源所有权校验
         ├── 用户设备与型号服务
         ├── 确定性诊断状态机
         ├── 附件元数据与对象存储适配
@@ -28,8 +30,8 @@ FastAPI /api/v1
 ```
 
 - 【已验证】前端已使用 Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus 与 Axios，并通过生产构建。
-- 【已验证】后端使用 FastAPI、Pydantic v2、SQLAlchemy 2、JWT、Argon2 与 Alembic；显式初始迁移和 revision 启动门禁已通过 SQLite 测试。
-- 【已验证】管理员授权由 FastAPI 依赖在服务器端执行；`AuditLog` 与 Alembic `20260720_0002` 记录型号启停、管理员创建和角色提升等动作。前端路由守卫不作为安全边界。
+- 【已验证】后端使用 FastAPI、Pydantic v2、SQLAlchemy 2、JWT、Argon2 与 Alembic；显式迁移、revision 启动门禁和当前 head `20260720_0003` 已通过 SQLite 迁移测试及本地启动验证。
+- 【已验证】管理员授权由 FastAPI 依赖在服务器端执行；`AuditLog` 与 Alembic `20260720_0002` 记录型号启停、管理员创建和角色提升等动作。`20260720_0003` 增加用户状态、认证会话、刷新令牌和数据库登录限流表。前端路由守卫不作为安全边界。
 - 【已验证】数据层已实现 SQLite/PostgreSQL 双方言：SQLite 用 JSON Text 保存 256 维向量并在 Python 中计算余弦相似度；PostgreSQL 使用 `vector(256)` 和数据库内余弦 Top-K SQL。
 - 【已验证：实现与静态/单元验证】PostgreSQL 查询保持 HNSW 索引列无 CAST，并在数据库层完成型号过滤、阈值、排序和 LIMIT；迁移定义 `vector` 扩展和 `vector_cosine_ops` HNSW 索引。
 - 【待验证】真实 PostgreSQL 尚未运行集成测试；当前不能声称扩展安装、迁移执行、HNSW 可用、查询计划或运行健康已经验证。
@@ -73,22 +75,30 @@ FastAPI /api/v1
 ## 4. 信任与安全
 
 - 【已验证】设备、诊断、附件和报告查询在服务端校验资源所有权；7 个管理员接口统一使用服务器端 `require_admin`，普通用户调用测试均返回 403。
+- 【已验证】认证采用“短期访问 JWT + 服务器端会话 + opaque 刷新 Cookie”。刷新 Cookie 为 `HttpOnly; SameSite=Lax; Path=/api/v1/auth`，生产环境强制 `Secure`；刷新明文不进入响应体、JavaScript 存储或数据库，数据库只保存 SHA256。
+- 【已验证】访问令牌包含 `sid` 并绑定 `AuthSession`；每次受保护请求检查用户状态、会话存在、未撤销且未过期。刷新使用条件更新实现单次消费和轮换；默认 5 秒内自然并发返回 409 而不撤销会话，宽限外旧令牌重放和退出会撤销会话，因此旧访问令牌立即失效。
+- 【已验证】登录限流存入数据库而非进程内内存，包含规范化邮箱全局桶与邮箱/IP 桶，默认 `5 次 / 15 分钟窗口 / 15 分钟锁定`，返回 `Retry-After`。邮箱与 IP 只以密钥化 HMAC 标识保存；不信任可由客户端伪造的 `X-Forwarded-For`。
+- 【已验证】注册唯一键竞争映射为 409，不泄露数据库异常；用户 `active/disabled` 状态会同时约束登录、刷新和既有访问令牌。
 - 【已验证】高风险描述在创建诊断前由后端确定性规则阻断，不依赖 LLM 或前端提示；记录最小化安全事件，不进入普通步骤。
 - 【已验证】附件删除先隔离文件并与数据库记录一起变更；物理清理失败时保留可追踪任务，避免静默孤儿文件。
 - 【已验证】管理员可读取运营概览、型号、知识健康、安全阻断、未解决报告摘要和审计日志，并可启停型号；型号启停记录操作人、资源与变更前后值。
 - 【已验证】型号停用会阻止公共型号发现、新建设备和新开诊断，同时保留历史诊断可读性，避免把运营停用误写成历史数据删除。
 - 【计划】知识上传/重建/停用、流程审核发布和评测结果持久化接入相同 RBAC 与审计体系。
-- 【计划】日志不得记录密码、JWT、Wi-Fi 密码、完整联系方式或附件内容。
+- 【已验证】结构化日志递归脱敏密码、JWT/Token、Cookie、Wi-Fi 字段、联系方式、邮箱与图片/附件内容；请求日志不采集头、查询串或请求体。422 校验错误移除 `input/ctx`，通用 500 不回显异常消息。
 - 【计划】模型输出采用结构化 schema；步骤文本来自已审核数据库记录，而非模型即兴生成。
 - 【已验证】官方入口、原始正文和向量状态分开记录；当前两份说明书已入库，但这不代表内容已经完成逐条人工安全审核。
 - 【已验证】生产式启动不调用 `create_all()` 修改表结构；数据库必须先升级到 Alembic head。测试可显式启用临时建表。
 
 ## 5. 可观测性与交付
 
-- 【已验证】管理员操作已有结构化 `AuditLog`；【计划】请求级 Trace ID、诊断状态变更和报告生成的统一结构化日志。
-- 【计划】监控 API 错误率、诊断完成率、拒答率、来源命中率、检索延迟和模型调用成本。
+- 【已验证】每个请求接受或生成安全格式的 `X-Request-ID`，响应头和错误 JSON 顶层均返回相同 `trace_id`；非法、超长或路径式 ID 会替换为 UUID。
+- 【已验证】进程输出单行 JSON 日志。请求日志包含 `trace_id/method/path/status_code/duration_ms`；领域事件覆盖安全阻断、诊断创建/状态变化、知识检索成功/失败以及 embedding 成功/失败。管理员变更另有持久化 `AuditLog`。
+- 【已验证】知识检索事件记录文档标题、文档 SHA256、来源页码、分数、结果数与耗时；embedding 事件记录模型、输入条数、维度、耗时和结果，不记录查询、分片内容、模型输入或 API Key。
+- 【已验证】`/health` 只表示进程存活；`/ready` 以数据库连通、Alembic head、附件目录和报告目录可写为合取条件，失败关闭并返回 503。本地迁移库实际启动得到 `/health 200` 与 `/ready 200`。
+- 【计划】接入外部日志聚合、指标系统、告警和 OpenTelemetry；当前 JSON 日志不是集中式监控，也没有 SLO、错误率/延迟告警或跨服务 Trace。当前未实现生成式调用，因而还没有可验证的生成模型 token/费用监控。
 - 【计划】通过单元测试、API 集成测试、权限越权测试、状态机测试、RAG 评测和关键页面端到端测试后，才能在状态文档中标为【已验证】。
 - 【已验证：静态契约】Docker Compose、Dockerfile、启动迁移、外部密钥、PostgreSQL/附件/报告持久卷、Noto CJK 字体、服务健康检查和 CI PostgreSQL job 已通过静态配置检查。
+- 【已验证：静态契约】Compose 前后端端口都只绑定主机回环地址；Nginx 配置 CSP、`nosniff`、Referrer Policy 与 Permissions Policy，并且不公开详细 backend readiness。真实 HTTPS 反向代理与浏览器响应头仍需 Docker/E2E 运行确认。
 - 【待验证：真实运行】当前环境没有 Docker/psql，镜像未构建、Compose 未启动、PostgreSQL 集成测试未运行，GitHub Actions 也尚无远端成功记录。配置存在不能替代运行证据。
 
 ## 6. 管理员边界
@@ -106,6 +116,8 @@ FastAPI /api/v1
 
 1. Alembic 升级到当前 head，且 `vector` 扩展存在。
 2. `knowledge_chunks.embedding` 的实际类型为 `vector(256)`，余弦 HNSW 索引存在。
-3. `tests/test_postgres_integration.py` 通过，证明数据库层 Top-K 和型号隔离；`scripts/postgres_integration_smoke.py` 通过，证明迁移后应用健康、种子型号和持久目录可写。
-4. `docker compose build`、`docker compose up -d`、后端/前端健康检查通过。
+3. `tests/test_postgres_integration.py` 通过，证明数据库层 Top-K 和型号隔离；`scripts/postgres_integration_smoke.py` 通过，证明迁移后 `/ready` 就绪、种子型号和持久目录可写。
+4. `docker compose build`、`docker compose up -d`、回环地址上的后端 `/health` 与 `/ready`、前端 `/healthz` 通过；容器内部前端健康检查能直连 `backend:8000/ready`，HTTPS 反代不能暴露详细 readiness。
 5. 重建容器后 PostgreSQL 数据、附件和报告仍存在，并保存命令输出或 CI 链接。
+
+Compose 默认按生产模式启动并要求安全刷新 Cookie，因此实际部署必须位于 HTTPS 反向代理之后。【待验证】本机纯 HTTP Compose 调试必须显式使用 `.env.compose-local.example` 覆盖为 `development` 与 `ROBOTCARE_REFRESH_COOKIE_SECURE=false`；该覆盖不是生产配置。

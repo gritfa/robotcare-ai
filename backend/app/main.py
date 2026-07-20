@@ -1,14 +1,16 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .api import router
 from .config import get_settings
 from .database import Base, build_session_factory
 from .knowledge_service import DashScopeEmbeddingProvider, EmbeddingProvider
 from .migration_guard import ensure_database_at_head
+from .observability import install_observability, readiness_status, request_trace_id
 from .seed import seed_database
 
 
@@ -52,11 +54,17 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    install_observability(application)
     application.include_router(router)
 
     @application.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @application.get("/ready")
+    def ready(request: Request) -> JSONResponse:
+        status_code, content = readiness_status(application, request_trace_id(request))
+        return JSONResponse(status_code=status_code, content=content)
 
     return application
 

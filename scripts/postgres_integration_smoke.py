@@ -81,6 +81,16 @@ def main() -> None:
         health = client.get("/health")
         require(health.status_code == 200, health.text)
         require(health.json() == {"status": "ok"}, "unexpected health payload")
+        ready = client.get("/ready")
+        require(ready.status_code == 200, ready.text)
+        require(ready.json().get("status") == "ready", "application is not ready")
+        require(
+            all(
+                component.get("status") == "ok"
+                for component in ready.json().get("components", {}).values()
+            ),
+            "one or more readiness components failed",
+        )
 
         models = client.get("/api/v1/models")
         require(models.status_code == 200, models.text)

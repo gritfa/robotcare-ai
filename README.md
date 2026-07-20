@@ -8,14 +8,16 @@
 
 | 子系统 | 状态 | 说明 |
 | --- | --- | --- |
-| FastAPI 后端 | `【已验证】` | 认证、设备、诊断、安全、版本化流程、Alembic、附件、报告、检索和管理员接口全量回归为 `68 passed, 1 skipped`；跳过项是真实 PostgreSQL 集成测试 |
-| Vue 3 前端 | `【已验证】` | 用户主链路与管理员控制台共 `14 passed`；`vue-tsc` 和生产构建通过，Vite 转换 1701 个模块 |
+| FastAPI 后端 | `【已验证】` | 认证生命周期、设备、诊断、安全、版本化流程、Alembic、附件、报告、检索、管理员与可观测性全量回归为 `94 passed, 1 skipped`；唯一跳过项是真实 PostgreSQL 集成测试 |
+| Vue 3 前端 | `【已验证】` | 用户主链路、管理员控制台与认证恢复共 `27 passed`；`vue-tsc` 和生产构建通过，Vite 转换 1702 个模块 |
+| 认证生命周期 | `【已验证】` | HttpOnly 刷新 Cookie、访问令牌会话绑定、轮换/重放撤销、自然并发宽限、退出失效、用户状态和原子数据库限流均有后端测试；前端覆盖同标签单飞、跨标签 Web Lock 与冲突重试 |
+| 可观测性基线 | `【已验证】` | `X-Request-ID`、JSON 请求/领域事件日志、递归脱敏、带 `trace_id` 的安全错误响应以及数据库/Alembic/存储就绪检查均通过测试；尚未接入外部日志、告警或 OpenTelemetry |
 | 高风险输入阻断 | `【已验证】` | 后端确定性规则覆盖冒烟、焦味、异常发热、电池损坏、内部进水、拆机、内部维修、短接、绕过保护和非官方改装；17 个安全测试通过 |
 | 反馈幂等与并发 | `【已验证】` | 请求携带当前 `step_id`；重复、旧步骤和两请求并发只允许一条执行记录，冲突返回 409 |
 | 图片上传安全 | `【已验证】` | Pillow 真实解码，校验格式/MIME/扩展名、5MB、2500 万像素、每会话 5 张和会话状态；删除失败进入可追踪清理记录 |
 | 官方说明书证据 | `【已验证】` | JH69U1、VC35U1 官方 PDF 已下载、校验 SHA256、按页解析并完成指定页面目视检查；原始 PDF 不提交公开仓库 |
 | 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；4 条逐步骤说明书复核流程已发布，1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
-| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；发布版本不可原地修改；Alembic head `20260720_0002` 和生产启动 revision 门禁通过测试 |
+| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；发布版本不可原地修改；Alembic head `20260720_0003` 和生产启动 revision 门禁通过测试 |
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
 | RAG/安全评测数据与离线审计 | `【已验证】` | 已形成 113 条分项用例；离线实际执行 `safety_block 15/15`、`source_page 14/14`、`step_selection 14/14`，JSON/Markdown 报告已保存；113 条均为 `needs_human_review` |
 | 完整 RAG 在线评测 | `【计划】` | `model_isolation`、`retrieval_recall`、`refusal`、`classification`、`faithfulness` 均为 `not_run`；当前不生成自然语言答案，也不能称评测集已人工审核 |
@@ -25,7 +27,7 @@
 | 管理员后端与审计 | `【已验证】` | 后端 RBAC、`AuditLog`、7 个管理员接口、安全管理员 CLI、型号停用语义均通过单元/API/迁移测试 |
 | 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；浏览器 E2E 仍为【计划】 |
 | 管理员完整内容运营 | `【计划】` | 知识上传/重建/停用、流程审核发布、评测执行与结果持久化尚未实现，不能称管理后台全部完成 |
-| Docker 静态部署契约 | `【已验证】` | 静态检查已覆盖启动迁移、外部密钥、PostgreSQL/附件/报告持久卷、健康检查和 Noto CJK 字体配置 |
+| Docker 静态部署契约 | `【已验证】` | 部署检查脚本执行与 py_compile 通过；静态检查覆盖启动迁移、外部密钥、认证生产门禁、PostgreSQL/附件/报告持久卷、`/ready` 健康检查和 Noto CJK 字体配置 |
 | Docker 实际部署 | `【待验证】` | 本机没有 Docker，尚未实际构建镜像、启动 Compose、执行迁移或验证重建后数据保持 |
 
 ## 已验证命令
@@ -36,7 +38,7 @@
 cd backend
 $base = Join-Path $env:TEMP ('robotcare_pytest_' + [guid]::NewGuid().ToString('N'))
 python -m pytest -q -p no:cacheprovider --basetemp $base
-# 68 passed, 1 skipped
+# 94 passed, 1 skipped
 ```
 
 前端：
@@ -46,7 +48,7 @@ cd frontend
 npm.cmd ci --cache .npm-cache
 npm.cmd run test
 npm.cmd run build
-# 14 passed；vue-tsc 与 Vite production build 通过，1701 modules transformed
+# 27 passed；vue-tsc 与 Vite production build 通过，1702 modules transformed
 ```
 
 知识数据：
@@ -87,9 +89,19 @@ cd backend
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 
-API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260720_0002`，新增管理员审计日志表；`create_all()` 仅保留给显式开启的隔离测试。
+API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260720_0003`：`0002` 新增管理员审计日志，`0003` 新增用户状态、认证会话、刷新令牌与登录限流表；`create_all()` 仅保留给显式开启的隔离测试。
 
-本地旧开发库已通过迁移升级，并保留 `robotcare.db.pre-alembic-20260720.bak` 与 `robotcare.db.pre-admin-0002-20260720.bak` 备份；2 份知识文档、53 个分片和 53 个向量均已保留。
+本地旧开发库已通过迁移升级，并保留 `robotcare.db.pre-alembic-20260720.bak`、`robotcare.db.pre-admin-0002-20260720.bak` 与本轮 `robotcare.db.pre-auth-0003-20260720.bak` 备份；4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留。
+
+## 认证与可观测性基线
+
+- 【已验证】注册与登录响应体只返回短期访问令牌；opaque 刷新令牌只存在 `robotcare_refresh_token` Cookie 中，属性为 `HttpOnly; SameSite=Lax; Path=/api/v1/auth`，生产环境强制 `Secure`。数据库只保存刷新令牌的 SHA256，不保存明文。
+- 【已验证】访问 JWT 含 `sid` 并绑定服务器端 `AuthSession`。刷新采用条件更新轮换；默认 5 秒内的自然并发重复消费返回 `409 + Retry-After` 且不撤销会话，超过宽限的旧令牌重放返回 401 并撤销整个会话。`POST /api/v1/auth/logout` 返回 204、删除 Cookie 并撤销会话。
+- 【已验证】用户状态为 `active/disabled`；停用用户不能登录、刷新或继续使用既有访问令牌，前端收到对应 403 会清理认证状态。登录失败计数使用 SQLite/PostgreSQL 方言原子 UPSERT，并在密码校验前用事务锁按账户串行化门禁；8 路登录 API 并发测试仍严格在第 5 次失败时锁定。默认窗口/锁定时间均为 15 分钟，返回 `429` 与 `Retry-After`。键值使用 JWT 密钥派生的 HMAC，不保存原邮箱或 IP。
+- 【已验证】所有响应带 `X-Request-ID`；HTTP/校验错误的 JSON 顶层包含 `trace_id`，422 不回显 Pydantic 的 `input/ctx`，未处理异常统一返回通用 500。请求日志只记录方法、路径、状态和耗时，不记录请求头、查询参数或正文；敏感键递归脱敏。
+- 【已验证】`GET /health` 是存活探针；`GET /ready` 检查数据库连通、Alembic 是否处于 head、附件和报告目录是否可写，任一失败返回 503。本地迁移库实际启动已获得 `/health 200` 与 `/ready 200`。
+- 【已验证】领域日志覆盖安全阻断、诊断创建/状态变化、知识检索来源/文档 SHA256/页码/分数/耗时，以及 embedding 模型/条数/维度/耗时/结果；不记录用户故障描述、检索文本、分片内容或模型输入。
+- 【计划】公开注册的邀请制/限流/邮箱验证、修改密码、找回密码、账户删除/个人数据清理，以及外部日志平台、指标告警、分布式 Trace/OTel 仍未实现。
 
 ## 目录
 
@@ -135,6 +147,8 @@ Remove-Item Env:ROBOTCARE_ADMIN_PASSWORD
 
 ## PostgreSQL / Docker 下一步验收
 
+【待验证】`docker-compose.yml` 默认使用 `ROBOTCARE_ENVIRONMENT=production` 与安全刷新 Cookie，因此必须部署在 HTTPS 反向代理之后。仅限本机 HTTP 调试时，复制 `.env.compose-local.example` 为本地环境文件，以 `development` 和 `ROBOTCARE_REFRESH_COOKIE_SECURE=false` 覆盖；不得把这套配置用于公网。
+
 以下命令是待执行的运行验收，不是当前已完成证据。必须使用名称包含 `robotcare_test` 的专用测试库；集成测试会执行 Alembic downgrade/upgrade，禁止指向开发库或生产库。
 
 ```powershell
@@ -161,11 +175,13 @@ docker compose build
 docker compose up -d
 docker compose ps
 Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/ready
 Invoke-WebRequest http://127.0.0.1:5173/healthz
-Invoke-WebRequest http://127.0.0.1:5173/backend-healthz
+# 容器内部健康检查直接访问 backend:8000/ready；
+# 公共 Nginx 不暴露详细 readiness 端点。
 ```
 
-验收证据至少应保存：PostgreSQL `vector` 扩展版本、`knowledge_chunks.embedding=vector(256)`、HNSW 索引存在、型号隔离与 Top-K 测试输出、Alembic head、后端健康响应、前端健康响应，以及容器重建后数据库/附件/报告仍存在的记录。
+验收证据至少应保存：PostgreSQL `vector` 扩展版本、`knowledge_chunks.embedding=vector(256)`、HNSW 索引存在、型号隔离与 Top-K 测试输出、Alembic head、后端 `/health` 与 `/ready` 响应、前端健康响应，以及容器重建后数据库/附件/报告仍存在的记录。
 
 ## 完成证据规则
 

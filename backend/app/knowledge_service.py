@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Protocol
 
 import numpy as np
@@ -14,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from .db_types import EMBEDDING_DIMENSION, normalize_embedding
 from .models import KnowledgeChunk, KnowledgeDocument, RobotModel
+from .observability import current_trace_id, emit_json_log
 
 EMBEDDING_MODEL = "text-embedding-v4"
 EMBEDDING_BATCH_SIZE = 10
@@ -49,11 +52,36 @@ class DashScopeEmbeddingProvider:
         }
         if self.api_key:
             kwargs["api_key"] = self.api_key
+        started_at = perf_counter()
         try:
             response = dashscope.TextEmbedding.call(**kwargs)
         except Exception as exc:
+            emit_json_log(
+                logging.ERROR,
+                "embedding_call",
+                trace_id=current_trace_id(),
+                model=EMBEDDING_MODEL,
+                text_type=text_type,
+                item_count=len(texts),
+                dimension=EMBEDDING_DIMENSION,
+                outcome="error",
+                error_type=type(exc).__name__,
+                duration_ms=round((perf_counter() - started_at) * 1000, 3),
+            )
             raise RuntimeError("DashScope embedding request failed") from exc
         if getattr(response, "status_code", None) != 200:
+            emit_json_log(
+                logging.ERROR,
+                "embedding_call",
+                trace_id=current_trace_id(),
+                model=EMBEDDING_MODEL,
+                text_type=text_type,
+                item_count=len(texts),
+                dimension=EMBEDDING_DIMENSION,
+                outcome="error",
+                provider_status=getattr(response, "status_code", None),
+                duration_ms=round((perf_counter() - started_at) * 1000, 3),
+            )
             message = getattr(response, "message", "DashScope embedding request failed")
             raise RuntimeError(str(message))
 
@@ -64,7 +92,31 @@ class DashScopeEmbeddingProvider:
         ordered = sorted(embeddings, key=lambda item: item.get("text_index", 0))
         vectors = [list(map(float, item["embedding"])) for item in ordered]
         if len(vectors) != len(texts):
+            emit_json_log(
+                logging.ERROR,
+                "embedding_call",
+                trace_id=current_trace_id(),
+                model=EMBEDDING_MODEL,
+                text_type=text_type,
+                item_count=len(texts),
+                returned_count=len(vectors),
+                dimension=EMBEDDING_DIMENSION,
+                outcome="error",
+                error_type="UnexpectedEmbeddingCount",
+                duration_ms=round((perf_counter() - started_at) * 1000, 3),
+            )
             raise RuntimeError("DashScope returned an unexpected embedding count")
+        emit_json_log(
+            logging.INFO,
+            "embedding_call",
+            trace_id=current_trace_id(),
+            model=EMBEDDING_MODEL,
+            text_type=text_type,
+            item_count=len(texts),
+            dimension=EMBEDDING_DIMENSION,
+            outcome="success",
+            duration_ms=round((perf_counter() - started_at) * 1000, 3),
+        )
         return vectors
 
     def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
@@ -101,6 +153,7 @@ class SearchResult:
     score: float
     content: str
     document_title: str
+    document_sha256: str
     source_url: str
     page_number: int
 
@@ -299,6 +352,7 @@ def search_knowledge(
                 score=score,
                 content=chunk.content,
                 document_title=document.title,
+                document_sha256=document.sha256,
                 source_url=document.source_url,
                 page_number=chunk.page_number,
             )
@@ -327,6 +381,7 @@ def _search_knowledge_postgresql(
             score=max(-1.0, min(1.0, 1.0 - float(distance_value))),
             content=chunk.content,
             document_title=document.title,
+            document_sha256=document.sha256,
             source_url=document.source_url,
             page_number=chunk.page_number,
         )

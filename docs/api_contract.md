@@ -1,22 +1,24 @@
 # RobotCare AI API 契约
 
-> 契约版本：`0.7.0`；统一前缀：`/api/v1`。本文按 2026-07-20 的后端源码和完整回归 `68 passed, 1 skipped` 整理；跳过项为真实 PostgreSQL 集成测试，未被运行验证的边界明确标为【待验证】或【计划】。
+> 契约版本：`0.8.0`；统一前缀：`/api/v1`。本文按 2026-07-20 的后端源码和完整回归 `94 passed, 1 skipped` 整理；唯一跳过项为真实 PostgreSQL 集成测试，未被运行验证的边界明确标为【待验证】或【计划】。
 
 ## 1. 通用约定
 
-- 【已验证】除注册、登录和型号列表外，业务接口使用 `Authorization: Bearer <access_token>`；注册、登录、当前用户和跨用户隔离测试已通过。
+- 【已验证】除注册、登录、刷新、退出和型号列表外，业务接口使用 `Authorization: Bearer <access_token>`；访问 JWT 含 `sub`、`sid`、`type=access`、`iat`、`exp`，每次受保护请求还会校验服务器端认证会话和用户状态。
+- 【已验证】注册与登录设置 opaque 刷新 Cookie `robotcare_refresh_token`，属性为 `HttpOnly; SameSite=Lax; Path=/api/v1/auth`；生产环境强制 `Secure`。刷新令牌不出现在 JSON 响应，也不应进入 JavaScript 存储。
 - 【已验证】普通请求和响应使用 `application/json`；附件上传使用 `multipart/form-data`。
-- 【计划】时间字段使用 FastAPI/Pydantic 的 ISO 8601 日期时间字符串。
+- 【已验证】时间字段使用 FastAPI/Pydantic 的 ISO 8601 日期时间字符串。
 - 【已验证】用户资源在服务端校验所有权；设备和诊断跨用户访问测试返回 `403`。
-- 【已验证】常见错误包括 `401` 未认证或令牌无效、`403` 资源越权、`404` 资源/流程不存在、`409` 状态或并发冲突、`413` 文件过大/像素过多、`415` 图片格式无效、`422` 请求校验或安全阻断。
+- 【已验证】常见错误包括 `401` 未认证、访问/刷新令牌无效或会话撤销，`403` 资源越权或账号停用，`404` 资源/流程不存在，`409` 状态/并发/注册冲突，`413` 文件过大/像素过多，`415` 图片格式无效，`422` 请求校验或安全阻断，`429` 登录限流。
+- 【已验证】每个响应带 `X-Request-ID`。客户端提供合法值时原样贯穿；非法或超过 128 字符时服务器生成 UUID。HTTP 错误响应统一在 JSON 顶层增加 `trace_id`；422 不回显 Pydantic `input` 或 `ctx`，未处理异常只返回通用 `500 Internal server error`。
 - 【已验证】测试覆盖 `in_progress → resolved` 与 `in_progress → unresolved`；步骤反馈使用 `resolved`、`not_resolved`。
-- 【已验证】当前 OpenAPI 已提供图片附件、型号级知识检索/状态、文本/PDF 报告和 7 个管理员接口；没有刷新令牌、登出黑名单、知识上传/重建/停用、流程审核发布、评测结果持久化或生成式 RAG 回答接口。
+- 【已验证】当前 OpenAPI 已提供刷新/退出、图片附件、型号级知识检索/状态、文本/PDF 报告和 7 个管理员接口；没有修改密码、找回密码、账户删除、知识上传/重建/停用、流程审核发布、评测结果持久化或生成式 RAG 回答接口。
 
 ## 2. 公共接口
 
 ### `POST /api/v1/auth/register`
 
-【已验证】注册用户并直接返回 Bearer 访问令牌。
+【已验证】注册用户，创建服务器端认证会话，返回 Bearer 访问令牌并设置刷新 Cookie。
 
 请求：
 
@@ -27,15 +29,37 @@
 }
 ```
 
-成功：`201 TokenResponse`。邮箱重复：`409`。
+成功：`201 TokenResponse`。邮箱重复或并发唯一键竞争：`409`，不会返回数据库 500。新用户状态为 `active`。
 
 ### `POST /api/v1/auth/login`
 
-【已验证】邮箱密码登录。请求字段与注册相同，成功返回 `200 TokenResponse`，凭据错误返回 `401`。
+【已验证】邮箱密码登录。请求字段与注册相同，成功返回 `200 TokenResponse` 并设置刷新 Cookie；凭据错误返回 `401`，停用账号返回 `403`。
+
+登录限流由数据库持久化，默认参数为：
+
+- `ROBOTCARE_LOGIN_MAX_FAILURES=5`
+- `ROBOTCARE_REFRESH_REUSE_GRACE_SECONDS=5`
+- `ROBOTCARE_LOGIN_WINDOW_MINUTES=15`
+- `ROBOTCARE_LOGIN_LOCK_MINUTES=15`
+
+达到阈值后当前请求及锁定期内后续请求返回 `429`，响应头包含正整数秒数 `Retry-After`。限流同时使用规范化邮箱全局桶与邮箱/IP 桶，键值为 HMAC，不保存原邮箱或 IP；成功登录会清除该邮箱所有桶。
+
+### `POST /api/v1/auth/refresh`
+
+【已验证】请求体为空，浏览器自动携带刷新 Cookie；成功返回 `200 TokenResponse` 并轮换 Cookie。
+
+- 刷新令牌为 opaque 随机值，数据库只保存 SHA256。
+- 条件更新保证一个令牌只能消费一次。
+- 默认 5 秒宽限内的自然并发重复消费返回 `409` 与 `Retry-After`，不会撤销会话；宽限外的旧令牌重放返回 `401` 并撤销整个 `AuthSession`，该会话已签发的访问令牌都会失效。
+- 缺少、无效、过期或已撤销刷新令牌返回 `401`；停用账号返回 `403`。
+
+### `POST /api/v1/auth/logout`
+
+【已验证】返回 `204` 且无响应体，删除刷新 Cookie并撤销认证会话。随后使用退出前的访问令牌调用受保护接口返回 `401`。没有 Cookie 时，接口会尝试从 Bearer 访问令牌取得 `sid` 并撤销对应会话；无有效凭据仍保持幂等 204。
 
 ### `GET /api/v1/auth/me`
 
-【已验证】携带 Bearer JWT 返回当前 `UserRead`；API 测试覆盖成功响应。
+【已验证】携带 Bearer JWT 返回当前 `UserRead`；`UserRead` 包含 `status`。用户停用、会话撤销或会话过期时不能继续使用既有访问令牌。
 
 ### `GET /api/v1/models`
 
@@ -251,10 +275,13 @@
     "id": 1,
     "email": "user@example.com",
     "role": "user",
+    "status": "active",
     "created_at": "2026-07-20T12:00:00Z"
   }
 }
 ```
+
+响应体没有 `refresh_token` 字段。前端只持久化访问令牌和用户摘要；刷新 Cookie 由浏览器管理。
 
 ### `ModelRead` 与 `DeviceRead`
 
@@ -374,10 +401,12 @@
 
 ## 10. 前端调用约束
 
-- 【计划】前端不得通过隐藏按钮替代权限校验；以 API 的 `401/403/404/409/422` 为准。
-- 【计划】`current_step=null` 可能表示已解决或未解决，必须同时检查 `diagnostic.status`。
-- 【计划】只有 `unresolved` 状态展示“生成售后报告”；报告内容当前按纯文本显示。
-- 【计划】客户端不得提交或持久化 Wi-Fi 明文密码、访问令牌到诊断描述或报告。
+- 【已验证】Axios 客户端设置 `withCredentials=true`，使限定路径的 HttpOnly 刷新 Cookie随认证请求发送；刷新令牌不能被 JavaScript 读取或写入本地存储。
+- 【已验证】多个业务请求同时收到 401 时共享一个 refresh Promise，只发送一次 `/auth/refresh`；每个原请求最多重试一次，认证端点自身不会触发自动刷新，避免循环。
+- 【已验证】刷新成功更新访问令牌后重试原请求；刷新失败清理访问令牌和用户状态并触发认证丢失处理。退出调用在 `finally` 路径清理本地状态，即使网络请求失败也不会保留过期登录界面。
+- 【已验证】前端不得通过隐藏按钮替代权限校验；以 API 的 `401/403/404/409/422/429` 为准。
+- 【已验证】`current_step=null` 可能表示已解决或未解决，必须同时检查 `diagnostic.status`；只有 `unresolved` 状态展示“生成售后报告”。
+- 【计划】客户端输入策略进一步阻止用户把 Wi-Fi 明文密码或联系方式写入自由文本；当前服务器日志已脱敏，但诊断业务字段仍由用户主动输入。
 
 ## 11. 管理员 CLI
 
@@ -399,4 +428,25 @@ Remove-Item Env:ROBOTCARE_ADMIN_PASSWORD
 
 ## 12. 非 `/api/v1` 运行接口
 
-- 【已验证】`GET /health` 返回 `200 {"status":"ok"}`；迁移后的数据库启动测试已覆盖。它不属于版本化业务 API。
+- 【已验证】`GET /health` 返回 `200 {"status":"ok"}`，只表示进程存活；迁移后的本地数据库实际启动得到 200。它不属于版本化业务 API。
+- 【已验证】`GET /ready` 返回就绪状态，并检查数据库连通、当前 Alembic revision 是否为 head、附件目录和报告目录是否存在且可写。全部正常返回 `200`：
+
+```json
+{
+  "status": "ready",
+  "trace_id": "request-id",
+  "components": {
+    "database": {"status": "ok"},
+    "alembic": {
+      "status": "ok",
+      "at_head": true,
+      "current_revision": "20260720_0003",
+      "expected_revision": "20260720_0003"
+    },
+    "attachments": {"status": "ok", "exists": true, "is_directory": true, "writable": true},
+    "reports": {"status": "ok", "exists": true, "is_directory": true, "writable": true}
+  }
+}
+```
+
+任一组件失败返回 `503` 与 `status=not_ready`；`/health` 仍可为 200。Compose 后端健康检查使用 `/ready`，因此数据库未迁移到 head 或持久目录不可写时应保持不健康。

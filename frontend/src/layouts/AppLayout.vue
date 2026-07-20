@@ -8,7 +8,7 @@ const menus = [
   { path: '/guides', label: '使用指导', icon: Reading }, { path: '/diagnostics/new', label: '开始诊断', icon: FirstAidKit },
   { path: '/history', label: '诊断历史', icon: Clock },
 ]
-function logout() { auth.logout(); router.push('/login') }
+async function logout() { try { await auth.logout() } finally { await router.push('/login') } }
 </script>
 <template>
   <div class="shell">

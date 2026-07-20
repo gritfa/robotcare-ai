@@ -18,7 +18,7 @@ python -m pip install -e ".[test]"
 python -m pytest
 ```
 
-本地完整回归的当前证据为 `68 passed, 1 skipped`；覆盖管理员 RBAC/API/CLI、`AuditLog` 迁移和 113 条评测数据审计。跳过项需要专用 PostgreSQL 数据库和显式破坏性测试开关。
+本地完整回归的当前证据为 `94 passed, 1 skipped`；覆盖认证会话/刷新轮换/自然并发宽限/重放/退出/原子限流与登录 API 并发门禁、可观测性、管理员 RBAC/API/CLI、Alembic `20260720_0003` 和 113 条评测数据审计。唯一跳过项需要 `ROBOTCARE_TEST_POSTGRES_URL` 和显式破坏性测试开关。
 
 ### Backend PostgreSQL + pgvector
 
@@ -32,7 +32,7 @@ python -m pytest tests/test_postgres_integration.py -v
 python ../scripts/postgres_integration_smoke.py
 ```
 
-该 job 计划验证：`vector` 扩展、`vector(256)` 字段、HNSW 索引、数据库 Top-K、型号隔离、Alembic head、应用健康、种子型号以及附件/报告目录可写。`【待验证】` 工作流尚未在 GitHub Actions 实际运行，所以不能将这些运行结果记为已通过。
+该 job 计划验证：`vector` 扩展、`vector(256)` 字段、HNSW 索引、数据库 Top-K、型号隔离、Alembic head、应用 `/ready`、种子型号以及附件/报告目录可写。`【待验证】` 工作流尚未在 GitHub Actions 实际运行，所以不能将这些运行结果记为已通过。
 
 ### Frontend
 
@@ -47,7 +47,7 @@ npm run build
 
 `npm ci` 要求 `package.json` 与 `package-lock.json` 保持同步。构建失败时不应改用 `npm install` 掩盖锁文件不一致。
 
-本地当前证据为 Vitest `14 passed`，`vue-tsc` 与 Vite production build 通过，1701 个模块完成转换。该结果包括管理员状态管理单元测试，但不包括浏览器 E2E。
+本地当前证据为 Vitest `27 passed`，`vue-tsc` 与 Vite production build 通过，1702 个模块完成转换。该结果包括管理员状态管理、`withCredentials`、同标签并发 401 单次刷新、跨标签 Web Lock、409 冲突重试、停用账户清理、刷新失败清理和 logout finally 单元测试，但不包括浏览器 E2E。
 
 ### Knowledge
 
@@ -70,11 +70,12 @@ npm run build
 
 ## Docker 验证边界
 
-- `【已验证：静态契约】` `scripts/verify_deployment_config.py` 检查 pgvector 镜像、健康检查、持久卷、启动 Alembic、外部密钥、Noto CJK 字体、Nginx 健康端点和 CI 必需任务；CI 的 deployment-config job 还计划执行 `docker compose config --quiet`。
+- `【已验证：静态契约】` `scripts/verify_deployment_config.py` 检查 pgvector 镜像、`/ready` 健康检查、持久卷、启动 Alembic、外部密钥、认证生产门禁、前后端回环绑定、Noto CJK 字体、Nginx 安全/健康端点和 CI 必需任务；CI 的 deployment-config job 还计划执行 `docker compose config --quiet`。
 - `【待验证】` 当前 CI 不执行 `docker compose build`、容器启动或容器端到端测试；本机也没有 Docker 可供运行。
 - Dockerfile 和 `docker-compose.yml` 的存在不等于镜像能够构建或服务能够正常启动。
 - 在 GitHub Actions 增加真实 Docker job，并保存对应提交的构建与健康检查证据之前，不得将 Docker 部署标为 `【已验证】`。
 - 后续 Docker 验证至少应覆盖镜像构建、PostgreSQL 健康检查、数据库迁移、后端健康接口和前端静态资源访问。
+- `【已验证：配置语义】` Compose 默认 `ROBOTCARE_ENVIRONMENT=production`、`ROBOTCARE_AUTO_CREATE_SCHEMA=false`、`ROBOTCARE_REFRESH_COOKIE_SECURE=true`，只能在 HTTPS 反向代理后用于实际部署。纯 HTTP 本地调试必须使用 `.env.compose-local.example` 覆盖为 development/secure=false，且不得将该文件作为生产环境模板。
 
 本地静态契约验证命令与已记录结果：
 
@@ -84,7 +85,7 @@ python scripts\verify_deployment_config.py
 # deployment configuration: static contract passed
 ```
 
-该结果只读取并校验配置文本，不调用 Docker daemon。
+该结果只读取并校验配置文本，不调用 Docker daemon；部署脚本本身的 py_compile 也已通过，但仍不是容器运行证据。
 
 ## 本地/远端验收清单
 
@@ -103,4 +104,4 @@ python -m pytest tests/test_postgres_integration.py -v
 python ..\scripts\postgres_integration_smoke.py
 ```
 
-Docker 验收还应执行 `docker compose config --quiet`、`docker compose build`、`docker compose up -d`、`docker compose ps` 和前后端健康请求，并验证容器重建后数据仍保留。远端 CI 验收必须记录提交 SHA、workflow URL、各 job 结论和失败日志；没有这些证据时保持【待验证】。
+Docker 验收还应执行 `docker compose config --quiet`、`docker compose build`、`docker compose up -d`、`docker compose ps`，并分别请求回环地址上的后端 `/health`、`/ready` 与前端 `/healthz`；前端容器健康检查应从容器网络直连 `backend:8000/ready`，公共 Nginx 不暴露详细 readiness。随后验证 HTTPS 反代与容器重建后数据仍保留。远端 CI 验收必须记录提交 SHA、workflow URL、各 job 结论和失败日志；没有这些证据时保持【待验证】。

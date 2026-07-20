@@ -1,25 +1,56 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { TOKEN_KEY, authApi, diagnosticApi } from './api'
+import { authApi, diagnosticApi } from './api'
+import { applyAuthResult, bindAuthState, clearAuthState, persistUser, readStoredAccessToken, readStoredUser } from './authSession'
 import type { Diagnostic, DiagnosticStep, User } from './types'
-const USER_KEY = 'robotcare_user'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem(TOKEN_KEY) || '')
-  const savedUser = localStorage.getItem(USER_KEY)
-  const user = ref<User | null>(savedUser ? JSON.parse(savedUser) as User : null)
+  const token = ref(readStoredAccessToken())
+  const user = ref<User | null>(readStoredUser())
+  const profileLoaded = ref(false)
   const isAuthenticated = computed(() => Boolean(token.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
-  function applyAuth(result: { access_token: string; user?: User }) {
-    token.value = result.access_token; user.value = result.user || null
-    localStorage.setItem(TOKEN_KEY, result.access_token)
-    if (user.value) localStorage.setItem(USER_KEY, JSON.stringify(user.value))
+
+  bindAuthState({
+    getAccessToken: () => token.value,
+    applyAuth: (result) => {
+      token.value = result.access_token
+      user.value = result.user || null
+      profileLoaded.value = Boolean(result.user)
+    },
+    clearAuth: () => {
+      token.value = ''
+      user.value = null
+      profileLoaded.value = false
+    },
+  })
+
+  async function login(email: string, password: string) {
+    applyAuthResult(await authApi.login(email, password))
+    if (!profileLoaded.value) await loadMe()
   }
-  async function login(email: string, password: string) { applyAuth(await authApi.login(email, password)); if (!user.value) await loadMe() }
-  async function register(body: { email: string; password: string; name: string }) { const result = await authApi.register(body); if (result.access_token) applyAuth(result) }
-  async function loadMe() { if (!token.value) return; try { user.value = await authApi.me() } catch { logout() } }
-  function logout() { token.value = ''; user.value = null; localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY) }
-  return { token, user, isAuthenticated, isAdmin, login, register, loadMe, logout }
+  async function register(body: { email: string; password: string; name: string }) {
+    const result = await authApi.register(body)
+    if (result.access_token) {
+      applyAuthResult(result)
+      if (!profileLoaded.value) await loadMe()
+    }
+  }
+  async function loadMe() {
+    if (!token.value) return
+    const loadedUser = await authApi.me()
+    user.value = loadedUser
+    profileLoaded.value = true
+    persistUser(loadedUser)
+  }
+  async function logout() {
+    try {
+      await authApi.logout()
+    } finally {
+      clearAuthState()
+    }
+  }
+  return { token, user, profileLoaded, isAuthenticated, isAdmin, login, register, loadMe, logout }
 })
 
 export const useDiagnosticStore = defineStore('diagnostics', () => {

@@ -8,7 +8,7 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
 import pytest
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.database import Base
@@ -40,6 +40,7 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkey
     expected_tables = {
         "alembic_version",
         "attachments",
+        "auth_sessions",
         "audit_logs",
         "diagnostic_flows",
         "diagnostic_sessions",
@@ -47,7 +48,9 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkey
         "issue_categories",
         "knowledge_chunks",
         "knowledge_documents",
+        "login_throttles",
         "pending_file_deletions",
+        "refresh_tokens",
         "robot_models",
         "safety_block_events",
         "service_reports",
@@ -56,6 +59,48 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkey
         "users",
     }
     assert set(inspector.get_table_names()) == expected_tables
+
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    assert "status" in user_columns
+    user_indexes = {index["name"] for index in inspector.get_indexes("users")}
+    assert "ix_users_status" in user_indexes
+
+    auth_session_columns = {
+        column["name"] for column in inspector.get_columns("auth_sessions")
+    }
+    assert {
+        "id",
+        "user_id",
+        "created_at",
+        "expires_at",
+        "revoked_at",
+        "revoke_reason",
+    } == auth_session_columns
+    refresh_columns = {
+        column["name"] for column in inspector.get_columns("refresh_tokens")
+    }
+    assert {
+        "id",
+        "session_id",
+        "token_hash",
+        "created_at",
+        "expires_at",
+        "used_at",
+        "revoked_at",
+    } == refresh_columns
+    throttle_columns = {
+        column["name"] for column in inspector.get_columns("login_throttles")
+    }
+    assert {
+        "key_hash",
+        "scope",
+        "email_hash",
+        "client_ip_hash",
+        "failure_count",
+        "window_started_at",
+        "locked_until",
+        "updated_at",
+    } == throttle_columns
 
     audit_columns = {column["name"] for column in inspector.get_columns("audit_logs")}
     assert {
@@ -168,9 +213,19 @@ def test_audit_log_migration_upgrades_existing_0001_database_without_data_loss(
     command.upgrade(config, "20260720_0001")
 
     engine = create_engine(database_url)
-    with Session(engine) as db:
-        db.add(User(email="preserved@example.com", password_hash="hash", role="user"))
-        db.commit()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (email, password_hash, role, created_at) "
+                "VALUES (:email, :password_hash, :role, :created_at)"
+            ),
+            {
+                "email": "preserved@example.com",
+                "password_hash": "hash",
+                "role": "user",
+                "created_at": "2026-07-20 00:00:00",
+            },
+        )
     engine.dispose()
 
     command.upgrade(config, "head")
@@ -180,4 +235,60 @@ def test_audit_log_migration_upgrades_existing_0001_database_without_data_loss(
         preserved = db.scalar(select(User).where(User.email == "preserved@example.com"))
         assert preserved is not None
         assert preserved.role == "user"
+        assert preserved.status == "active"
+    engine.dispose()
+
+
+def test_auth_migration_upgrades_0002_and_preserves_users_and_audit_logs(
+    tmp_path, monkeypatch
+):
+    database_url = f"sqlite:///{(tmp_path / 'upgrade-0003.db').as_posix()}"
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    config = alembic_config(database_url)
+    command.upgrade(config, "20260720_0002")
+
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, email, password_hash, role, created_at) "
+                "VALUES (1, :email, :password_hash, 'admin', :created_at)"
+            ),
+            {
+                "email": "before-auth-migration@example.com",
+                "password_hash": "preserved-hash",
+                "created_at": "2026-07-20 00:00:00",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO audit_logs "
+                "(actor_user_id, action, resource_type, resource_id, details_json, created_at) "
+                "VALUES (1, 'preserve', 'user', '1', '{}', :created_at)"
+            ),
+            {"created_at": "2026-07-20 00:00:01"},
+        )
+    engine.dispose()
+
+    command.upgrade(config, "20260720_0003")
+    engine = create_engine(database_url)
+    inspector = inspect(engine)
+    assert {"auth_sessions", "refresh_tokens", "login_throttles"} <= set(
+        inspector.get_table_names()
+    )
+    with engine.connect() as connection:
+        user_row = connection.execute(
+            text(
+                "SELECT email, password_hash, role, status FROM users WHERE id = 1"
+            )
+        ).mappings().one()
+        assert dict(user_row) == {
+            "email": "before-auth-migration@example.com",
+            "password_hash": "preserved-hash",
+            "role": "admin",
+            "status": "active",
+        }
+        assert connection.execute(
+            text("SELECT count(*) FROM audit_logs WHERE action = 'preserve'")
+        ).scalar_one() == 1
     engine.dispose()

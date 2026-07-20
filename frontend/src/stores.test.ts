@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Diagnostic, DiagnosticStep, DiagnosticStatus } from './types'
 
@@ -7,14 +7,34 @@ const apiMocks = vi.hoisted(() => ({
   currentStep: vi.fn(),
   feedback: vi.fn(),
 }))
+const authMocks = vi.hoisted(() => ({
+  login: vi.fn(),
+  register: vi.fn(),
+  me: vi.fn(),
+  logout: vi.fn(),
+}))
 
 vi.mock('./api', () => ({
   TOKEN_KEY: 'robotcare_access_token',
-  authApi: { login: vi.fn(), register: vi.fn(), me: vi.fn() },
+  authApi: authMocks,
   diagnosticApi: apiMocks,
 }))
 
-import { useDiagnosticStore } from './stores'
+import { useAuthStore, useDiagnosticStore } from './stores'
+
+class MemoryStorage implements Storage {
+  private values = new Map<string, string>()
+  get length() { return this.values.size }
+  clear() { this.values.clear() }
+  getItem(key: string) { return this.values.get(key) ?? null }
+  key(index: number) { return [...this.values.keys()][index] ?? null }
+  removeItem(key: string) { this.values.delete(key) }
+  setItem(key: string, value: string) { this.values.set(key, String(value)) }
+}
+
+beforeAll(() => {
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: new MemoryStorage() })
+})
 
 const step: DiagnosticStep = {
   id: 31,
@@ -36,6 +56,7 @@ function diagnostic(status: DiagnosticStatus): Diagnostic {
 describe('diagnostic store resume behavior', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    localStorage.clear()
     vi.clearAllMocks()
   })
 
@@ -90,5 +111,54 @@ describe('diagnostic store resume behavior', () => {
     expect(apiMocks.feedback).toHaveBeenCalledWith(7, 31, true)
     expect(store.active?.status).toBe('resolved')
     expect(store.currentStep).toBeNull()
+  })
+})
+
+describe('auth store session lifecycle', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    vi.clearAllMocks()
+  })
+
+  it('calls the backend logout endpoint before clearing local state', async () => {
+    localStorage.setItem('robotcare_access_token', 'access-token')
+    localStorage.setItem('robotcare_user', JSON.stringify({ id: 1, email: 'user@example.com' }))
+    authMocks.logout.mockResolvedValue(undefined)
+    const store = useAuthStore()
+
+    await store.logout()
+
+    expect(authMocks.logout).toHaveBeenCalledTimes(1)
+    expect(store.token).toBe('')
+    expect(store.user).toBeNull()
+    expect(localStorage.getItem('robotcare_access_token')).toBeNull()
+  })
+
+  it('reloads a persisted user profile instead of trusting stale local data', async () => {
+    localStorage.setItem('robotcare_access_token', 'access-token')
+    localStorage.setItem('robotcare_user', JSON.stringify({ id: 1, email: 'old@example.com', role: 'admin' }))
+    authMocks.me.mockResolvedValue({ id: 1, email: 'current@example.com', role: 'user' })
+    const store = useAuthStore()
+
+    expect(store.profileLoaded).toBe(false)
+    await store.loadMe()
+
+    expect(authMocks.me).toHaveBeenCalledTimes(1)
+    expect(store.profileLoaded).toBe(true)
+    expect(store.user?.email).toBe('current@example.com')
+    expect(store.isAdmin).toBe(false)
+    expect(localStorage.getItem('robotcare_user')).toContain('current@example.com')
+  })
+
+  it('still clears local state when the backend logout request fails', async () => {
+    localStorage.setItem('robotcare_access_token', 'access-token')
+    authMocks.logout.mockRejectedValue(new Error('network unavailable'))
+    const store = useAuthStore()
+
+    await expect(store.logout()).rejects.toThrow('network unavailable')
+
+    expect(store.isAuthenticated).toBe(false)
+    expect(localStorage.getItem('robotcare_access_token')).toBeNull()
   })
 })

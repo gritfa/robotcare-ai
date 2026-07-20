@@ -1,9 +1,12 @@
 import hashlib
 from io import BytesIO
+import logging
 from pathlib import Path
+from time import perf_counter
 from uuid import uuid4
 import warnings
 
+import jwt
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
@@ -11,6 +14,20 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from .auth_service import (
+    REFRESH_COOKIE_NAME,
+    acquire_login_attempt_lock,
+    clear_login_failures,
+    delete_refresh_cookie,
+    enforce_login_rate_limit,
+    issue_authentication,
+    logout_refresh_token,
+    normalize_email,
+    record_login_failure,
+    revoke_session,
+    rotate_refresh_token,
+    set_refresh_cookie,
+)
 from .database import get_db
 from .diagnostic_graph import feedback_decision_graph
 from .knowledge_service import get_knowledge_status, search_knowledge
@@ -31,6 +48,7 @@ from .models import (
     User,
     UserDevice,
 )
+from .observability import emit_json_log, request_trace_id
 from .pdf_report import render_report_pdf, report_pdf_path
 from .safety import detect_safety_block
 from .schemas import (
@@ -65,7 +83,7 @@ from .schemas import (
     TokenResponse,
     UserRead,
 )
-from .security import create_access_token, get_current_user, hash_password, require_admin, verify_password
+from .security import decode_access_token, get_current_user, hash_password, require_admin, verify_password
 
 router = APIRouter(prefix="/api/v1")
 
@@ -118,8 +136,8 @@ def validate_image_content(content: bytes, expected_content_type: str) -> None:
         ) from exc
 
 
-def token_response(user: User) -> TokenResponse:
-    return TokenResponse(access_token=create_access_token(user.id), user=user)
+def token_response(user: User, access_token: str) -> TokenResponse:
+    return TokenResponse(access_token=access_token, user=user)
 
 
 def owned_device(db: Session, device_id: int, user: User) -> UserDevice:
@@ -159,23 +177,82 @@ def current_step_for(diagnostic: DiagnosticSession) -> DiagnosticStep | None:
 
 
 @router.post("/auth/register", response_model=TokenResponse, status_code=201)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    email = str(payload.email).lower()
+def register(
+    payload: RegisterRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    email = normalize_email(str(payload.email))
     if db.scalar(select(User).where(User.email == email)) is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
     user = User(email=email, password_hash=hash_password(payload.password))
     db.add(user)
-    db.commit()
+    try:
+        db.flush()
+        issued = issue_authentication(db, user)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Email already registered") from None
     db.refresh(user)
-    return token_response(user)
+    set_refresh_cookie(response, issued.refresh_token)
+    return token_response(user, issued.access_token)
 
 
 @router.post("/auth/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    user = db.scalar(select(User).where(User.email == str(payload.email).lower()))
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    email = normalize_email(str(payload.email))
+    acquire_login_attempt_lock(db, email)
+    enforce_login_rate_limit(db, email, request)
+    user = db.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(payload.password, user.password_hash):
+        record_login_failure(db, email, request)
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    return token_response(user)
+    if user.status != "active":
+        raise HTTPException(status_code=403, detail="Account disabled")
+    clear_login_failures(db, email, request)
+    issued = issue_authentication(db, user)
+    db.commit()
+    set_refresh_cookie(response, issued.refresh_token)
+    return token_response(user, issued.access_token)
+
+
+@router.post("/auth/refresh", response_model=TokenResponse)
+def refresh_authentication(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    raw_refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if raw_refresh_token is None:
+        raise HTTPException(status_code=401, detail="Refresh token required")
+    user, issued = rotate_refresh_token(db, raw_refresh_token)
+    set_refresh_cookie(response, issued.refresh_token)
+    return token_response(user, issued.access_token)
+
+
+@router.post("/auth/logout", status_code=204)
+def logout(request: Request, db: Session = Depends(get_db)) -> Response:
+    revoked_session_id = logout_refresh_token(db, request.cookies.get(REFRESH_COOKIE_NAME))
+    if revoked_session_id is None:
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() == "bearer" and token:
+            try:
+                _user_id, access_session_id = decode_access_token(token)
+            except (ValueError, TypeError, jwt.PyJWTError):
+                pass
+            else:
+                revoke_session(db, access_session_id, reason="logout")
+                db.commit()
+    response = Response(status_code=204)
+    delete_refresh_cookie(response)
+    return response
 
 
 @router.get("/auth/me", response_model=UserRead)
@@ -193,19 +270,49 @@ def knowledge_search(
     del user
     if db.scalar(select(RobotModel.id).where(RobotModel.id == payload.robot_model_id)) is None:
         raise HTTPException(status_code=404, detail="Robot model not found")
+    started_at = perf_counter()
     try:
-        return [
+        raw_results = search_knowledge(
+            db,
+            robot_model_id=payload.robot_model_id,
+            query=payload.query,
+            top_k=payload.top_k,
+            min_score=payload.min_score,
+            provider=request.app.state.embedding_provider,
+        )
+        results = [
             KnowledgeSearchResult(**result.__dict__)
-            for result in search_knowledge(
-                db,
-                robot_model_id=payload.robot_model_id,
-                query=payload.query,
-                top_k=payload.top_k,
-                min_score=payload.min_score,
-                provider=request.app.state.embedding_provider,
-            )
+            for result in raw_results
         ]
+        emit_json_log(
+            logging.INFO,
+            "knowledge_search",
+            trace_id=request_trace_id(request),
+            robot_model_id=payload.robot_model_id,
+            top_k=payload.top_k,
+            min_score=payload.min_score,
+            result_count=len(results),
+            duration_ms=round((perf_counter() - started_at) * 1000, 3),
+            sources=[
+                {
+                    "document_title": item.document_title,
+                    "document_sha256": item.document_sha256,
+                    "page_number": item.page_number,
+                    "score": round(item.score, 6),
+                }
+                for item in raw_results
+            ],
+        )
+        return results
     except RuntimeError as exc:
+        emit_json_log(
+            logging.ERROR,
+            "knowledge_search_failed",
+            trace_id=request_trace_id(request),
+            robot_model_id=payload.robot_model_id,
+            duration_ms=round((perf_counter() - started_at) * 1000, 3),
+            error_type=type(exc).__name__,
+        )
         raise HTTPException(status_code=503, detail="Embedding service unavailable") from exc
 
 
@@ -275,6 +382,7 @@ def admin_list_models(
 def admin_update_model(
     model_id: int,
     payload: AdminModelUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ) -> RobotModel:
@@ -298,6 +406,15 @@ def admin_update_model(
     )
     db.commit()
     db.refresh(robot_model)
+    emit_json_log(
+        logging.INFO,
+        "admin_model_status_changed",
+        trace_id=request_trace_id(request),
+        actor_user_id=admin.id,
+        robot_model_id=robot_model.id,
+        previous_active=previous_active,
+        active=robot_model.active,
+    )
     return robot_model
 
 
@@ -502,6 +619,7 @@ def delete_device(
 @router.post("/diagnostics", response_model=DiagnosticRead, status_code=201)
 def create_diagnostic(
     payload: DiagnosticCreate,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> DiagnosticSession:
@@ -526,6 +644,15 @@ def create_diagnostic(
             )
         )
         db.commit()
+        emit_json_log(
+            logging.WARNING,
+            "safety_block",
+            trace_id=request_trace_id(request),
+            user_id=user.id,
+            device_id=device.id,
+            category=safety_block.category,
+            risk_level=safety_block.risk_level,
+        )
         raise HTTPException(
             status_code=422,
             detail={
@@ -561,6 +688,17 @@ def create_diagnostic(
     )
     db.add(diagnostic)
     db.commit()
+    emit_json_log(
+        logging.INFO,
+        "diagnostic_created",
+        trace_id=request_trace_id(request),
+        diagnostic_id=diagnostic.id,
+        user_id=user.id,
+        device_id=device.id,
+        flow_id=flow.id,
+        flow_version=flow.version,
+        status=diagnostic.status,
+    )
     return owned_diagnostic(db, diagnostic.id, user)
 
 
@@ -602,6 +740,7 @@ def get_current_step(
 def submit_feedback(
     diagnostic_id: int,
     payload: FeedbackRequest,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> FeedbackResponse:
@@ -663,6 +802,18 @@ def submit_feedback(
         ) from exc
     db.expire_all()
     refreshed = owned_diagnostic(db, diagnostic.id, user)
+    emit_json_log(
+        logging.INFO,
+        "diagnostic_state_changed",
+        trace_id=request_trace_id(request),
+        diagnostic_id=diagnostic.id,
+        user_id=user.id,
+        step_id=step.id,
+        outcome=payload.outcome,
+        previous_status="in_progress",
+        status=refreshed.status,
+        next_position=refreshed.current_position,
+    )
     return FeedbackResponse(diagnostic=refreshed, current_step=current_step_for(refreshed))
 
 

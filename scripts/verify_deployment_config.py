@@ -48,6 +48,19 @@ def main() -> None:
         "DashScope key must be injected externally",
     )
     require(backend_env["ROBOTCARE_AUTO_CREATE_SCHEMA"] == "false", "Alembic must own schema")
+    require(
+        backend_env["ROBOTCARE_ENVIRONMENT"] == "${ROBOTCARE_ENVIRONMENT:-production}",
+        "Compose must default to the production settings gate",
+    )
+    require(
+        backend_env["ROBOTCARE_REFRESH_COOKIE_SECURE"]
+        == "${ROBOTCARE_REFRESH_COOKIE_SECURE:-true}",
+        "refresh cookies must default to Secure",
+    )
+    require(
+        "127.0.0.1:${BACKEND_PORT:-8000}:8000" in backend["ports"],
+        "backend must bind to host loopback instead of a public interface",
+    )
     require("backend_data:/app/data" in backend["volumes"], "backend files are not persistent")
     require("healthcheck" in backend, "backend healthcheck missing")
     require(
@@ -57,6 +70,10 @@ def main() -> None:
 
     frontend = services["frontend"]
     require("healthcheck" in frontend, "frontend proxy healthcheck missing")
+    require(
+        "127.0.0.1:${FRONTEND_PORT:-5173}:80" in frontend["ports"],
+        "frontend must bind to host loopback instead of bypassing HTTPS",
+    )
     require(
         frontend["depends_on"]["backend"]["condition"] == "service_healthy",
         "frontend must wait for a healthy backend",
@@ -70,6 +87,7 @@ def main() -> None:
         "COPY knowledge /app/knowledge",
         "ENTRYPOINT",
         "HEALTHCHECK",
+        "http://127.0.0.1:8000/ready",
     ):
         require(token in backend_dockerfile, f"backend Dockerfile missing: {token}")
 
@@ -78,8 +96,26 @@ def main() -> None:
     require('exec "$@"' in entrypoint, "entrypoint must exec the server process")
 
     nginx = (ROOT / "frontend" / "nginx.conf").read_text(encoding="utf-8")
-    for token in ("location = /healthz", "location = /backend-healthz", "client_max_body_size 6m"):
+    for token in (
+        "Content-Security-Policy",
+        "X-Content-Type-Options",
+        "frame-ancestors 'none'",
+    ):
+        require(token in nginx, f"Nginx security header missing: {token}")
+    for token in (
+        "location = /healthz",
+        "client_max_body_size 6m",
+    ):
         require(token in nginx, f"Nginx config missing: {token}")
+    require(
+        "location = /backend-healthz" not in nginx,
+        "detailed backend readiness must not be exposed through public Nginx",
+    )
+    frontend_dockerfile = (ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    require(
+        "http://backend:8000/ready" in frontend_dockerfile,
+        "frontend container healthcheck must verify backend readiness internally",
+    )
 
     root_dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
     frontend_dockerignore = (ROOT / "frontend" / ".dockerignore").read_text(encoding="utf-8")

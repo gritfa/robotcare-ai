@@ -23,7 +23,18 @@ function createApi(overrides: Partial<AdminDashboardApi> = {}): AdminDashboardAp
     setModelActive: vi.fn().mockImplementation(async (_id, active) => ({ ...model(), active })),
     knowledgeStatus: vi.fn().mockResolvedValue([{ robot_model_id: 1, model_code: 'JH69U1', document_count: 1, chunk_count: 31, vector_count: 31 }]),
     safetyBlocks: vi.fn().mockResolvedValue([]),
+    safetyBlockDetail: vi.fn().mockResolvedValue({
+      id: 3, user_id: 4, device_id: 5, model_code: 'JH69U1', category: 'smoke',
+      risk_level: 'critical', reason: '检测到高风险', advice: '立即断电', created_at: '2026-07-22T00:00:00Z',
+    }),
     unresolvedReports: vi.fn().mockResolvedValue([]),
+    diagnosticDetail: vi.fn().mockResolvedValue({
+      id: 6, user_id: 4, device_id: 5, flow_id: 7, status: 'unresolved',
+      issue_description: '机器人无法回充', error_code: 'E1', created_at: '2026-07-22T00:00:00Z',
+    }),
+    reportDetail: vi.fn().mockResolvedValue({
+      id: 8, session_id: 6, report_number: 'RC-8', content: '完整售后报告', created_at: '2026-07-22T00:00:00Z',
+    }),
     auditLogs: vi.fn().mockResolvedValue([]),
     ...overrides,
   }
@@ -92,5 +103,26 @@ describe('admin dashboard state', () => {
     expect(dashboard.loaded.value).toBe(false)
     expect(dashboard.loadError.value).toContain('没有管理员权限')
     expect(adminErrorMessage(forbidden)).toContain('403')
+  })
+
+  it('loads sensitive content only after an explicit detail action', async () => {
+    const api = createApi()
+    const dashboard = useAdminDashboard(api)
+
+    await dashboard.load()
+    expect(api.safetyBlockDetail).not.toHaveBeenCalled()
+    expect(api.diagnosticDetail).not.toHaveBeenCalled()
+    expect(api.reportDetail).not.toHaveBeenCalled()
+
+    await dashboard.openSafetyBlock(3)
+    await dashboard.openDiagnostic(6)
+    await dashboard.openReport(8)
+
+    expect(api.safetyBlockDetail).toHaveBeenCalledWith(3)
+    expect(api.diagnosticDetail).toHaveBeenCalledWith(6)
+    expect(api.reportDetail).toHaveBeenCalledWith(8)
+    expect(dashboard.selectedSafetyBlock.value?.reason).toBe('检测到高风险')
+    expect(dashboard.selectedDiagnostic.value?.issue_description).toBe('机器人无法回充')
+    expect(dashboard.selectedReport.value?.content).toBe('完整售后报告')
   })
 })

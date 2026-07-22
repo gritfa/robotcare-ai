@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
-import type { AdminAuditLog, AdminModel, AdminOverview, AdminSafetyBlock, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
+import type { AdminAuditLog, AdminDiagnosticDetail, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
 
 export { TOKEN_KEY } from './authSession'
@@ -214,7 +214,12 @@ function retryAfterSeconds(error: unknown) {
   const headers = error.response?.headers as { get?: (name: string) => unknown; [name: string]: unknown } | undefined
   const raw = headers?.get?.('retry-after') ?? headers?.['retry-after']
   const seconds = Number(raw)
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds)
+  if (typeof raw === 'string') {
+    const retryAt = Date.parse(raw)
+    if (Number.isFinite(retryAt)) return Math.max(0, Math.ceil((retryAt - Date.now()) / 1000))
+  }
+  return undefined
 }
 
 export function parseApiError(error: unknown, fallback = '请求失败，请稍后重试'): ApiErrorInfo {
@@ -257,7 +262,18 @@ export function parseApiError(error: unknown, fallback = '请求失败，请稍�
 }
 
 export function apiError(error: unknown, fallback = '请求失败，请稍后重试') {
-  return parseApiError(error, fallback).message
+  return userFacingApiError(error, fallback)
+}
+
+export function userFacingApiError(error: unknown, fallback = '请求失败，请稍后重试') {
+  const parsed = parseApiError(error, fallback)
+  if (parsed.code !== 'RATE_LIMITED') return parsed.message
+  const retryHint = parsed.retryAfterSeconds === undefined
+    ? '请稍后重试'
+    : parsed.retryAfterSeconds === 0
+      ? '现在可以重试'
+      : `请在 ${parsed.retryAfterSeconds} 秒后重试`
+  return `${parsed.message}；${retryHint}`
 }
 function payload<T>(value: unknown): T {
   const body = value as { data?: unknown }
@@ -335,6 +351,9 @@ export const adminApi = {
   setModelActive: async (id: EntityId, active: boolean) => payload<AdminModel>((await http.patch(`/admin/models/${id}`, { active })).data),
   knowledgeStatus: async () => listPayload<KnowledgeModelStatus>((await http.get('/admin/knowledge/status')).data),
   safetyBlocks: async (limit = 20) => listPayload<AdminSafetyBlock>((await http.get('/admin/safety-blocks', { params: { limit } })).data),
+  safetyBlockDetail: async (id: EntityId) => payload<AdminSafetyBlockDetail>((await http.get(`/admin/safety-blocks/${id}`)).data),
   unresolvedReports: async (limit = 20) => listPayload<AdminUnresolvedReport>((await http.get('/admin/unresolved-reports', { params: { limit } })).data),
+  diagnosticDetail: async (id: EntityId) => payload<AdminDiagnosticDetail>((await http.get(`/admin/diagnostics/${id}`)).data),
+  reportDetail: async (id: EntityId) => payload<AdminServiceReportDetail>((await http.get(`/admin/reports/${id}`)).data),
   auditLogs: async (limit = 20) => listPayload<AdminAuditLog>((await http.get('/admin/audit-logs', { params: { limit } })).data),
 }

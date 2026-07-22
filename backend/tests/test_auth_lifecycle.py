@@ -7,18 +7,27 @@ from fastapi import HTTPException, Request, Response
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
+import app.api as api_module
+import app.auth_service as auth_service_module
 from app.auth_service import (
     REFRESH_COOKIE_NAME,
+    cleanup_expired_login_throttles,
+    client_ip,
+    login_attempt_lock_ids,
+    login_throttle_keys,
+    login_throttle_limit,
     record_login_failure,
     rotate_refresh_token,
     set_refresh_cookie,
 )
 from app.config import Settings
 from app.models import AuthSession, LoginThrottle, RefreshToken, User
+from app.security import DUMMY_PASSWORD_HASH, verify_password as verify_real_password
 from conftest import auth, register
 
 
 PASSWORD = "StrongPass123"
+DUMMY_PASSWORD = "robotcare-dummy-password-never-used"
 
 
 def _refresh_cookie(client) -> str:
@@ -147,7 +156,7 @@ def test_atomic_login_failure_upsert_does_not_lose_concurrent_counts(client):
 
     with session_factory() as db:
         rows = list(db.scalars(select(LoginThrottle)))
-        assert {row.scope for row in rows} == {"email", "email_ip"}
+        assert {row.scope for row in rows} == {"email", "email_ip", "ip"}
         assert all(row.failure_count == 8 for row in rows)
 
 
@@ -178,7 +187,7 @@ def test_concurrent_login_api_enforces_threshold_before_extra_password_checks(cl
                 select(LoginThrottle).where(LoginThrottle.failure_count == 5)
             )
         )
-        assert {row.scope for row in rows} == {"email", "email_ip"}
+        assert {row.scope for row in rows} == {"email", "email_ip", "ip"}
 
 
 def test_login_password_length_is_bounded_before_authentication_work(client):
@@ -191,6 +200,58 @@ def test_login_password_length_is_bounded_before_authentication_work(client):
     session_factory = client.app.state.session_factory
     with session_factory() as db:
         assert list(db.scalars(select(LoginThrottle))) == []
+
+
+def test_wrong_password_and_unknown_user_each_verify_once_with_identical_response(
+    client, monkeypatch
+):
+    register(client, "timing-existing@example.com")
+    client.post("/api/v1/auth/logout")
+
+    session_factory = client.app.state.session_factory
+    with session_factory() as db:
+        existing = db.scalar(
+            select(User).where(User.email == "timing-existing@example.com")
+        )
+        assert existing is not None
+        existing_password_hash = existing.password_hash
+
+    verified_hashes: list[str] = []
+
+    def reject_password(_password: str, password_hash: str) -> bool:
+        verified_hashes.append(password_hash)
+        return False
+
+    monkeypatch.setattr(api_module, "verify_password", reject_password)
+    trace_headers = {"X-Request-ID": "7dc61147-996c-4e99-b434-7c66690a8397"}
+
+    existing_response = client.post(
+        "/api/v1/auth/login",
+        headers=trace_headers,
+        json={
+            "email": "timing-existing@example.com",
+            "password": "wrong-password",
+        },
+    )
+    assert verified_hashes == [existing_password_hash]
+
+    verified_hashes.clear()
+    unknown_response = client.post(
+        "/api/v1/auth/login",
+        headers=trace_headers,
+        json={
+            "email": "timing-unknown@example.com",
+            "password": "wrong-password",
+        },
+    )
+    assert verified_hashes == [DUMMY_PASSWORD_HASH]
+    assert unknown_response.status_code == existing_response.status_code == 401
+    assert unknown_response.json() == existing_response.json()
+    assert unknown_response.json()["detail"] == "Invalid email or password"
+
+
+def test_dummy_password_hash_is_a_valid_argon2_hash():
+    assert verify_real_password(DUMMY_PASSWORD, DUMMY_PASSWORD_HASH) is True
 
 
 def test_logout_has_no_body_deletes_cookie_and_invalidates_existing_access(client):
@@ -262,7 +323,7 @@ def test_login_limit_is_database_backed_account_wide_and_clears_after_success(cl
     session_factory = client.app.state.session_factory
     with session_factory() as db:
         rows = list(db.scalars(select(LoginThrottle)))
-        assert {row.scope for row in rows} == {"email", "email_ip"}
+        assert {row.scope for row in rows} == {"email", "email_ip", "ip"}
         assert all(row.failure_count == 5 for row in rows)
         assert all(row.client_ip_hash != "testclient" for row in rows)
         assert "testclient" not in repr([row.__dict__ for row in rows])
@@ -281,7 +342,181 @@ def test_login_limit_is_database_backed_account_wide_and_clears_after_success(cl
     with session_factory() as db:
         # Only the still-locked first account remains. The successful login
         # removed both throttle scopes for clear-limit@example.com.
-        assert len(list(db.scalars(select(LoginThrottle)))) == 2
+        remaining = list(db.scalars(select(LoginThrottle)))
+        assert {row.scope for row in remaining} == {"email", "email_ip", "ip"}
+        assert sum(row.scope == "ip" for row in remaining) == 1
+
+
+def test_login_scope_limits_are_independent_and_keys_do_not_store_plaintext():
+    settings = Settings(
+        login_max_failures=5,
+        login_email_max_failures=20,
+        login_ip_max_failures=30,
+        _env_file=None,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/auth/login",
+            "headers": [],
+            "client": ("198.51.100.44", 50000),
+        }
+    )
+    keys = login_throttle_keys("Private@Example.com", request, settings)
+    assert {key.scope: login_throttle_limit(key, settings) for key in keys} == {
+        "email": 20,
+        "email_ip": 5,
+        "ip": 30,
+    }
+    assert keys[2].email_hash is None
+    assert keys[2].client_ip_hash is not None
+    assert "private@example.com" not in repr(keys).lower()
+    assert "198.51.100.44" not in repr(keys)
+
+
+def test_trusted_proxy_resolution_ignores_spoofing_and_walks_chain_right_to_left():
+    untrusted_settings = Settings(trusted_proxy_cidrs="10.0.0.10/32", _env_file=None)
+    spoofed = Request(
+        {
+            "type": "http",
+            "headers": [(b"x-forwarded-for", b"203.0.113.99")],
+            "client": ("198.51.100.7", 50000),
+        }
+    )
+    assert client_ip(spoofed, untrusted_settings) == "198.51.100.7"
+
+    trusted_settings = Settings(
+        trusted_proxy_cidrs="10.0.0.0/24,192.0.2.10/32", _env_file=None
+    )
+    forwarded = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"x-forwarded-for", b"203.0.113.8, 192.0.2.10")
+            ],
+            "client": ("10.0.0.10", 50000),
+        }
+    )
+    assert client_ip(forwarded, trusted_settings) == "203.0.113.8"
+
+    malformed = Request(
+        {
+            "type": "http",
+            "headers": [(b"x-forwarded-for", b"attacker-controlled")],
+            "client": ("10.0.0.10", 50000),
+        }
+    )
+    assert client_ip(malformed, trusted_settings) == "10.0.0.10"
+
+
+def test_postgres_login_lock_ids_are_ordered_and_share_email_or_ip_boundaries():
+    settings = Settings(_env_file=None)
+
+    def request_from(address: str) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "headers": [],
+                "client": (address, 50000),
+            }
+        )
+
+    first = login_attempt_lock_ids(
+        "first@example.com", request_from("198.51.100.1"), settings
+    )
+    same_ip = login_attempt_lock_ids(
+        "second@example.com", request_from("198.51.100.1"), settings
+    )
+    same_email = login_attempt_lock_ids(
+        "first@example.com", request_from("198.51.100.2"), settings
+    )
+    assert first == tuple(sorted(first))
+    assert len(set(first) & set(same_ip)) == 1
+    assert len(set(first) & set(same_email)) == 1
+
+
+def test_concurrent_login_rotating_emails_is_stopped_by_independent_ip_bucket(
+    client, monkeypatch
+):
+    settings = Settings(
+        login_max_failures=100,
+        login_email_max_failures=100,
+        login_ip_max_failures=5,
+        _env_file=None,
+    )
+    monkeypatch.setattr(auth_service_module, "get_settings", lambda: settings)
+
+    def unknown_login(index: int) -> int:
+        response = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": f"rotating-{index}@example.com",
+                "password": "wrong-password",
+            },
+        )
+        if response.status_code == 429:
+            assert int(response.headers["Retry-After"]) >= 1
+        return response.status_code
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        status_codes = list(executor.map(unknown_login, range(8)))
+
+    assert status_codes.count(401) == 4
+    assert status_codes.count(429) == 4
+    session_factory = client.app.state.session_factory
+    with session_factory() as db:
+        ip_rows = list(
+            db.scalars(select(LoginThrottle).where(LoginThrottle.scope == "ip"))
+        )
+        assert len(ip_rows) == 1
+        assert ip_rows[0].failure_count == 5
+
+
+def test_cleanup_expired_login_throttles_preserves_active_and_locked_rows(client):
+    now = datetime.now(timezone.utc)
+    session_factory = client.app.state.session_factory
+    with session_factory() as db:
+        db.add_all(
+            [
+                LoginThrottle(
+                    key_hash="a" * 64,
+                    scope="email",
+                    email_hash="b" * 64,
+                    client_ip_hash=None,
+                    failure_count=1,
+                    window_started_at=now - timedelta(hours=2),
+                    locked_until=None,
+                    updated_at=now - timedelta(hours=2),
+                ),
+                LoginThrottle(
+                    key_hash="c" * 64,
+                    scope="ip",
+                    email_hash=None,
+                    client_ip_hash="d" * 64,
+                    failure_count=1,
+                    window_started_at=now,
+                    locked_until=None,
+                    updated_at=now,
+                ),
+                LoginThrottle(
+                    key_hash="e" * 64,
+                    scope="email_ip",
+                    email_hash="f" * 64,
+                    client_ip_hash="1" * 64,
+                    failure_count=5,
+                    window_started_at=now - timedelta(hours=2),
+                    locked_until=now + timedelta(minutes=5),
+                    updated_at=now - timedelta(hours=2),
+                ),
+            ]
+        )
+        db.commit()
+        assert cleanup_expired_login_throttles(db, now=now) == 1
+        assert {row.key_hash for row in db.scalars(select(LoginThrottle))} == {
+            "c" * 64,
+            "e" * 64,
+        }
 
 
 def test_register_integrity_error_is_reported_as_conflict(client, monkeypatch):

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Document, InfoFilled, Link, Reading, Refresh, Search } from '@element-plus/icons-vue'
-import { apiError, deviceApi, knowledgeApi, modelApi, parseApiError, type ApiErrorInfo } from '../api'
+import { apiError, deviceApi, knowledgeApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
 import type { Device, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, RobotModel } from '../types'
 
@@ -115,7 +115,7 @@ async function searchKnowledge() {
     if (parsed.code === 'SAFETY_BLOCKED') {
       safetyError.value = parsed
     } else {
-      searchError.value = parsed.message
+      searchError.value = userFacingApiError(error, '资料检索服务暂不可用，请稍后重试')
     }
   } finally {
     searching.value = false

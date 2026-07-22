@@ -61,14 +61,17 @@ class AdminOverviewRead(BaseModel):
 
 class AdminSafetyBlockRead(BaseModel):
     id: int
-    user_id: int
-    device_id: int
     model_code: str
     category: str
     risk_level: str
+    created_at: datetime
+
+
+class AdminSafetyBlockDetailRead(AdminSafetyBlockRead):
+    user_id: int
+    device_id: int
     reason: str
     advice: str
-    created_at: datetime
 
 
 class AdminReportSummary(BaseModel):
@@ -80,8 +83,6 @@ class AdminReportSummary(BaseModel):
 class AdminDiagnosticSummary(BaseModel):
     id: int
     status: str
-    issue_description: str
-    error_code: str | None
     created_at: datetime
 
 
@@ -92,7 +93,6 @@ class AdminRobotModelSummary(BaseModel):
 
 
 class AdminUserSummary(BaseModel):
-    id: int
     email_masked: str
 
 
@@ -101,6 +101,25 @@ class AdminUnresolvedReportRead(BaseModel):
     diagnostic: AdminDiagnosticSummary
     model: AdminRobotModelSummary
     user: AdminUserSummary
+
+
+class AdminServiceReportDetailRead(BaseModel):
+    id: int
+    session_id: int
+    report_number: str
+    content: str
+    created_at: datetime
+
+
+class AdminDiagnosticDetailRead(BaseModel):
+    id: int
+    user_id: int
+    device_id: int
+    flow_id: int
+    status: str
+    issue_description: str
+    error_code: str | None
+    created_at: datetime
 
 
 class AdminAuditLogRead(ORMModel):

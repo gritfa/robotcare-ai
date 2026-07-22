@@ -27,6 +27,7 @@ def utcnow() -> datetime:
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
+        CheckConstraint("role IN ('user', 'admin')", name="ck_users_role"),
         CheckConstraint("status IN ('active', 'disabled')", name="ck_users_status"),
     )
 
@@ -79,14 +80,21 @@ class LoginThrottle(Base):
     __tablename__ = "login_throttles"
     __table_args__ = (
         CheckConstraint(
-            "scope IN ('email', 'email_ip')", name="ck_login_throttles_scope"
+            "scope IN ('email', 'email_ip', 'ip')", name="ck_login_throttles_scope"
+        ),
+        CheckConstraint(
+            "(scope = 'email' AND email_hash IS NOT NULL AND client_ip_hash IS NULL) OR "
+            "(scope = 'email_ip' AND email_hash IS NOT NULL AND client_ip_hash IS NOT NULL) OR "
+            "(scope = 'ip' AND email_hash IS NULL AND client_ip_hash IS NOT NULL)",
+            name="ck_login_throttles_scope_keys",
         ),
         Index("ix_login_throttles_email_scope", "email_hash", "scope"),
+        Index("ix_login_throttles_ip_scope", "client_ip_hash", "scope"),
     )
 
     key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     scope: Mapped[str] = mapped_column(String(20))
-    email_hash: Mapped[str] = mapped_column(String(64))
+    email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     client_ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     failure_count: Mapped[int] = mapped_column(Integer, default=0)
     window_started_at: Mapped[datetime] = mapped_column(
@@ -95,6 +103,35 @@ class LoginThrottle(Base):
     locked_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class ApiRateLimit(Base):
+    __tablename__ = "api_rate_limits"
+    __table_args__ = (
+        CheckConstraint(
+            "scope IN ('user', 'email', 'ip')", name="ck_api_rate_limits_scope"
+        ),
+        CheckConstraint(
+            "window_kind IN ('minute', 'day')",
+            name="ck_api_rate_limits_window_kind",
+        ),
+        CheckConstraint(
+            "request_count >= 0", name="ck_api_rate_limits_request_count_nonnegative"
+        ),
+        Index("ix_api_rate_limits_action_scope", "action", "scope"),
+    )
+
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    action: Mapped[str] = mapped_column(String(80))
+    scope: Mapped[str] = mapped_column(String(20))
+    principal_hash: Mapped[str] = mapped_column(String(64))
+    window_kind: Mapped[str] = mapped_column(String(20))
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    request_count: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
@@ -186,6 +223,11 @@ class IssueCategory(Base):
 class DiagnosticFlow(Base):
     __tablename__ = "diagnostic_flows"
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'retired')",
+            name="ck_diagnostic_flows_status",
+        ),
+        CheckConstraint("version > 0", name="ck_diagnostic_flows_version_positive"),
         UniqueConstraint("stable_key", "version"),
         UniqueConstraint("robot_model_id", "issue_category_id", "version"),
     )
@@ -211,6 +253,10 @@ class DiagnosticFlow(Base):
 class DiagnosticStep(Base):
     __tablename__ = "diagnostic_steps"
     __table_args__ = (
+        CheckConstraint(
+            "evidence_level IN ('direct', 'partial', 'none')",
+            name="ck_diagnostic_steps_evidence_level",
+        ),
         UniqueConstraint("flow_id", "position"),
         UniqueConstraint("flow_id", "stable_key"),
     )
@@ -233,6 +279,16 @@ class DiagnosticStep(Base):
 
 class DiagnosticSession(Base):
     __tablename__ = "diagnostic_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('in_progress', 'resolved', 'unresolved')",
+            name="ck_diagnostic_sessions_status",
+        ),
+        CheckConstraint(
+            "current_position IS NULL OR current_position >= 0",
+            name="ck_diagnostic_sessions_current_position_nonnegative",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
@@ -272,6 +328,12 @@ class DiagnosticSession(Base):
 
 class SafetyBlockEvent(Base):
     __tablename__ = "safety_block_events"
+    __table_args__ = (
+        CheckConstraint(
+            "risk_level = 'critical'",
+            name="ck_safety_block_events_risk_level",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
@@ -286,7 +348,13 @@ class SafetyBlockEvent(Base):
 
 class StepExecution(Base):
     __tablename__ = "step_executions"
-    __table_args__ = (UniqueConstraint("session_id", "step_id"),)
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('resolved', 'not_resolved')",
+            name="ck_step_executions_outcome",
+        ),
+        UniqueConstraint("session_id", "step_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("diagnostic_sessions.id"))

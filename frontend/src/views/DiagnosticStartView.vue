@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Camera, Close, InfoFilled, Plus, Warning } from '@element-plus/icons-vue'
-import { apiError, deviceApi, diagnosticApi, modelApi, parseApiError, type ApiErrorInfo } from '../api'
+import { apiError, deviceApi, diagnosticApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
 import { diagnosticOptionKey, robotModelIdForDevice, visibleDiagnosticOptions } from '../diagnosticOptions'
 import type { Device, DiagnosticOption } from '../types'
@@ -29,6 +29,7 @@ const optionsLoading = ref(false)
 const optionsError = ref('')
 const safetyError = ref<ApiErrorInfo | null>(null)
 const categoryMismatch = ref<ApiErrorInfo | null>(null)
+const submitError = ref('')
 const route = useRoute()
 const router = useRouter()
 const form = reactive({ device_id: '', issue_category_code: '', issue_description: '', error_code: '' })
@@ -148,6 +149,7 @@ async function submit(confirmCategoryMismatch = false) {
 
   submitting.value = true
   safetyError.value = null
+  submitError.value = ''
   try {
     const diagnostic = await diagnosticApi.create({
       device_id: form.device_id,
@@ -158,14 +160,27 @@ async function submit(confirmCategoryMismatch = false) {
     })
 
     let failedUploads = 0
-    for (const image of selectedImages.value) {
+    let uploadNotice = ''
+    for (let index = 0; index < selectedImages.value.length; index += 1) {
+      const image = selectedImages.value[index]
       try {
         await diagnosticApi.uploadAttachment(diagnostic.id, image.file)
-      } catch {
+      } catch (uploadError) {
         failedUploads += 1
+        const uploadFailure = parseApiError(uploadError, '图片上传失败，请稍后重试')
+        if (uploadFailure.code === 'RATE_LIMITED') {
+          failedUploads += selectedImages.value.length - index - 1
+          uploadNotice = `诊断已创建，但图片上传受到频率限制。${userFacingApiError(uploadError, '图片上传过于频繁')}`
+          sessionStorage.setItem(`robotcare-attachment-retry-${diagnostic.id}`, uploadNotice)
+          break
+        }
       }
     }
-    if (failedUploads) ElMessage.warning(`诊断已创建，但有 ${failedUploads} 张图片上传失败`)
+    if (failedUploads && !uploadNotice) {
+      uploadNotice = `诊断已创建，但有 ${failedUploads} 张图片上传失败。请在诊断详情页重新选择并上传。`
+      sessionStorage.setItem(`robotcare-attachment-retry-${diagnostic.id}`, uploadNotice)
+    }
+    if (uploadNotice) ElMessage.warning(uploadNotice)
     await router.push(`/diagnostics/${diagnostic.id}`)
   } catch (error) {
     const parsed = parseApiError(error, '诊断创建失败，请确认当前流程仍然可用')
@@ -174,8 +189,10 @@ async function submit(confirmCategoryMismatch = false) {
       categoryMismatch.value = null
     } else if (parsed.code === 'ISSUE_CATEGORY_MISMATCH') {
       categoryMismatch.value = parsed
+    } else if (parsed.code === 'RATE_LIMITED') {
+      submitError.value = userFacingApiError(error, '诊断创建过于频繁')
     } else {
-      ElMessage.error(parsed.message)
+      submitError.value = parsed.message
     }
   } finally {
     submitting.value = false
@@ -193,6 +210,7 @@ async function submit(confirmCategoryMismatch = false) {
     </div>
 
     <SafetyBlockCard v-if="safetyError" :error="safetyError" />
+    <el-alert v-if="submitError" class="submit-error" :title="submitError" type="error" :closable="false" show-icon />
 
     <div v-if="devices.length" class="form-grid">
       <section class="panel form-panel">

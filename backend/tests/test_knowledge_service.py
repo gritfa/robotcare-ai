@@ -1,5 +1,7 @@
 import json
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
+from time import sleep
 import pytest
 
 from pypdf import PdfWriter
@@ -16,7 +18,7 @@ from app.knowledge_service import (
     split_pages,
 )
 from app.config import Settings
-from app.models import KnowledgeChunk, KnowledgeDocument, RobotModel
+from app.models import ApiRateLimit, KnowledgeChunk, KnowledgeDocument, RobotModel
 from conftest import auth, register
 
 
@@ -269,6 +271,14 @@ def test_knowledge_api_blocks_high_risk_queries_before_embedding(client, query):
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "SAFETY_BLOCKED"
     assert provider.query_texts == []
+    with client.app.state.session_factory() as db:
+        assert list(
+            db.scalars(
+                select(ApiRateLimit).where(
+                    ApiRateLimit.action.in_(("knowledge_search", "knowledge_embedding"))
+                )
+            )
+        ) == []
 
 
 def test_knowledge_api_allows_safe_external_cleaning_and_negated_smoke(client):
@@ -339,6 +349,136 @@ def test_public_knowledge_api_rejects_threshold_override_and_uses_server_setting
     )
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_knowledge_cache_normalizes_query_and_isolates_version_top_k_and_model(client):
+    provider = FakeEmbeddingProvider()
+    client.app.state.embedding_provider = provider
+    token = register(client, "knowledge-cache@example.com")["access_token"]
+    with client.app.state.session_factory() as db:
+        jh_model_id = model_id(db, "JH69U1")
+        vc_model_id = model_id(db, "VC35U1")
+        document = KnowledgeDocument(
+            robot_model_id=jh_model_id,
+            title="Cache manual",
+            source_url="https://example.com/cache.pdf",
+            sha256="7" * 64,
+            page_count=1,
+        )
+        db.add(document)
+        db.flush()
+        db.add(
+            KnowledgeChunk(
+                document_id=document.id,
+                chunk_index=0,
+                page_number=1,
+                content="Clean charging contacts",
+                embedding=json.dumps(vector(1.0)),
+            )
+        )
+        db.commit()
+
+    headers = auth(token)
+    first = client.post(
+        "/api/v1/knowledge/search",
+        headers=headers,
+        json={"robot_model_id": jh_model_id, "query": "Cannot   Charge", "top_k": 3},
+    )
+    repeated = client.post(
+        "/api/v1/knowledge/search",
+        headers=headers,
+        json={"robot_model_id": jh_model_id, "query": "  cannot charge ", "top_k": 3},
+    )
+    assert first.status_code == repeated.status_code == 200
+    assert repeated.json() == first.json()
+    assert provider.query_texts == ["cannot charge"]
+
+    different_top_k = client.post(
+        "/api/v1/knowledge/search",
+        headers=headers,
+        json={"robot_model_id": jh_model_id, "query": "cannot charge", "top_k": 4},
+    )
+    different_model = client.post(
+        "/api/v1/knowledge/search",
+        headers=headers,
+        json={"robot_model_id": vc_model_id, "query": "cannot charge", "top_k": 3},
+    )
+    assert different_top_k.status_code == different_model.status_code == 200
+    assert provider.query_texts == ["cannot charge"] * 3
+
+    with client.app.state.session_factory() as db:
+        db.add(
+            KnowledgeDocument(
+                robot_model_id=jh_model_id,
+                title="Updated cache manual",
+                source_url="https://example.com/cache-v2.pdf",
+                sha256="8" * 64,
+                page_count=1,
+            )
+        )
+        db.commit()
+    changed_version = client.post(
+        "/api/v1/knowledge/search",
+        headers=headers,
+        json={"robot_model_id": jh_model_id, "query": "cannot charge", "top_k": 3},
+    )
+    assert changed_version.status_code == 200
+    assert provider.query_texts == ["cannot charge"] * 4
+
+    with client.app.state.session_factory() as db:
+        embedding_rows = list(
+            db.scalars(
+                select(ApiRateLimit).where(
+                    ApiRateLimit.action == "knowledge_embedding"
+                )
+            )
+        )
+        assert len(embedding_rows) == 4
+        assert all(row.request_count == 4 for row in embedding_rows)
+
+
+def test_knowledge_cache_singleflight_allows_one_embedding_for_concurrent_miss(client):
+    class SlowProvider(FakeEmbeddingProvider):
+        def embed_query(self, text):
+            sleep(0.1)
+            return super().embed_query(text)
+
+    provider = SlowProvider()
+    client.app.state.embedding_provider = provider
+    token = register(client, "knowledge-singleflight@example.com")["access_token"]
+    with client.app.state.session_factory() as db:
+        robot_model_id = model_id(db, "JH69U1")
+        document = KnowledgeDocument(
+            robot_model_id=robot_model_id,
+            title="Singleflight manual",
+            source_url="https://example.com/singleflight.pdf",
+            sha256="9" * 64,
+            page_count=1,
+        )
+        db.add(document)
+        db.flush()
+        db.add(
+            KnowledgeChunk(
+                document_id=document.id,
+                chunk_index=0,
+                page_number=1,
+                content="Check charging contacts",
+                embedding=json.dumps(vector(1.0)),
+            )
+        )
+        db.commit()
+
+    def search_once(_index):
+        return client.post(
+            "/api/v1/knowledge/search",
+            headers=auth(token),
+            json={"robot_model_id": robot_model_id, "query": "dock contacts"},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(search_once, range(2)))
+    assert all(response.status_code == 200 for response in responses)
+    assert provider.query_texts == ["dock contacts"]
 
 
 def test_knowledge_health_distinguishes_external_model_and_vector_readiness(client):

@@ -9,6 +9,7 @@ from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import Base
@@ -19,6 +20,99 @@ from app.seed import seed_database
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+STATE_CHECK_CONSTRAINTS = {
+    "api_rate_limits": {
+        "ck_api_rate_limits_scope",
+        "ck_api_rate_limits_window_kind",
+        "ck_api_rate_limits_request_count_nonnegative",
+    },
+    "users": {"ck_users_role"},
+    "diagnostic_flows": {
+        "ck_diagnostic_flows_status",
+        "ck_diagnostic_flows_version_positive",
+    },
+    "diagnostic_sessions": {
+        "ck_diagnostic_sessions_status",
+        "ck_diagnostic_sessions_current_position_nonnegative",
+    },
+    "step_executions": {"ck_step_executions_outcome"},
+    "safety_block_events": {"ck_safety_block_events_risk_level"},
+    "diagnostic_steps": {"ck_diagnostic_steps_evidence_level"},
+    "login_throttles": {
+        "ck_login_throttles_scope",
+        "ck_login_throttles_scope_keys",
+    },
+}
+
+
+def assert_state_check_constraints(engine) -> None:
+    inspector = inspect(engine)
+    for table_name, expected_names in STATE_CHECK_CONSTRAINTS.items():
+        actual_names = {
+            constraint["name"]
+            for constraint in inspector.get_check_constraints(table_name)
+        }
+        assert expected_names <= actual_names
+
+
+def insert_state_constraint_fixture(engine) -> None:
+    with Session(engine) as db:
+        seed_database(db)
+        flow = db.scalar(
+            select(DiagnosticFlow).where(DiagnosticFlow.status == "published")
+        )
+        assert flow is not None and flow.steps
+        model_id = flow.robot_model_id
+        flow_id = flow.id
+        step_id = flow.steps[0].id
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users "
+                "(id, email, password_hash, role, status, created_at) VALUES "
+                "(9001, 'constraint@example.com', 'hash', 'user', 'active', "
+                "'2026-07-22 00:00:00')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO user_devices "
+                "(id, user_id, robot_model_id, nickname, created_at) VALUES "
+                "(9001, 9001, :model_id, 'constraint device', "
+                "'2026-07-22 00:00:00')"
+            ),
+            {"model_id": model_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO diagnostic_sessions "
+                "(id, user_id, device_id, flow_id, issue_description, status, "
+                "current_position, resolved, created_at, updated_at) VALUES "
+                "(9001, 9001, 9001, :flow_id, 'fixture', 'in_progress', 1, "
+                "NULL, '2026-07-22 00:00:00', '2026-07-22 00:00:00')"
+            ),
+            {"flow_id": flow_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO safety_block_events "
+                "(id, user_id, device_id, category, risk_level, reason, advice, "
+                "description_sha256, created_at) VALUES "
+                "(9001, 9001, 9001, 'battery', 'critical', 'reason', 'advice', "
+                ":sha, '2026-07-22 00:00:00')"
+            ),
+            {"sha": "a" * 64},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO step_executions "
+                "(id, session_id, step_id, outcome, created_at) VALUES "
+                "(9001, 9001, :step_id, 'not_resolved', '2026-07-22 00:00:00')"
+            ),
+            {"step_id": step_id},
+        )
 
 
 def alembic_config(database_url: str) -> Config:
@@ -39,6 +133,7 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkey
     inspector = inspect(engine)
     expected_tables = {
         "alembic_version",
+        "api_rate_limits",
         "attachments",
         "auth_sessions",
         "audit_logs",
@@ -101,6 +196,14 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkey
         "locked_until",
         "updated_at",
     } == throttle_columns
+    throttle_indexes = {
+        index["name"] for index in inspector.get_indexes("login_throttles")
+    }
+    assert "ix_login_throttles_ip_scope" in throttle_indexes
+    assert next(
+        column for column in inspector.get_columns("login_throttles")
+        if column["name"] == "email_hash"
+    )["nullable"] is True
 
     audit_columns = {column["name"] for column in inspector.get_columns("audit_logs")}
     assert {
@@ -147,6 +250,7 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkey
 
     flow_indexes = {index["name"] for index in inspector.get_indexes("diagnostic_flows")}
     assert {"ix_diagnostic_flows_stable_key", "ix_diagnostic_flows_status"} <= flow_indexes
+    assert_state_check_constraints(engine)
 
     # This comparison is deliberately broader than the spot checks above: it
     # fails whenever a mapped table, column, constraint, index, or type is not
@@ -291,4 +395,323 @@ def test_auth_migration_upgrades_0002_and_preserves_users_and_audit_logs(
         assert connection.execute(
             text("SELECT count(*) FROM audit_logs WHERE action = 'preserve'")
         ).scalar_one() == 1
+    engine.dispose()
+
+
+def test_state_constraint_migration_upgrades_0004_without_data_loss(
+    tmp_path, monkeypatch
+):
+    database_url = f"sqlite:///{(tmp_path / 'upgrade-0005.db').as_posix()}"
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    config = alembic_config(database_url)
+    command.upgrade(config, "20260720_0004")
+
+    engine = create_engine(database_url)
+    insert_state_constraint_fixture(engine)
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = create_engine(database_url)
+    assert_state_check_constraints(engine)
+    with engine.connect() as connection:
+        assert connection.scalar(
+            text("SELECT role FROM users WHERE id = 9001")
+        ) == "user"
+        assert connection.scalar(
+            text("SELECT status FROM diagnostic_sessions WHERE id = 9001")
+        ) == "in_progress"
+        assert connection.scalar(
+            text("SELECT outcome FROM step_executions WHERE id = 9001")
+        ) == "not_resolved"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+            "20260722_0007"
+        )
+    engine.dispose()
+
+
+def test_state_constraint_migration_rejects_all_invalid_historical_rows_before_ddl(
+    tmp_path, monkeypatch
+):
+    database_url = f"sqlite:///{(tmp_path / 'invalid-0005.db').as_posix()}"
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    config = alembic_config(database_url)
+    command.upgrade(config, "20260720_0004")
+
+    engine = create_engine(database_url)
+    insert_state_constraint_fixture(engine)
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE users SET role = 'owner' WHERE id = 9001"))
+        connection.execute(
+            text(
+                "UPDATE diagnostic_flows SET status = 'broken', version = 0 "
+                "WHERE id = (SELECT MIN(id) FROM diagnostic_flows)"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE diagnostic_sessions SET status = 'paused', "
+                "current_position = -1 WHERE id = 9001"
+            )
+        )
+        connection.execute(
+            text("UPDATE step_executions SET outcome = 'skipped' WHERE id = 9001")
+        )
+        connection.execute(
+            text(
+                "UPDATE safety_block_events SET risk_level = 'unknown' "
+                "WHERE id = 9001"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE diagnostic_steps SET evidence_level = 'guess' "
+                "WHERE id = (SELECT MIN(id) FROM diagnostic_steps)"
+            )
+        )
+    engine.dispose()
+
+    with pytest.raises(RuntimeError) as exc_info:
+        command.upgrade(config, "head")
+    message = str(exc_info.value)
+    for field in (
+        "users.role",
+        "diagnostic_flows.status",
+        "diagnostic_sessions.status",
+        "step_executions.outcome",
+        "safety_block_events.risk_level",
+        "diagnostic_steps.evidence_level",
+        "diagnostic_flows.version",
+        "diagnostic_sessions.current_position",
+    ):
+        assert f"{field}=1" in message
+
+    engine = create_engine(database_url)
+    assert connection_revision(engine) == "20260720_0004"
+    assert "ck_users_role" not in {
+        constraint["name"]
+        for constraint in inspect(engine).get_check_constraints("users")
+    }
+    engine.dispose()
+
+
+def test_independent_ip_throttle_migration_preserves_existing_rows_and_enforces_keys(
+    tmp_path, monkeypatch
+):
+    database_url = f"sqlite:///{(tmp_path / 'upgrade-0006.db').as_posix()}"
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    config = alembic_config(database_url)
+    command.upgrade(config, "20260722_0005")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO login_throttles "
+                "(key_hash, scope, email_hash, client_ip_hash, failure_count, "
+                "window_started_at, locked_until, updated_at) VALUES "
+                "(:key, 'email', :email, NULL, 2, :created, NULL, :created)"
+            ),
+            {
+                "key": "a" * 64,
+                "email": "b" * 64,
+                "created": "2026-07-22 00:00:00",
+            },
+        )
+    engine.dispose()
+
+
+    command.upgrade(config, "head")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        assert connection.scalar(
+            text("SELECT failure_count FROM login_throttles WHERE key_hash = :key"),
+            {"key": "a" * 64},
+        ) == 2
+        connection.execute(
+            text(
+                "INSERT INTO login_throttles "
+                "(key_hash, scope, email_hash, client_ip_hash, failure_count, "
+                "window_started_at, locked_until, updated_at) VALUES "
+                "(:key, 'ip', NULL, :ip, 1, :created, NULL, :created)"
+            ),
+            {
+                "key": "c" * 64,
+                "ip": "d" * 64,
+                "created": "2026-07-22 00:00:00",
+            },
+        )
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO login_throttles "
+                    "(key_hash, scope, email_hash, client_ip_hash, failure_count, "
+                    "window_started_at, locked_until, updated_at) VALUES "
+                    "(:key, 'ip', :email, :ip, 1, :created, NULL, :created)"
+                ),
+                {
+                    "key": "e" * 64,
+                    "email": "f" * 64,
+                    "ip": "1" * 64,
+                    "created": "2026-07-22 00:00:00",
+                },
+            )
+    engine.dispose()
+
+
+def test_api_rate_limit_migration_constraints_and_downgrade(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{(tmp_path / 'upgrade-0007.db').as_posix()}"
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    config = alembic_config(database_url)
+    command.upgrade(config, "20260722_0006")
+    engine = create_engine(database_url)
+    assert "api_rate_limits" not in inspect(engine).get_table_names()
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = create_engine(database_url)
+    inspector = inspect(engine)
+    assert_state_check_constraints(engine)
+    assert {"ix_api_rate_limits_action_scope", "ix_api_rate_limits_expires_at"} <= {
+        index["name"] for index in inspector.get_indexes("api_rate_limits")
+    }
+    valid_values = {
+        "key": "a" * 64,
+        "action": "knowledge_search",
+        "scope": "user",
+        "principal": "b" * 64,
+        "window": "minute",
+        "started": "2026-07-22 00:00:00",
+        "expires": "2026-07-22 00:01:00",
+        "count": 1,
+    }
+    insert_sql = text(
+        "INSERT INTO api_rate_limits "
+        "(key_hash, action, scope, principal_hash, window_kind, "
+        "window_started_at, expires_at, request_count, updated_at) VALUES "
+        "(:key, :action, :scope, :principal, :window, :started, :expires, "
+        ":count, :started)"
+    )
+    with engine.begin() as connection:
+        connection.execute(insert_sql, valid_values)
+    for suffix, overrides in (
+        ("c", {"scope": "device"}),
+        ("d", {"window": "hour"}),
+        ("e", {"count": -1}),
+    ):
+        with pytest.raises(IntegrityError):
+            with engine.begin() as connection:
+                connection.execute(
+                    insert_sql,
+                    {**valid_values, **overrides, "key": suffix * 64},
+                )
+    engine.dispose()
+
+    command.downgrade(config, "20260722_0006")
+    engine = create_engine(database_url)
+    assert "api_rate_limits" not in inspect(engine).get_table_names()
+    assert "login_throttles" in inspect(engine).get_table_names()
+    assert connection_revision(engine) == "20260722_0006"
+    engine.dispose()
+
+
+def test_independent_ip_throttle_migration_rejects_invalid_legacy_scope_keys(
+    tmp_path, monkeypatch
+):
+    database_url = f"sqlite:///{(tmp_path / 'invalid-upgrade-0006.db').as_posix()}"
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    config = alembic_config(database_url)
+    command.upgrade(config, "20260722_0005")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO login_throttles "
+                "(key_hash, scope, email_hash, client_ip_hash, failure_count, "
+                "window_started_at, locked_until, updated_at) VALUES "
+                "(:key, 'email', :email, :ip, 1, :created, NULL, :created)"
+            ),
+            {
+                "key": "9" * 64,
+                "email": "8" * 64,
+                "ip": "7" * 64,
+                "created": "2026-07-22 00:00:00",
+            },
+        )
+    engine.dispose()
+
+    with pytest.raises(RuntimeError, match="invalid legacy scope/key"):
+        command.upgrade(config, "head")
+
+    engine = create_engine(database_url)
+    assert connection_revision(engine) == "20260722_0005"
+    engine.dispose()
+
+
+def test_independent_ip_throttle_downgrade_refuses_to_delete_ip_history(
+    tmp_path, monkeypatch
+):
+    database_url = f"sqlite:///{(tmp_path / 'refuse-downgrade-0006.db').as_posix()}"
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    config = alembic_config(database_url)
+    command.upgrade(config, "20260722_0006")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO login_throttles "
+                "(key_hash, scope, email_hash, client_ip_hash, failure_count, "
+                "window_started_at, locked_until, updated_at) VALUES "
+                "(:key, 'ip', NULL, :ip, 1, :created, NULL, :created)"
+            ),
+            {
+                "key": "6" * 64,
+                "ip": "5" * 64,
+                "created": "2026-07-22 00:00:00",
+            },
+        )
+    engine.dispose()
+
+    with pytest.raises(RuntimeError, match="refusing destructive downgrade"):
+        command.downgrade(config, "20260722_0005")
+
+    engine = create_engine(database_url)
+    assert connection_revision(engine) == "20260722_0006"
+    with engine.connect() as connection:
+        assert connection.scalar(
+            text("SELECT COUNT(*) FROM login_throttles WHERE scope = 'ip'")
+        ) == 1
+    engine.dispose()
+
+
+def connection_revision(engine) -> str:
+    with engine.connect() as connection:
+        return connection.scalar(text("SELECT version_num FROM alembic_version"))
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE users SET role = 'owner' WHERE id = 9001",
+        "UPDATE diagnostic_flows SET status = 'broken' "
+        "WHERE id = (SELECT MIN(id) FROM diagnostic_flows)",
+        "UPDATE diagnostic_flows SET version = 0 "
+        "WHERE id = (SELECT MIN(id) FROM diagnostic_flows)",
+        "UPDATE diagnostic_sessions SET status = 'paused' WHERE id = 9001",
+        "UPDATE diagnostic_sessions SET current_position = -1 WHERE id = 9001",
+        "UPDATE step_executions SET outcome = 'skipped' WHERE id = 9001",
+        "UPDATE safety_block_events SET risk_level = 'unknown' WHERE id = 9001",
+        "UPDATE diagnostic_steps SET evidence_level = 'guess' "
+        "WHERE id = (SELECT MIN(id) FROM diagnostic_steps)",
+    ],
+)
+def test_sqlite_rejects_invalid_database_states(tmp_path, monkeypatch, statement):
+    database_url = f"sqlite:///{(tmp_path / 'invalid-state.db').as_posix()}"
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    command.upgrade(alembic_config(database_url), "head")
+    engine = create_engine(database_url)
+    insert_state_constraint_fixture(engine)
+
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(text(statement))
     engine.dispose()

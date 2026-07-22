@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
+from ipaddress import ip_address
 import math
 import secrets
 from uuid import uuid4
 
 from fastapi import HTTPException, Request, Response, status
-from sqlalchemy import case, delete, select, text, update
+from sqlalchemy import case, delete, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -35,7 +36,7 @@ class IssuedAuthentication:
 class LoginThrottleKey:
     key_hash: str
     scope: str
-    email_hash: str
+    email_hash: str | None
     client_ip_hash: str | None
 
 
@@ -69,21 +70,50 @@ def _opaque_digest(settings: Settings, namespace: str, value: str) -> str:
     ).hexdigest()
 
 
-def client_ip(request: Request) -> str:
-    # Do not trust X-Forwarded-For here: the backend may be reachable directly,
-    # and accepting a caller-controlled header would let attackers rotate the
-    # rate-limit key. Deployments needing the original address should terminate
-    # traffic at a trusted proxy that supplies the ASGI client address.
-    return request.client.host if request.client is not None else "unknown"
+def client_ip(request: Request, settings: Settings | None = None) -> str:
+    """Return the direct peer, or a forwarded client only from a trusted peer.
+
+    The chain is walked from right to left so a client-controlled leftmost
+    value cannot override the first untrusted hop. A malformed chain fails
+    closed to the direct peer instead of creating an attacker-selected bucket.
+    """
+
+    peer = request.client.host if request.client is not None else "unknown"
+    try:
+        peer_address = ip_address(peer)
+    except ValueError:
+        return peer
+
+    trusted_networks = (settings or get_settings()).trusted_proxy_networks
+    if not any(peer_address in network for network in trusted_networks):
+        return peer_address.compressed
+
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if not forwarded_for:
+        return peer_address.compressed
+    try:
+        chain = [ip_address(value.strip()) for value in forwarded_for.split(",")]
+    except ValueError:
+        return peer_address.compressed
+    if not chain:
+        return peer_address.compressed
+
+    for candidate in reversed([*chain, peer_address]):
+        if any(candidate in network for network in trusted_networks):
+            continue
+        return candidate.compressed
+    return peer_address.compressed
 
 
 def login_throttle_keys(
     email: str, request: Request, settings: Settings | None = None
-) -> tuple[LoginThrottleKey, LoginThrottleKey]:
+) -> tuple[LoginThrottleKey, LoginThrottleKey, LoginThrottleKey]:
     resolved_settings = settings or get_settings()
     normalized_email = normalize_email(email)
     email_hash = _opaque_digest(resolved_settings, "login-email", normalized_email)
-    ip_hash = _opaque_digest(resolved_settings, "login-ip", client_ip(request))
+    ip_hash = _opaque_digest(
+        resolved_settings, "login-ip", client_ip(request, resolved_settings)
+    )
     return (
         LoginThrottleKey(
             key_hash=_opaque_digest(resolved_settings, "login-key-email", normalized_email),
@@ -101,7 +131,47 @@ def login_throttle_keys(
             email_hash=email_hash,
             client_ip_hash=ip_hash,
         ),
+        LoginThrottleKey(
+            key_hash=_opaque_digest(resolved_settings, "login-key-ip", ip_hash),
+            scope="ip",
+            email_hash=None,
+            client_ip_hash=ip_hash,
+        ),
     )
+
+
+def login_throttle_limit(key: LoginThrottleKey, settings: Settings) -> int:
+    if key.scope == "email":
+        return settings.login_email_max_failures
+    if key.scope == "email_ip":
+        return settings.login_max_failures
+    if key.scope == "ip":
+        return settings.login_ip_max_failures
+    raise ValueError(f"Unsupported login throttle scope: {key.scope}")
+
+
+def login_attempt_lock_ids(
+    email: str, request: Request, settings: Settings
+) -> tuple[int, ...]:
+    digests = {
+        _opaque_digest(
+            settings,
+            "login-attempt-lock-email",
+            normalize_email(email),
+        ),
+        _opaque_digest(
+            settings,
+            "login-attempt-lock-ip",
+            client_ip(request, settings),
+        ),
+    }
+    lock_ids: list[int] = []
+    for digest in digests:
+        lock_id = int(digest[:16], 16)
+        if lock_id >= 2**63:
+            lock_id -= 2**64
+        lock_ids.append(lock_id)
+    return tuple(sorted(lock_ids))
 
 
 def _retry_after_seconds(locked_until: datetime, now: datetime) -> int:
@@ -132,9 +202,12 @@ def enforce_login_rate_limit(
 
 
 def acquire_login_attempt_lock(
-    db: Session, email: str, settings: Settings | None = None
+    db: Session,
+    email: str,
+    request: Request,
+    settings: Settings | None = None,
 ) -> None:
-    """Serialize password checks for one normalized account.
+    """Serialize password checks sharing either the account or source IP.
 
     Atomic counters prevent lost increments, but a counter written only after
     verification cannot stop many requests that all pass the pre-check at the
@@ -151,18 +224,13 @@ def acquire_login_attempt_lock(
         db.execute(text("BEGIN IMMEDIATE"))
         return
     if dialect_name == "postgresql":
-        digest = _opaque_digest(
-            resolved_settings,
-            "login-attempt-lock",
-            normalize_email(email),
-        )
-        lock_id = int(digest[:16], 16)
-        if lock_id >= 2**63:
-            lock_id -= 2**64
-        db.execute(
-            text("SELECT pg_advisory_xact_lock(:lock_id)"),
-            {"lock_id": lock_id},
-        )
+        # All callers acquire the same lock set in numeric order, preventing
+        # deadlocks when requests share an email, an IP, or both.
+        for lock_id in login_attempt_lock_ids(email, request, resolved_settings):
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": lock_id},
+            )
         return
     raise RuntimeError(
         f"Login attempt locking is not implemented for {dialect_name}"
@@ -181,6 +249,7 @@ def record_login_failure(
     new_locked_until = now + lock_duration
 
     for key in login_throttle_keys(email, request, resolved_settings):
+        maximum_failures = login_throttle_limit(key, resolved_settings)
         dialect_name = db.get_bind().dialect.name
         if dialect_name == "sqlite":
             insert_statement = sqlite_insert(LoginThrottle)
@@ -200,7 +269,7 @@ def record_login_failure(
             else_=1,
         )
         next_locked_until = case(
-            (next_failure_count >= resolved_settings.login_max_failures, new_locked_until),
+            (next_failure_count >= maximum_failures, new_locked_until),
             (existing_window_is_current, LoginThrottle.locked_until),
             else_=None,
         )
@@ -214,7 +283,7 @@ def record_login_failure(
                 window_started_at=now,
                 locked_until=(
                     new_locked_until
-                    if resolved_settings.login_max_failures <= 1
+                    if maximum_failures <= 1
                     else None
                 ),
                 updated_at=now,
@@ -256,6 +325,34 @@ def clear_login_failures(
     # Clear every scope for this normalized email. A successful login should
     # remove both the current IP bucket and the account-wide anti-bypass bucket.
     db.execute(delete(LoginThrottle).where(LoginThrottle.email_hash == email_hash))
+
+
+def cleanup_expired_login_throttles(
+    db: Session,
+    settings: Settings | None = None,
+    *,
+    now: datetime | None = None,
+) -> int:
+    """Delete inactive throttle buckets without removing active lockouts."""
+
+    resolved_settings = settings or get_settings()
+    resolved_now = now or utcnow()
+    retention_minutes = max(
+        resolved_settings.login_window_minutes,
+        resolved_settings.login_lock_minutes,
+    )
+    cutoff = resolved_now - timedelta(minutes=retention_minutes)
+    result = db.execute(
+        delete(LoginThrottle).where(
+            LoginThrottle.updated_at < cutoff,
+            or_(
+                LoginThrottle.locked_until.is_(None),
+                LoginThrottle.locked_until <= resolved_now,
+            ),
+        )
+    )
+    db.commit()
+    return result.rowcount or 0
 
 
 def _new_refresh_token() -> str:

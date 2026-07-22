@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { describe, expect, it } from 'vitest'
-import { apiError, parseApiError } from './api'
+import { apiError, parseApiError, userFacingApiError } from './api'
 
 function axiosError(status: number, data: unknown, headers?: Record<string, string>) {
   return new axios.AxiosError(
@@ -66,5 +66,26 @@ describe('parseApiError', () => {
     const limited = parseApiError(axiosError(429, {}, { 'retry-after': '12' }))
     expect(limited.code).toBe('RATE_LIMITED')
     expect(limited.retryAfterSeconds).toBe(12)
+    expect(userFacingApiError(axiosError(429, {
+      detail: { code: 'RATE_LIMITED', message: '请求过于频繁' },
+    }, { 'retry-after': '12' }))).toBe('请求过于频繁；请在 12 秒后重试')
+  })
+
+  it('supports an HTTP-date Retry-After header', () => {
+    const now = new Date('2026-07-22T02:00:00Z')
+    const originalNow = Date.now
+    Date.now = () => now.getTime()
+    try {
+      const retryAt = new Date(now.getTime() + 25_000).toUTCString()
+      const parsed = parseApiError(axiosError(429, {
+        detail: { code: 'RATE_LIMITED', message: '配额暂时不可用' },
+      }, { 'retry-after': retryAt }))
+      expect(parsed.retryAfterSeconds).toBe(25)
+      expect(userFacingApiError(axiosError(429, {
+        detail: { code: 'RATE_LIMITED', message: '配额暂时不可用' },
+      }, { 'retry-after': retryAt }))).toContain('25 秒后重试')
+    } finally {
+      Date.now = originalNow
+    }
   })
 })

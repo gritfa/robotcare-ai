@@ -79,14 +79,17 @@ export interface AdminModel {
 
 export interface AdminSafetyBlock {
   id: EntityId
-  user_id: EntityId
-  device_id: EntityId
   model_code: string
   category: string
   risk_level: string
+  created_at: string
+}
+
+export interface AdminSafetyBlockDetail extends AdminSafetyBlock {
+  user_id: EntityId
+  device_id: EntityId
   reason: string
   advice: string
-  created_at: string
 }
 
 export interface AdminUnresolvedReport {
@@ -98,8 +101,6 @@ export interface AdminUnresolvedReport {
   diagnostic: {
     id: EntityId
     status: string
-    issue_description: string
-    error_code?: string | null
     created_at: string
   }
   model: {
@@ -108,9 +109,27 @@ export interface AdminUnresolvedReport {
     name: string
   }
   user: {
-    id: EntityId
     email_masked: string
   }
+}
+
+export interface AdminDiagnosticDetail {
+  id: EntityId
+  user_id: EntityId
+  device_id: EntityId
+  flow_id: EntityId
+  status: string
+  issue_description: string
+  error_code?: string | null
+  created_at: string
+}
+
+export interface AdminServiceReportDetail {
+  id: EntityId
+  session_id: EntityId
+  report_number: string
+  content: string
+  created_at: string
 }
 
 export interface AdminAuditLog {

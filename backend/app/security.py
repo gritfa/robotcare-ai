@@ -13,6 +13,14 @@ from .database import get_db
 from .models import AuthSession, User
 
 password_hasher = PasswordHasher()
+# Pre-generated with the same Argon2id policy as ``password_hasher``.  Login
+# attempts for unknown accounts verify against this fixed hash so that account
+# existence does not decide whether the expensive password check runs.
+DUMMY_PASSWORD_HASH = (
+    "$argon2id$v=19$m=65536,t=3,p=4$"
+    "d7/Pri/UUml1PUmpHup9dw$"
+    "dD0k/dFVU1DtM1YCTFgThmBgClsVMGK4hguCaclX94M"
+)
 bearer = HTTPBearer(auto_error=False)
 
 

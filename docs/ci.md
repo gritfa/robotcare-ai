@@ -18,7 +18,7 @@ python -m pip install -e ".[test]"
 python -m pytest
 ```
 
-本地完整回归的当前证据为 `137 passed, 1 skipped`；新增分类一致性、检索安全/阈值、知识健康/发布、报告/PDF 与附件并发及 Alembic `20260720_0004`。唯一跳过项需要 `ROBOTCARE_TEST_POSTGRES_URL` 和显式破坏性测试开关。
+本地完整回归的当前证据为 `168 passed, 1 skipped`；新增登录时序防护、三桶认证限流、业务/Embedding 配额、敏感读取审计、数据库状态约束及 Alembic `20260722_0007`。唯一跳过项需要 `ROBOTCARE_TEST_POSTGRES_URL` 和显式破坏性测试开关。
 
 ### Backend PostgreSQL + pgvector
 
@@ -47,25 +47,26 @@ npm run build
 
 `npm ci` 要求 `package.json` 与 `package-lock.json` 保持同步。构建失败时不应改用 `npm install` 掩盖锁文件不一致。
 
-本地当前证据为 Vitest `33 passed`，`vue-tsc` 与 Vite production build 通过，1705 个模块完成转换。新增结构化错误解析、分类确认、安全阻断卡片和知识健康状态。
+本地当前证据为 Vitest `36 passed`，`vue-tsc` 与 Vite production build 通过，1706 个模块完成转换。新增结构化 429 解析和附件失败队列重试。
 
 ### Browser E2E
 
-`【已验证：本机 Edge】` Playwright 使用系统安装的 Microsoft Edge，在隔离 FastAPI、Vite 和 SQLite 测试库上完成 5 条关键链路：
+`【已验证：本机 Edge】` Playwright 使用系统安装的 Microsoft Edge，在隔离 FastAPI、Vite 和 SQLite 测试库上完成 8 条关键链路：
 
 - 邀请码注册 → 添加设备 → 单步诊断全部未解决 → 生成并下载 PDF。
 - 诊断过程中刷新页面后恢复当前步骤。
 - 第二用户不能读取第一用户诊断，普通用户不能进入管理员页面。
 - 分类明显冲突时展示候选，用户改选后成功创建正确流程。
 - 高风险诊断显示持久安全卡片；PDF 下载验证存在、非空和 `%PDF-`。
+- 注册、附件上传以及报告/PDF 超限显示结构化等待时间；附件失败项保留并可重试。
 
 ```powershell
 Set-Location frontend
 npm run test:e2e:edge
-# 5 passed (38.4s)，进程正常以 0 退出
+# 8 passed (44.9s)，进程正常以 0 退出
 ```
 
-E2E 测试仅用 `/health` 等待隔离测试进程启动，并由测试配置显式自动建表；这不替代生产 Alembic revision 门禁，也不证明 PostgreSQL、Docker、HTTPS 或多浏览器兼容。`【已验证：工作流配置】` CI 另配置 Chromium E2E 和失败证据上传；`【待验证：远端运行】` 尚无 GitHub Actions 成功记录。
+E2E 包装脚本直接管理 Uvicorn/Vite 子进程；正常通过和故意失败路径均已验证释放隔离端口。测试仅用 `/health` 等待进程启动，并由测试配置显式自动建表；这不替代生产 Alembic revision 门禁，也不证明 PostgreSQL、Docker、HTTPS 或多浏览器兼容。`【已验证：工作流配置】` CI 另配置 Chromium E2E 和失败证据上传；`【待验证：远端运行】` 尚无 GitHub Actions 成功记录。
 
 ### Knowledge
 

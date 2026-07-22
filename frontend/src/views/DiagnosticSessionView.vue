@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleCheck, Delete, Document, InfoFilled, Picture, Warning } from '@element-plus/icons-vue'
-import { apiError, diagnosticApi } from '../api'
+import { CircleCheck, Delete, Document, InfoFilled, Picture, Upload, Warning } from '@element-plus/icons-vue'
+import { apiError, diagnosticApi, parseApiError, userFacingApiError } from '../api'
 import { useDiagnosticStore } from '../stores'
+import { uploadAttachmentQueue } from '../attachmentUploadQueue'
 import type { Attachment } from '../types'
 
 const store = useDiagnosticStore()
@@ -13,6 +14,11 @@ const router = useRouter()
 const id = String(route.params.id)
 const attachments = ref<Attachment[]>([])
 const attachmentsLoading = ref(false)
+const attachmentUploading = ref(false)
+const attachmentInput = ref<HTMLInputElement>()
+const pendingUploads = ref<File[]>([])
+const attachmentError = ref('')
+const reportError = ref('')
 const reportAvailable = ref(false)
 const finished = computed(() => ['resolved', 'unresolved', 'report_ready'].includes(store.active?.status || ''))
 const displayStatus = computed(() => reportAvailable.value && store.active?.status === 'unresolved' ? 'report_ready' : store.active?.status)
@@ -33,6 +39,11 @@ onMounted(async () => {
     await store.load(id)
     reportAvailable.value = Boolean(store.active?.report_available || store.active?.status === 'report_ready')
     await loadAttachments()
+    const retryNotice = sessionStorage.getItem(`robotcare-attachment-retry-${id}`)
+    if (retryNotice) {
+      attachmentError.value = retryNotice
+      sessionStorage.removeItem(`robotcare-attachment-retry-${id}`)
+    }
   } catch (error) {
     ElMessage.error(apiError(error, '无法加载诊断记录'))
     router.push('/history')
@@ -43,6 +54,8 @@ async function loadAttachments() {
   attachmentsLoading.value = true
   try {
     attachments.value = await diagnosticApi.attachments(id)
+  } catch (error) {
+    attachmentError.value = userFacingApiError(error, '附件列表加载失败，请稍后重试')
   } finally {
     attachmentsLoading.value = false
   }
@@ -71,6 +84,54 @@ async function removeAttachment(item: Attachment) {
   }
 }
 
+function openAttachmentPicker() {
+  attachmentInput.value?.click()
+}
+
+async function selectAttachments(event: Event) {
+  const input = event.target as HTMLInputElement
+  const available = Math.max(0, 5 - attachments.value.length)
+  const inputFiles = Array.from(input.files || [])
+  const selected = inputFiles.slice(0, available)
+  input.value = ''
+  if (inputFiles.length > available) ElMessage.warning(`本次只能再上传 ${available} 张图片`)
+  if (!selected.length) {
+    attachmentError.value = available ? '请选择 JPG、PNG 或 WebP 图片。' : '每次诊断最多保存 5 张图片。'
+    return
+  }
+  const acceptedTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
+  if (selected.some(file => !acceptedTypes.has(file.type) || file.size > 5 * 1024 * 1024)) {
+    attachmentError.value = '仅支持不超过 5 MB 的 JPG、PNG 或 WebP 图片。'
+    return
+  }
+  pendingUploads.value = selected
+  await uploadPendingAttachments()
+}
+
+async function uploadPendingAttachments() {
+  if (!pendingUploads.value.length || attachmentUploading.value) return
+  attachmentUploading.value = true
+  attachmentError.value = ''
+  try {
+    const result = await uploadAttachmentQueue(
+      pendingUploads.value.slice(0, Math.max(0, 5 - attachments.value.length)),
+      file => diagnosticApi.uploadAttachment(id, file),
+    )
+    attachments.value.push(...result.uploaded)
+    pendingUploads.value = result.pending
+    if (result.error) {
+      const parsed = parseApiError(result.error, '图片上传失败，请稍后重试')
+      attachmentError.value = parsed.code === 'RATE_LIMITED'
+        ? userFacingApiError(result.error, '图片上传过于频繁')
+        : parsed.message
+      return
+    }
+    if (!pendingUploads.value.length) ElMessage.success('图片附件已上传')
+  } finally {
+    attachmentUploading.value = false
+  }
+}
+
 async function feedback(resolved: boolean) {
   try {
     if (resolved) {
@@ -86,6 +147,7 @@ async function feedback(resolved: boolean) {
 }
 
 async function report() {
+  reportError.value = ''
   try {
     if (!reportAvailable.value) {
       await diagnosticApi.createReport(id)
@@ -93,7 +155,7 @@ async function report() {
     }
     router.push(`/reports/${id}`)
   } catch (error) {
-    ElMessage.error(apiError(error, '报告生成失败'))
+    reportError.value = userFacingApiError(error, '报告生成失败，请稍后重试')
   }
 }
 </script>
@@ -110,11 +172,17 @@ async function report() {
         <el-tag :type="statusType" size="large">{{ statusLabel }}</el-tag>
       </div>
 
-      <section v-if="attachments.length || attachmentsLoading" class="panel attachments" v-loading="attachmentsLoading">
+      <section class="panel attachments" v-loading="attachmentsLoading || attachmentUploading">
         <div class="attachments-head">
           <div><h3>故障图片附件</h3><p>这些图片仅作为故障证据保存，可随时删除。</p></div>
-          <el-tag type="info">{{ attachments.length }} 张</el-tag>
+          <div class="attachment-actions">
+            <el-tag type="info">{{ attachments.length }}/5 张</el-tag>
+            <el-button v-if="pendingUploads.length" type="primary" plain :icon="Upload" :loading="attachmentUploading" @click="uploadPendingAttachments">重试上传（{{ pendingUploads.length }}）</el-button>
+            <el-button v-else-if="attachments.length < 5" type="primary" plain :icon="Upload" @click="openAttachmentPicker">添加照片</el-button>
+            <input ref="attachmentInput" class="hidden-input" type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" @change="selectAttachments" />
+          </div>
         </div>
+        <el-alert v-if="attachmentError" :title="attachmentError" type="error" :closable="false" show-icon />
         <div class="attachment-grid">
           <div v-for="item in attachments" :key="item.id" class="attachment-item">
             <div class="attachment-fallback"><el-icon><Picture /></el-icon></div>
@@ -162,6 +230,7 @@ async function report() {
           <el-button @click="router.push('/history')">返回诊断历史</el-button>
           <el-button v-if="store.active.status !== 'resolved'" class="brand-button" type="primary" :icon="Document" @click="report">{{ reportAvailable ? '进入售后诊断报告' : '生成售后诊断报告' }}</el-button>
         </div>
+        <el-alert v-if="reportError" :title="reportError" type="error" :closable="false" show-icon />
         <div v-if="store.active.executions?.length" class="timeline">
           <h3>已执行步骤</h3>
           <div v-for="execution in store.active.executions" :key="String(execution.id)"><span></span><p><b>{{ execution.step.title }}</b><small>{{ execution.outcome === 'resolved' ? '已解决' : '完成后未解决' }}</small></p></div>
@@ -178,5 +247,6 @@ async function report() {
 </template>
 
 <style scoped>
+.attachment-actions{display:flex;align-items:center;gap:10px}.hidden-input{display:none}.attachments .el-alert{margin-bottom:12px}.result .el-alert{margin-top:18px;text-align:left}
 .session-page{max-width:1220px}.attachments{padding:20px 22px;margin-bottom:20px}.attachments-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.attachments-head h3{margin:0 0 4px;font-size:15px}.attachments-head p{margin:0;color:var(--muted);font-size:11px}.attachment-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.attachment-item{display:grid;grid-template-columns:58px minmax(0,1fr) 28px;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fbfcfc}.attachment-item>a,.attachment-fallback{width:58px;height:58px;border-radius:7px;overflow:hidden;background:#edf3f0;display:grid;place-items:center;color:var(--brand)}.attachment-item img{width:100%;height:100%;object-fit:cover;display:block}.attachment-fallback .el-icon{font-size:24px}.attachment-meta{min-width:0}.attachment-meta b,.attachment-meta small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.attachment-meta b{font-size:12px}.attachment-meta small{font-size:10px;color:var(--muted);margin-top:5px}.attachment-delete{justify-self:end}.step-layout{display:grid;grid-template-columns:1fr 280px;gap:20px}.step-card{overflow:hidden}.progress-row{display:flex;justify-content:space-between;padding:18px 28px 10px;color:var(--muted);font-size:12px}.progress-row b{color:var(--brand)}.step-card :deep(.el-progress-bar__outer){border-radius:0;height:3px!important}.step-body{padding:45px 58px;position:relative}.step-number{position:absolute;right:50px;top:35px;font-size:72px;font-weight:850;color:#edf3f0}.step-body h2{font-size:27px;margin:13px 0 22px;position:relative}.instruction{background:#f4f8f6;border-left:4px solid var(--brand);padding:22px 24px;font-size:16px;line-height:1.9;white-space:pre-wrap}.source{display:flex;gap:10px;align-items:center;margin-top:22px;color:var(--muted);font-size:12px}.source b{display:block;color:var(--ink);margin-bottom:3px}.feedback{background:#fbfcfc;border-top:1px solid var(--line);padding:22px 28px;display:flex;align-items:center;justify-content:space-between}.feedback p{font-size:13px;color:var(--muted)}.guard{padding:22px}.guard>.el-icon{font-size:23px;color:var(--brand)}.guard h3{margin:13px 0 8px}.guard p,.warning p{font-size:12px;line-height:1.7;color:var(--muted)}.warning{display:flex;gap:10px;margin-top:14px;padding:16px;border-radius:11px;background:#fff4e6;color:#d57600}.warning p{color:#97662c;margin:0}.result{text-align:center;padding:55px;max-width:760px;margin:20px auto}.result-icon{width:74px;height:74px;border-radius:50%;display:grid;place-items:center;margin:auto;font-size:36px}.result-icon.success{background:#e8f8f1;color:#087f5b}.result-icon.failed{background:#fff4e6;color:#e67700}.result h2{font-size:25px}.result>p{color:var(--muted);line-height:1.8;max-width:570px;margin:0 auto 25px}.timeline{text-align:left;margin:38px auto 0;max-width:550px;border-top:1px solid var(--line);padding-top:22px}.timeline>div{display:flex;gap:12px;margin:15px 0}.timeline>div>span{width:9px;height:9px;background:var(--brand);border-radius:50%;margin-top:5px}.timeline p,.timeline small{margin:0;display:block}.timeline small{color:var(--muted);margin-top:4px}@media(max-width:900px){.attachment-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.attachment-grid{grid-template-columns:1fr}.step-body{padding:34px 24px}.feedback{align-items:flex-start;flex-direction:column;gap:14px}}
 </style>

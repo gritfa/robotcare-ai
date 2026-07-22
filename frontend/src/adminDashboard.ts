@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { computed, reactive, ref } from 'vue'
 import { adminApi, apiError } from './api'
-import type { AdminAuditLog, AdminModel, AdminOverview, AdminSafetyBlock, AdminUnresolvedReport, EntityId, KnowledgeModelStatus } from './types'
+import type { AdminAuditLog, AdminDiagnosticDetail, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, EntityId, KnowledgeModelStatus } from './types'
 
 export interface AdminDashboardApi {
   overview(): Promise<AdminOverview>
@@ -9,7 +9,10 @@ export interface AdminDashboardApi {
   setModelActive(id: EntityId, active: boolean): Promise<AdminModel>
   knowledgeStatus(): Promise<KnowledgeModelStatus[]>
   safetyBlocks(limit?: number): Promise<AdminSafetyBlock[]>
+  safetyBlockDetail(id: EntityId): Promise<AdminSafetyBlockDetail>
   unresolvedReports(limit?: number): Promise<AdminUnresolvedReport[]>
+  diagnosticDetail(id: EntityId): Promise<AdminDiagnosticDetail>
+  reportDetail(id: EntityId): Promise<AdminServiceReportDetail>
   auditLogs(limit?: number): Promise<AdminAuditLog[]>
 }
 
@@ -46,6 +49,11 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
   const safetyBlocks = ref<AdminSafetyBlock[]>([])
   const unresolvedReports = ref<AdminUnresolvedReport[]>([])
   const auditLogs = ref<AdminAuditLog[]>([])
+  const selectedSafetyBlock = ref<AdminSafetyBlockDetail | null>(null)
+  const selectedDiagnostic = ref<AdminDiagnosticDetail | null>(null)
+  const selectedReport = ref<AdminServiceReportDetail | null>(null)
+  const detailLoading = ref(false)
+  const detailError = ref('')
   const updatingModelIds = reactive(new Set<EntityId>())
 
   const knowledgeHealthy = computed(() => knowledgeStatus.value.length > 0 && knowledgeStatus.value.every((item) => (
@@ -103,6 +111,34 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     return updatingModelIds.has(id)
   }
 
+  async function loadSensitiveDetail<T>(loader: () => Promise<T>): Promise<T | null> {
+    detailLoading.value = true
+    detailError.value = ''
+    try {
+      return await loader()
+    } catch (error) {
+      detailError.value = adminErrorMessage(error, '敏感详情加载失败，请稍后重试。')
+      return null
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
+  async function openSafetyBlock(id: EntityId) {
+    selectedSafetyBlock.value = null
+    selectedSafetyBlock.value = await loadSensitiveDetail(() => api.safetyBlockDetail(id))
+  }
+
+  async function openDiagnostic(id: EntityId) {
+    selectedDiagnostic.value = null
+    selectedDiagnostic.value = await loadSensitiveDetail(() => api.diagnosticDetail(id))
+  }
+
+  async function openReport(id: EntityId) {
+    selectedReport.value = null
+    selectedReport.value = await loadSensitiveDetail(() => api.reportDetail(id))
+  }
+
   return {
     loading,
     loaded,
@@ -114,8 +150,16 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     safetyBlocks,
     unresolvedReports,
     auditLogs,
+    selectedSafetyBlock,
+    selectedDiagnostic,
+    selectedReport,
+    detailLoading,
+    detailError,
     load,
     setModelActive,
     isModelUpdating,
+    openSafetyBlock,
+    openDiagnostic,
+    openReport,
   }
 }

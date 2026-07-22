@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.models import User
+from app.models import AuditLog, User
 from conftest import auth, register, submit_feedback
 
 
@@ -74,6 +75,13 @@ def test_all_admin_endpoints_reject_normal_users(client: TestClient):
     )
     assert response.status_code == 403
 
+    for path in (
+        "/api/v1/admin/reports/1",
+        "/api/v1/admin/diagnostics/1",
+        "/api/v1/admin/safety-blocks/1",
+    ):
+        assert client.get(path, headers=auth(token)).status_code == 403
+
 
 def test_admin_reads_operational_overview_without_sensitive_payloads(client: TestClient):
     admin_token = make_admin(client)
@@ -135,7 +143,11 @@ def test_admin_reads_operational_overview_without_sensitive_payloads(client: Tes
     assert safety_blocks.status_code == 200
     assert len(safety_blocks.json()) == 1
     assert safety_blocks.json()[0]["model_code"] == "JH69U1"
+    assert "user_id" not in safety_blocks.json()[0]
+    assert "device_id" not in safety_blocks.json()[0]
     assert "description_sha256" not in safety_blocks.json()[0]
+    assert "reason" not in safety_blocks.json()[0]
+    assert "advice" not in safety_blocks.json()[0]
 
     unresolved = client.get(
         "/api/v1/admin/unresolved-reports",
@@ -147,9 +159,98 @@ def test_admin_reads_operational_overview_without_sensitive_payloads(client: Tes
     assert entry["report"]["id"] == report.json()["id"]
     assert "content" not in entry["report"]
     assert entry["diagnostic"]["id"] == diagnostic_id
+    assert "issue_description" not in entry["diagnostic"]
+    assert "error_code" not in entry["diagnostic"]
     assert entry["model"]["code"] == "VC35U1"
     assert entry["user"]["email_masked"] == "c***@example.com"
+    assert "id" not in entry["user"]
     assert "email" not in entry["user"]
+
+    safety_detail = client.get(
+        f"/api/v1/admin/safety-blocks/{safety_blocks.json()[0]['id']}",
+        headers=auth(admin_token),
+    )
+    assert safety_detail.status_code == 200
+    assert safety_detail.json()["reason"]
+    assert safety_detail.json()["advice"]
+
+    diagnostic_detail = client.get(
+        f"/api/v1/admin/diagnostics/{diagnostic_id}",
+        headers=auth(admin_token),
+    )
+    assert diagnostic_detail.status_code == 200
+    assert diagnostic_detail.json()["issue_description"]
+
+    report_detail = client.get(
+        f"/api/v1/admin/reports/{report.json()['id']}",
+        headers=auth(admin_token),
+    )
+    assert report_detail.status_code == 200
+    assert report_detail.json()["content"] == report.json()["content"]
+
+    with client.app.state.session_factory() as db:
+        sensitive_audits = list(
+            db.scalars(
+                select(AuditLog).where(AuditLog.action.like("admin.%.sensitive_read"))
+            )
+        )
+    assert {item.action for item in sensitive_audits} == {
+        "admin.service_report.sensitive_read",
+        "admin.diagnostic_session.sensitive_read",
+        "admin.safety_block_event.sensitive_read",
+    }
+    for item in sensitive_audits:
+        assert item.actor_user_id is not None
+        assert item.resource_id
+        assert item.created_at is not None
+        serialized = str(item.details_json)
+        assert "trace_id" in item.details_json
+        assert report_detail.json()["content"] not in serialized
+        assert diagnostic_detail.json()["issue_description"] not in serialized
+        assert safety_detail.json()["reason"] not in serialized
+        assert safety_detail.json()["advice"] not in serialized
+
+
+def test_sensitive_admin_detail_fails_closed_when_audit_cannot_commit(
+    client: TestClient, monkeypatch
+):
+    admin_token = make_admin(client)
+    user_token = register(client, "audit-failure-customer@example.com")["access_token"]
+    device_id = create_device(client, user_token, "JH69U1")
+    diagnostic_id = create_diagnostic(
+        client,
+        user_token,
+        device_id,
+        "return_to_dock_failure",
+        description="Sensitive description must not leave without an audit record",
+    )
+
+    original_commit = Session.commit
+
+    def reject_sensitive_audit(self: Session) -> None:
+        if any(
+            isinstance(item, AuditLog) and item.action.endswith(".sensitive_read")
+            for item in self.new
+        ):
+            raise RuntimeError("audit database unavailable")
+        original_commit(self)
+
+    monkeypatch.setattr(Session, "commit", reject_sensitive_audit)
+    response = client.get(
+        f"/api/v1/admin/diagnostics/{diagnostic_id}",
+        headers=auth(admin_token),
+    )
+
+    assert response.status_code == 503
+    assert "Sensitive description" not in response.text
+    with client.app.state.session_factory() as db:
+        assert list(
+            db.scalars(
+                select(AuditLog).where(
+                    AuditLog.action == "admin.diagnostic_session.sensitive_read"
+                )
+            )
+        ) == []
 
 
 def test_model_activation_changes_public_availability_and_writes_audit(client: TestClient):

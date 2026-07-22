@@ -11,6 +11,7 @@ from .database import Base, build_session_factory
 from .knowledge_service import DashScopeEmbeddingProvider, EmbeddingProvider
 from .migration_guard import ensure_database_at_head
 from .observability import install_observability, readiness_status, request_trace_id
+from .rate_limit_service import KnowledgeSearchCache
 from .seed import seed_database
 
 
@@ -41,6 +42,9 @@ def create_app(
     application.state.session_factory = session_factory
     application.state.embedding_provider = embedding_provider or DashScopeEmbeddingProvider(
         settings.dashscope_api_key
+    )
+    application.state.knowledge_search_cache = KnowledgeSearchCache(
+        settings.knowledge_search_cache_ttl_seconds
     )
     application.state.environment = settings.environment.strip().lower()
     application.state.embedding_configured = bool(

@@ -3,6 +3,15 @@ import { readFile, stat } from 'node:fs/promises'
 
 const password = 'StrongPass123'
 const inviteCode = process.env.ROBOTCARE_E2E_INVITE_CODE || '7cYp9N2mK4qR8vTx'
+const onePixelPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+
+function rateLimitedResponse(seconds: number, message = '操作过于频繁') {
+  return {
+    status: 429,
+    headers: { 'content-type': 'application/json', 'Retry-After': String(seconds) },
+    body: JSON.stringify({ detail: { code: 'RATE_LIMITED', message } }),
+  }
+}
 
 function uniqueEmail(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`
@@ -160,4 +169,73 @@ test('高风险描述在诊断页展示持久安全阻断卡片', async ({ page 
   await expect(safetyBlock).toBeVisible()
   await expect(safetyBlock).toContainText('不要继续充电、拆机或重复测试')
   await expect(page).toHaveURL(/\/diagnostics\/new/)
+})
+
+test('注册限流展示 Retry-After 持久提示', async ({ page }) => {
+  await page.route('**/api/v1/auth/register', route => route.fulfill(rateLimitedResponse(17, '注册请求过于频繁')))
+  await page.goto('/register')
+  await page.getByPlaceholder('如何称呼你').fill('限流测试用户')
+  await page.getByPlaceholder('name@example.com').fill(uniqueEmail('register-rate-limit'))
+  const passwordInputs = page.locator('input[type="password"]')
+  await passwordInputs.nth(0).fill(password)
+  await passwordInputs.nth(1).fill(password)
+  await page.getByPlaceholder('请输入管理员提供的邀请码').fill(inviteCode)
+  await page.getByRole('button', { name: '注册并开始使用' }).click()
+
+  await expect(page.getByRole('alert').filter({ hasText: '注册请求过于频繁' })).toContainText('17 秒后重试')
+  await expect(page).toHaveURL(/\/register$/)
+})
+
+test('附件限流停止后续上传并在会话页提供重试入口', async ({ page }) => {
+  await register(page, uniqueEmail('attachment-rate-limit'))
+  await addDevice(page, '附件限流测试设备')
+  await page.locator('.categories button').first().click()
+  await page.getByPlaceholder(/扫地机器人清扫途中突然停止/).fill('设备无法返回基站，需要保存故障图片。')
+  await page.locator('input[type="file"]').setInputFiles([
+    { name: 'first.png', mimeType: 'image/png', buffer: onePixelPng },
+    { name: 'second.png', mimeType: 'image/png', buffer: onePixelPng },
+  ])
+
+  let uploadAttempts = 0
+  await page.route('**/api/v1/diagnostics/*/attachments', async route => {
+    if (route.request().method() !== 'POST') return route.continue()
+    uploadAttempts += 1
+    return route.fulfill(rateLimitedResponse(9, '图片上传过于频繁'))
+  })
+  await page.getByRole('button', { name: '创建诊断并查看第一步' }).click()
+  await expect(page).toHaveURL(/\/diagnostics\/\d+$/)
+  await expect(page.locator('section.attachments .el-alert')).toContainText('9 秒后重试')
+  expect(uploadAttempts).toBe(1)
+
+  await page.locator('input[type="file"]').setInputFiles({ name: 'retry.png', mimeType: 'image/png', buffer: onePixelPng })
+  await expect(page.getByRole('button', { name: /重试上传（1）/ })).toBeVisible()
+  await expect(page.locator('section.attachments .el-alert')).toContainText('9 秒后重试')
+})
+
+test('报告和 PDF 限流均展示可重试的持久提示', async ({ page }) => {
+  await register(page, uniqueEmail('report-rate-limit'))
+  await addDevice(page, '报告限流测试设备')
+  await createDiagnostic(page, '设备无法返回基站，按步骤检查后仍未解决。')
+  for (let step = 0; step < 10; step += 1) {
+    if (!await page.getByRole('button', { name: '仍未解决，继续下一步' }).isVisible().catch(() => false)) break
+    await submitUnresolved(page)
+  }
+
+  const reportPattern = '**/api/v1/diagnostics/*/report'
+  await page.route(reportPattern, route => route.request().method() === 'POST'
+    ? route.fulfill(rateLimitedResponse(11, '报告生成过于频繁'))
+    : route.continue())
+  await page.getByRole('button', { name: '生成售后诊断报告' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: '报告生成过于频繁' })).toContainText('11 秒后重试')
+  await page.unroute(reportPattern)
+  await page.getByRole('button', { name: '生成售后诊断报告' }).click()
+  await expect(page).toHaveURL(/\/reports\/\d+$/)
+
+  const pdfPattern = '**/api/v1/diagnostics/*/report/pdf'
+  await page.route(pdfPattern, route => route.request().method() === 'POST'
+    ? route.fulfill(rateLimitedResponse(13, 'PDF 生成过于频繁'))
+    : route.continue())
+  await page.getByRole('button', { name: '下载正式 PDF' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'PDF 生成过于频繁' })).toContainText('13 秒后重试')
+  await expect(page.getByRole('button', { name: '下载正式 PDF' })).toBeEnabled()
 })

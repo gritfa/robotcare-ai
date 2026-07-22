@@ -85,6 +85,45 @@ def main() -> None:
         "refresh cookies must default to Secure",
     )
     require(
+        backend_env["ROBOTCARE_TRUSTED_PROXY_CIDRS"]
+        == "${ROBOTCARE_TRUSTED_PROXY_CIDRS:-172.30.0.10/32}",
+        "backend must trust only the pinned Nginx proxy address by default",
+    )
+    require(
+        backend_env["ROBOTCARE_LOGIN_EMAIL_MAX_FAILURES"]
+        == "${ROBOTCARE_LOGIN_EMAIL_MAX_FAILURES:-20}",
+        "account-wide login threshold missing",
+    )
+    require(
+        backend_env["ROBOTCARE_LOGIN_IP_MAX_FAILURES"]
+        == "${ROBOTCARE_LOGIN_IP_MAX_FAILURES:-30}",
+        "independent IP login threshold missing",
+    )
+    rate_limit_defaults = {
+        "ROBOTCARE_REGISTRATION_EMAIL_PER_MINUTE": "3",
+        "ROBOTCARE_REGISTRATION_IP_PER_MINUTE": "10",
+        "ROBOTCARE_KNOWLEDGE_SEARCH_USER_PER_MINUTE": "20",
+        "ROBOTCARE_KNOWLEDGE_SEARCH_IP_PER_MINUTE": "60",
+        "ROBOTCARE_DIAGNOSTIC_CREATE_USER_PER_MINUTE": "10",
+        "ROBOTCARE_DIAGNOSTIC_CREATE_IP_PER_MINUTE": "30",
+        "ROBOTCARE_ATTACHMENT_UPLOAD_USER_PER_MINUTE": "20",
+        "ROBOTCARE_ATTACHMENT_UPLOAD_IP_PER_MINUTE": "60",
+        "ROBOTCARE_REPORT_CREATE_USER_PER_MINUTE": "5",
+        "ROBOTCARE_REPORT_CREATE_IP_PER_MINUTE": "15",
+        "ROBOTCARE_PDF_CREATE_USER_PER_MINUTE": "5",
+        "ROBOTCARE_PDF_CREATE_IP_PER_MINUTE": "15",
+        "ROBOTCARE_EMBEDDING_USER_PER_MINUTE": "10",
+        "ROBOTCARE_EMBEDDING_IP_PER_MINUTE": "30",
+        "ROBOTCARE_EMBEDDING_USER_PER_DAY": "100",
+        "ROBOTCARE_EMBEDDING_IP_PER_DAY": "300",
+        "ROBOTCARE_KNOWLEDGE_SEARCH_CACHE_TTL_SECONDS": "30",
+    }
+    for name, default in rate_limit_defaults.items():
+        require(
+            backend_env[name] == f"${{{name}:-{default}}}",
+            f"business rate-limit setting missing: {name}",
+        )
+    require(
         "127.0.0.1:${BACKEND_PORT:-8000}:8000" in backend["ports"],
         "backend must bind to host loopback instead of a public interface",
     )
@@ -137,6 +176,24 @@ def main() -> None:
     require(
         "location = /backend-healthz" not in nginx,
         "detailed backend readiness must not be exposed through public Nginx",
+    )
+    require(
+        "proxy_set_header X-Forwarded-For $remote_addr;" in nginx,
+        "Nginx must overwrite caller-controlled forwarded addresses",
+    )
+    require(
+        "$proxy_add_x_forwarded_for" not in nginx,
+        "single-hop Nginx must not append an untrusted forwarded chain",
+    )
+    internal_network = compose["networks"]["robotcare_internal"]
+    require(
+        internal_network["ipam"]["config"][0]["subnet"] == "172.30.0.0/24",
+        "Compose trusted-proxy network must use its reviewed subnet",
+    )
+    require(
+        frontend["networks"]["robotcare_internal"]["ipv4_address"]
+        == "172.30.0.10",
+        "Nginx must keep the address trusted by the backend",
     )
     frontend_dockerfile = (ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
     require(

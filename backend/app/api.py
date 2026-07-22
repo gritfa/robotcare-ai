@@ -55,10 +55,19 @@ from .observability import emit_json_log, request_trace_id
 from .attachment_service import create_attachment as persist_attachment
 from .pdf_report import ensure_report_pdf as ensure_stored_report_pdf, report_pdf_path
 from .report_service import get_or_create_service_report as persist_service_report
+from .rate_limit_service import (
+    aggregate_knowledge_version,
+    enforce_business_rate_limit,
+    enforce_embedding_rate_limit,
+    enforce_registration_rate_limit,
+    knowledge_cache_key,
+    normalize_knowledge_query,
+)
 from .safety import detect_safety_block
 from .schemas import (
     AttachmentRead,
     AdminAuditLogRead,
+    AdminDiagnosticDetailRead,
     AdminDiagnosticSummary,
     AdminModelRead,
     AdminModelUpdate,
@@ -66,6 +75,8 @@ from .schemas import (
     AdminReportSummary,
     AdminRobotModelSummary,
     AdminSafetyBlockRead,
+    AdminSafetyBlockDetailRead,
+    AdminServiceReportDetailRead,
     AdminUnresolvedReportRead,
     AdminUserSummary,
     DeviceCreate,
@@ -90,7 +101,14 @@ from .schemas import (
     TokenResponse,
     UserRead,
 )
-from .security import decode_access_token, get_current_user, hash_password, require_admin, verify_password
+from .security import (
+    DUMMY_PASSWORD_HASH,
+    decode_access_token,
+    get_current_user,
+    hash_password,
+    require_admin,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -198,11 +216,13 @@ def enforce_registration_policy(payload: RegisterRequest, settings: Settings) ->
 @router.post("/auth/register", response_model=TokenResponse, status_code=201)
 def register(
     payload: RegisterRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    enforce_registration_policy(payload, get_settings())
     email = normalize_email(str(payload.email))
+    enforce_registration_rate_limit(db, request, email)
+    enforce_registration_policy(payload, get_settings())
     if db.scalar(select(User).where(User.email == email)) is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
     user = User(email=email, password_hash=hash_password(payload.password))
@@ -227,10 +247,12 @@ def login(
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     email = normalize_email(str(payload.email))
-    acquire_login_attempt_lock(db, email)
+    acquire_login_attempt_lock(db, email, request)
     enforce_login_rate_limit(db, email, request)
     user = db.scalar(select(User).where(User.email == email))
-    if user is None or not verify_password(payload.password, user.password_hash):
+    password_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+    password_valid = verify_password(payload.password, password_hash)
+    if user is None or not password_valid:
         record_login_failure(db, email, request)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if user.status != "active":
@@ -287,7 +309,6 @@ def knowledge_search(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[KnowledgeSearchResult]:
-    del user
     robot_model = db.scalar(select(RobotModel).where(RobotModel.id == payload.robot_model_id))
     if robot_model is None:
         raise HTTPException(status_code=404, detail="Robot model not found")
@@ -312,27 +333,76 @@ def knowledge_search(
                 "official_service_advice": safety_block.advice,
             },
         )
-    knowledge_version = db.scalar(
+    settings = get_settings()
+    enforce_business_rate_limit(
+        db,
+        request,
+        action="knowledge_search",
+        user_id=user.id,
+        settings=settings,
+    )
+    threshold_version = db.scalar(
         select(KnowledgeDocument.sha256)
         .where(KnowledgeDocument.robot_model_id == payload.robot_model_id)
         .order_by(KnowledgeDocument.id.desc())
         .limit(1)
     )
-    min_score = get_settings().knowledge_score_threshold(robot_model.code, knowledge_version)
+    document_shas = list(
+        db.scalars(
+            select(KnowledgeDocument.sha256)
+            .where(KnowledgeDocument.robot_model_id == payload.robot_model_id)
+            .order_by(KnowledgeDocument.sha256)
+        )
+    )
+    knowledge_version = aggregate_knowledge_version(document_shas)
+    min_score = settings.knowledge_score_threshold(robot_model.code, threshold_version)
+    normalized_query = normalize_knowledge_query(payload.query)
+    cache_key = knowledge_cache_key(
+        settings,
+        model_code=robot_model.code,
+        normalized_query=normalized_query,
+        knowledge_version=knowledge_version,
+        top_k=payload.top_k,
+        min_score=min_score,
+    )
+    cache = request.app.state.knowledge_search_cache
     started_at = perf_counter()
     try:
-        raw_results = search_knowledge(
-            db,
-            robot_model_id=payload.robot_model_id,
-            query=payload.query,
-            top_k=payload.top_k,
-            min_score=min_score,
-            provider=request.app.state.embedding_provider,
-        )
-        results = [
-            KnowledgeSearchResult(**result.__dict__)
-            for result in raw_results
-        ]
+        with cache.singleflight(cache_key):
+            cached = cache.get(cache_key)
+            if cached is not None:
+                results = list(cached)
+                emit_json_log(
+                    logging.INFO,
+                    "knowledge_search",
+                    trace_id=request_trace_id(request),
+                    robot_model_id=payload.robot_model_id,
+                    top_k=payload.top_k,
+                    min_score=min_score,
+                    result_count=len(results),
+                    cache_hit=True,
+                    duration_ms=round((perf_counter() - started_at) * 1000, 3),
+                )
+                return results
+            enforce_embedding_rate_limit(
+                db,
+                request,
+                user_id=user.id,
+                settings=settings,
+            )
+            raw_results = search_knowledge(
+                db,
+                robot_model_id=payload.robot_model_id,
+                query=normalized_query,
+                top_k=payload.top_k,
+                min_score=min_score,
+                provider=request.app.state.embedding_provider,
+            )
+            results = [
+                KnowledgeSearchResult(**result.__dict__)
+                for result in raw_results
+            ]
+            cache.set(cache_key, results)
         emit_json_log(
             logging.INFO,
             "knowledge_search",
@@ -341,6 +411,7 @@ def knowledge_search(
             top_k=payload.top_k,
             min_score=min_score,
             result_count=len(results),
+            cache_hit=False,
             duration_ms=round((perf_counter() - started_at) * 1000, 3),
             sources=[
                 {
@@ -409,6 +480,44 @@ def mask_email(email: str) -> str:
     if not separator:
         return "***"
     return f"{local[:1]}***@{domain}"
+
+
+def audit_sensitive_admin_read(
+    db: Session,
+    request: Request,
+    admin: User,
+    *,
+    action: str,
+    resource_type: str,
+    resource_id: int,
+    related_resource_ids: dict[str, int] | None = None,
+) -> None:
+    """Persist the access record before any sensitive response leaves the API.
+
+    A failed audit write fails closed: the caller receives no sensitive payload.
+    Only identifiers and the request trace are recorded, never resource content.
+    """
+
+    details: dict[str, object] = {"trace_id": request_trace_id(request)}
+    if related_resource_ids:
+        details["related_resource_ids"] = related_resource_ids
+    db.add(
+        AuditLog(
+            actor_user_id=admin.id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=str(resource_id),
+            details_json=details,
+        )
+    )
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sensitive resource access could not be audited",
+        )
 
 
 @router.get("/admin/overview", response_model=AdminOverviewRead)
@@ -518,17 +627,54 @@ def admin_safety_blocks(
     return [
         AdminSafetyBlockRead(
             id=event.id,
-            user_id=event.user_id,
-            device_id=event.device_id,
             model_code=model_code,
             category=event.category,
             risk_level=event.risk_level,
-            reason=event.reason,
-            advice=event.advice,
             created_at=event.created_at,
         )
         for event, model_code in rows
     ]
+
+
+@router.get(
+    "/admin/safety-blocks/{event_id}",
+    response_model=AdminSafetyBlockDetailRead,
+)
+def admin_safety_block_detail(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> AdminSafetyBlockDetailRead:
+    row = db.execute(
+        select(SafetyBlockEvent, RobotModel.code)
+        .join(UserDevice, UserDevice.id == SafetyBlockEvent.device_id)
+        .join(RobotModel, RobotModel.id == UserDevice.robot_model_id)
+        .where(SafetyBlockEvent.id == event_id)
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Safety block event not found")
+    event, model_code = row
+    audit_sensitive_admin_read(
+        db,
+        request,
+        admin,
+        action="admin.safety_block_event.sensitive_read",
+        resource_type="safety_block_event",
+        resource_id=event.id,
+        related_resource_ids={"user_id": event.user_id, "device_id": event.device_id},
+    )
+    return AdminSafetyBlockDetailRead(
+        id=event.id,
+        user_id=event.user_id,
+        device_id=event.device_id,
+        model_code=model_code,
+        category=event.category,
+        risk_level=event.risk_level,
+        reason=event.reason,
+        advice=event.advice,
+        created_at=event.created_at,
+    )
 
 
 @router.get("/admin/unresolved-reports", response_model=list[AdminUnresolvedReportRead])
@@ -558,8 +704,6 @@ def admin_unresolved_reports(
             diagnostic=AdminDiagnosticSummary(
                 id=diagnostic.id,
                 status=diagnostic.status,
-                issue_description=diagnostic.issue_description,
-                error_code=diagnostic.error_code,
                 created_at=diagnostic.created_at,
             ),
             model=AdminRobotModelSummary(
@@ -568,12 +712,65 @@ def admin_unresolved_reports(
                 name=robot_model.name,
             ),
             user=AdminUserSummary(
-                id=user.id,
                 email_masked=mask_email(user.email),
             ),
         )
         for report, diagnostic, robot_model, user in rows
     ]
+
+
+@router.get(
+    "/admin/reports/{report_id}",
+    response_model=AdminServiceReportDetailRead,
+)
+def admin_report_detail(
+    report_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> ServiceReport:
+    report = db.get(ServiceReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Service report not found")
+    audit_sensitive_admin_read(
+        db,
+        request,
+        admin,
+        action="admin.service_report.sensitive_read",
+        resource_type="service_report",
+        resource_id=report.id,
+        related_resource_ids={"diagnostic_id": report.session_id},
+    )
+    return report
+
+
+@router.get(
+    "/admin/diagnostics/{diagnostic_id}",
+    response_model=AdminDiagnosticDetailRead,
+)
+def admin_diagnostic_detail(
+    diagnostic_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> DiagnosticSession:
+    diagnostic = db.get(DiagnosticSession, diagnostic_id)
+    if diagnostic is None:
+        raise HTTPException(status_code=404, detail="Diagnostic session not found")
+    audit_sensitive_admin_read(
+        db,
+        request,
+        admin,
+        action="admin.diagnostic_session.sensitive_read",
+        resource_type="diagnostic_session",
+        resource_id=diagnostic.id,
+        related_resource_ids={
+            "user_id": diagnostic.user_id,
+            "device_id": diagnostic.device_id,
+            "flow_id": diagnostic.flow_id,
+        },
+    )
+    return diagnostic
 
 
 @router.get("/admin/audit-logs", response_model=list[AdminAuditLogRead])
@@ -739,6 +936,12 @@ def create_diagnostic(
                 "official_service_advice": safety_block.advice,
             },
         )
+    enforce_business_rate_limit(
+        db,
+        request,
+        action="diagnostic_create",
+        user_id=user.id,
+    )
     flow = db.scalar(
         select(DiagnosticFlow)
         .join(IssueCategory)
@@ -999,6 +1202,12 @@ async def upload_attachment(
     diagnostic = owned_diagnostic(db, diagnostic_id, user)
     if diagnostic.status != "in_progress":
         raise HTTPException(status_code=409, detail="Attachments cannot be added after diagnosis ends")
+    enforce_business_rate_limit(
+        db,
+        request,
+        action="attachment_upload",
+        user_id=user.id,
+    )
     attachment_count = db.scalar(
         select(func.count()).select_from(Attachment).where(Attachment.session_id == diagnostic.id)
     )
@@ -1107,9 +1316,18 @@ def delete_attachment(
 
 @router.post("/diagnostics/{diagnostic_id}/report", response_model=ReportRead, status_code=201)
 def create_report(
-    diagnostic_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    diagnostic_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> ServiceReport:
     diagnostic = owned_diagnostic(db, diagnostic_id, user)
+    enforce_business_rate_limit(
+        db,
+        request,
+        action="report_create",
+        user_id=user.id,
+    )
     return get_or_create_service_report(db, diagnostic)
 
 
@@ -1132,6 +1350,12 @@ def create_report_pdf(
     user: User = Depends(get_current_user),
 ) -> ReportPdfRead:
     diagnostic = owned_diagnostic(db, diagnostic_id, user)
+    enforce_business_rate_limit(
+        db,
+        request,
+        action="pdf_create",
+        user_id=user.id,
+    )
     report = get_or_create_service_report(db, diagnostic)
     target = ensure_report_pdf(request, report)
     return report_pdf_response(diagnostic_id, report, target)

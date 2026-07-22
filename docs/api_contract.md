@@ -1,6 +1,6 @@
 # RobotCare AI API 契约
 
-> 契约版本：`0.10.0`；统一前缀：`/api/v1`。本文按 2026-07-20 的后端源码和完整回归 `137 passed, 1 skipped` 整理；唯一跳过项为真实 PostgreSQL 集成测试。
+> 契约版本：`0.11.0`；统一前缀：`/api/v1`。本文按 2026-07-22 的后端源码和完整回归 `168 passed, 1 skipped` 整理；唯一跳过项为真实 PostgreSQL 集成测试。
 
 ## 1. 通用约定
 
@@ -9,10 +9,10 @@
 - 【已验证】普通请求和响应使用 `application/json`；附件上传使用 `multipart/form-data`。
 - 【已验证】时间字段使用 FastAPI/Pydantic 的 ISO 8601 日期时间字符串。
 - 【已验证】用户资源在服务端校验所有权；设备和诊断跨用户访问测试返回 `403`。
-- 【已验证】常见错误包括 `401` 未认证、访问/刷新令牌无效或会话撤销，`403` 资源越权或账号停用，`404` 资源/流程不存在，`409` 状态/并发/注册冲突，`413` 文件过大/像素过多，`415` 图片格式无效，`422` 请求校验或安全阻断，`429` 登录限流。
+- 【已验证】常见错误包括 `401` 未认证、访问/刷新令牌无效或会话撤销，`403` 资源越权或账号停用，`404` 资源/流程不存在，`409` 状态/并发/注册冲突，`413` 文件过大/像素过多，`415` 图片格式无效，`422` 请求校验或安全阻断，`429` 登录或业务配额限流。
 - 【已验证】每个响应带 `X-Request-ID`。客户端提供合法值时原样贯穿；非法或超过 128 字符时服务器生成 UUID。HTTP 错误响应统一在 JSON 顶层增加 `trace_id`；422 不回显 Pydantic `input` 或 `ctx`，未处理异常只返回通用 `500 Internal server error`。
 - 【已验证】测试覆盖 `in_progress → resolved` 与 `in_progress → unresolved`；步骤反馈使用 `resolved`、`not_resolved`。
-- 【已验证】当前 OpenAPI 已提供刷新/退出、图片附件、型号级知识检索/状态、文本/PDF 报告和 7 个管理员接口；没有修改密码、找回密码、账户删除、知识上传/重建/停用、流程审核发布、评测结果持久化或生成式 RAG 回答接口。
+- 【已验证】当前 OpenAPI 已提供刷新/退出、图片附件、型号级知识检索/状态、文本/PDF 报告、管理员最小化列表和被审计敏感详情；没有修改密码、找回密码、账户删除、知识上传/重建/停用、流程审核发布、评测结果持久化或生成式 RAG 回答接口。
 
 ## 2. 公共接口
 
@@ -30,7 +30,7 @@
 }
 ```
 
-成功：`201 TokenResponse`。邮箱重复或并发唯一键竞争：`409`，不会返回数据库 500。新用户状态为 `active`。
+成功：`201 TokenResponse`。邮箱重复或并发唯一键竞争：`409`，不会返回数据库 500。新用户状态为 `active`。注册前使用 email/IP 分钟桶，默认分别为 3 和 10；超限遵循下述结构化 429 契约。
 
 注册由 `ROBOTCARE_REGISTRATION_MODE` 控制：
 
@@ -46,12 +46,14 @@
 
 登录限流由数据库持久化，默认参数为：
 
-- `ROBOTCARE_LOGIN_MAX_FAILURES=5`
+- `ROBOTCARE_LOGIN_EMAIL_MAX_FAILURES=20`
+- `ROBOTCARE_LOGIN_MAX_FAILURES=5`（email/IP）
+- `ROBOTCARE_LOGIN_IP_MAX_FAILURES=30`
 - `ROBOTCARE_REFRESH_REUSE_GRACE_SECONDS=5`
 - `ROBOTCARE_LOGIN_WINDOW_MINUTES=15`
 - `ROBOTCARE_LOGIN_LOCK_MINUTES=15`
 
-达到阈值后当前请求及锁定期内后续请求返回 `429`，响应头包含正整数秒数 `Retry-After`。限流同时使用规范化邮箱全局桶与邮箱/IP 桶，键值为 HMAC，不保存原邮箱或 IP；成功登录会清除该邮箱所有桶。
+达到任一阈值后当前请求及锁定期内后续请求返回 `429`，响应头包含正整数秒数 `Retry-After`。三个桶均使用 HMAC 键，不保存原邮箱或 IP；成功登录清除 email 与 email/IP 桶，但不清除独立 IP 桶。不存在账号与已有账号分支各执行一次 Argon2 验证并返回相同 401 JSON。仅当直连地址属于 `ROBOTCARE_TRUSTED_PROXY_CIDRS` 时解析转发链；畸形或伪造值回退直连地址。
 
 ### `POST /api/v1/auth/refresh`
 
@@ -69,6 +71,24 @@
 ### `GET /api/v1/auth/me`
 
 【已验证】携带 Bearer JWT 返回当前 `UserRead`；`UserRead` 包含 `status`。用户停用、会话撤销或会话过期时不能继续使用既有访问令牌。
+
+### 结构化业务配额
+
+以下写入或高成本动作具有数据库 user/IP 分钟桶：注册、`knowledge/search`、创建诊断、上传附件、生成文本报告和生成 PDF。Embedding 另有 user/IP 分钟与日桶。默认值以 `.env.example` 为准，服务端使用条件 UPSERT 保证一次请求涉及的桶全通过或全不消费。
+
+```json
+{
+  "detail": {
+    "code": "RATE_LIMITED",
+    "action": "knowledge_search",
+    "scope": "user",
+    "window_kind": "minute",
+    "retry_after_seconds": 42
+  }
+}
+```
+
+响应状态为 `429`，并包含与 JSON 一致的 `Retry-After`。高风险文本先执行安全阻断，不消耗配额、缓存或外部 Embedding 调用。知识查询的短 TTL HMAC 缓存和相同请求 singleflight 只在单进程内共享；数据库配额才是跨实例持久化边界。
 
 ### `GET /api/v1/models`
 
@@ -102,8 +122,11 @@
 | `GET /api/v1/admin/models` | `200 AdminModelRead[]` | 返回启用和停用的全部型号，按型号代码排序 |
 | `PATCH /api/v1/admin/models/{model_id}` | `200 AdminModelRead` | 请求 `{"active": true/false}`；设置型号启用状态并写审计日志 |
 | `GET /api/v1/admin/knowledge/status` | `200 KnowledgeStatusRead[]` | 返回每个型号的文档、分片和向量数量，只读 |
-| `GET /api/v1/admin/safety-blocks?limit=50` | `200 AdminSafetyBlockRead[]` | 最近安全阻断，`limit` 范围 1～100；不返回原始故障描述或描述哈希 |
-| `GET /api/v1/admin/unresolved-reports?limit=50` | `200 AdminUnresolvedReportRead[]` | 最近未解决诊断的报告摘要；用户邮箱脱敏，不返回报告正文 |
+| `GET /api/v1/admin/safety-blocks?limit=50` | `200 AdminSafetyBlockRead[]` | 最近安全阻断最小化列表；不返回原因、建议、用户或设备内部 ID |
+| `GET /api/v1/admin/safety-blocks/{event_id}` | `200 AdminSafetyBlockDetailRead` | 返回敏感详情前先提交 `safety_block.detail_read` 审计 |
+| `GET /api/v1/admin/diagnostics/{diagnostic_id}` | `200 AdminDiagnosticDetailRead` | 返回故障描述、错误码和步骤前先提交 `diagnostic.detail_read` 审计 |
+| `GET /api/v1/admin/unresolved-reports?limit=50` | `200 AdminUnresolvedReportRead[]` | 最近未解决报告最小化列表；不返回故障描述、错误码或用户内部 ID |
+| `GET /api/v1/admin/reports/{report_id}` | `200 AdminServiceReportDetailRead` | 返回报告正文前先提交 `service_report.detail_read` 审计 |
 | `GET /api/v1/admin/audit-logs?limit=50` | `200 AdminAuditLogRead[]` | 最近审计事件，`limit` 范围 1～100 |
 
 型号停用语义已通过 API 测试：
@@ -130,7 +153,9 @@
 }
 ```
 
-【计划】当前没有知识上传/重建/停用、流程审核发布、评测执行或评测结果持久化管理员 API，不能把上述 7 个接口描述为完整管理后台。
+三类敏感详情审计仅保存操作人、动作、资源类型/ID、时间、trace 和关联 ID，不复制故障描述、报告正文或图片内容；审计提交失败时返回 503，敏感正文不会发送。
+
+【计划】当前没有知识上传/重建/停用、流程审核发布、评测执行或评测结果持久化管理员 API，不能把上述接口描述为完整管理后台。
 
 ## 4. 设备接口
 
@@ -477,8 +502,8 @@ Remove-Item Env:ROBOTCARE_ADMIN_PASSWORD
     "alembic": {
       "status": "ok",
       "at_head": true,
-      "current_revision": "20260720_0004",
-      "expected_revision": "20260720_0004"
+      "current_revision": "20260722_0007",
+      "expected_revision": "20260722_0007"
     },
     "attachments": {"status": "ok", "exists": true, "is_directory": true, "writable": true},
     "reports": {"status": "ok", "exists": true, "is_directory": true, "writable": true},

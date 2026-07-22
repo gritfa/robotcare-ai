@@ -159,8 +159,11 @@ onMounted(dashboard.load)
           <el-table-column prop="risk_level" label="风险" width="90">
             <template #default="{ row }"><el-tag type="danger" size="small">{{ row.risk_level }}</el-tag></template>
           </el-table-column>
-          <el-table-column prop="reason" label="停止原因" min-width="230" show-overflow-tooltip />
-          <el-table-column prop="advice" label="处理建议" min-width="230" show-overflow-tooltip />
+          <el-table-column label="敏感详情" width="120" align="center">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="dashboard.openSafetyBlock(row.id)">查看详情</el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </section>
 
@@ -178,9 +181,11 @@ onMounted(dashboard.load)
           </el-table-column>
           <el-table-column prop="report.report_number" label="报告编号" min-width="150" />
           <el-table-column prop="model.code" label="型号" width="110" />
-          <el-table-column prop="diagnostic.issue_description" label="故障描述" min-width="250" show-overflow-tooltip />
-          <el-table-column prop="diagnostic.error_code" label="错误码" width="100">
-            <template #default="{ row }">{{ row.diagnostic.error_code || '—' }}</template>
+          <el-table-column label="敏感详情" min-width="180" align="center">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="dashboard.openDiagnostic(row.diagnostic.id)">诊断详情</el-button>
+              <el-button link type="primary" @click="dashboard.openReport(row.report.id)">报告详情</el-button>
+            </template>
           </el-table-column>
           <el-table-column prop="user.email_masked" label="用户（脱敏）" min-width="190" show-overflow-tooltip />
         </el-table>
@@ -207,6 +212,52 @@ onMounted(dashboard.load)
           </el-table-column>
         </el-table>
       </section>
+
+      <el-dialog
+        :model-value="Boolean(dashboard.selectedSafetyBlock.value)"
+        title="安全阻断详情（访问已审计）"
+        width="620px"
+        @close="dashboard.selectedSafetyBlock.value = null"
+      >
+        <div v-if="dashboard.selectedSafetyBlock.value" class="sensitive-detail">
+          <p><b>型号：</b>{{ dashboard.selectedSafetyBlock.value.model_code }}</p>
+          <p><b>阻断原因：</b>{{ dashboard.selectedSafetyBlock.value.reason }}</p>
+          <p><b>安全建议：</b>{{ dashboard.selectedSafetyBlock.value.advice }}</p>
+        </div>
+      </el-dialog>
+
+      <el-dialog
+        :model-value="Boolean(dashboard.selectedDiagnostic.value)"
+        title="诊断详情（访问已审计）"
+        width="620px"
+        @close="dashboard.selectedDiagnostic.value = null"
+      >
+        <div v-if="dashboard.selectedDiagnostic.value" class="sensitive-detail">
+          <p><b>问题描述：</b>{{ dashboard.selectedDiagnostic.value.issue_description }}</p>
+          <p><b>错误码：</b>{{ dashboard.selectedDiagnostic.value.error_code || '—' }}</p>
+          <p><b>状态：</b>{{ dashboard.selectedDiagnostic.value.status }}</p>
+        </div>
+      </el-dialog>
+
+      <el-dialog
+        :model-value="Boolean(dashboard.selectedReport.value)"
+        title="售后报告详情（访问已审计）"
+        width="720px"
+        @close="dashboard.selectedReport.value = null"
+      >
+        <div v-if="dashboard.selectedReport.value" class="sensitive-detail">
+          <p><b>报告编号：</b>{{ dashboard.selectedReport.value.report_number }}</p>
+          <pre>{{ dashboard.selectedReport.value.content }}</pre>
+        </div>
+      </el-dialog>
+
+      <el-alert
+        v-if="dashboard.detailError.value"
+        :title="dashboard.detailError.value"
+        type="error"
+        :closable="false"
+        show-icon
+      />
     </template>
 
     <div v-else-if="!dashboard.loading.value && !dashboard.loadError.value" class="panel empty">
@@ -216,5 +267,5 @@ onMounted(dashboard.load)
 </template>
 
 <style scoped>
-.admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}}
+.admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.sensitive-detail{line-height:1.7}.sensitive-detail pre{white-space:pre-wrap;word-break:break-word;padding:14px;background:#f7faf8;border-radius:8px;max-height:55vh;overflow:auto}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}}
 </style>

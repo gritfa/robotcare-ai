@@ -1,5 +1,7 @@
 # RobotCare AI
 
+[![CI](https://github.com/gritfa/robotcare-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/gritfa/robotcare-ai/actions/workflows/ci.yml)
+
 独立第三方海尔扫地机器人使用指导与安全故障排查平台。
 
 > 状态说明：本仓库正在执行分阶段工程化改造。本文只把经过真实命令验证的能力标记为 `【已验证】`；其余内容均标记为 `【计划】` 或 `【待验证】`。
@@ -26,7 +28,8 @@
 | RAG/安全评测数据与离线审计 | `【已验证】` | 已形成 113 条分项用例；离线实际执行 `safety_block 15/15`、`source_page 14/14`、`step_selection 14/14`，JSON/Markdown 报告已保存；113 条均为 `needs_human_review` |
 | 完整 RAG 在线评测 | `【计划】` | `model_isolation`、`retrieval_recall`、`refusal`、`classification`、`faithfulness` 均为 `not_run`；当前不生成自然语言答案，也不能称评测集已人工审核 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 双方言 256 维字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚已通过单元、静态编译与 SQLite 回归 |
-| PostgreSQL + pgvector 真实运行 | `【待验证】` | 集成测试与 smoke 脚本已编写，但本机无 Docker/psql，远端 CI 尚未运行，不能声称 PostgreSQL 迁移、索引命中或运行健康已完成 |
+| PostgreSQL + pgvector 真实运行 | `【已验证：GitHub Actions】` | PostgreSQL 16 + pgvector Job 已验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；本机 Docker、多实例压力与生产数据仍未验证 |
+| 远端 CI | `【已验证】` | 提交 `1bccb82` 的 GitHub Actions 六个 Job 全绿：SQLite、PostgreSQL + pgvector、前端、Chromium E2E、部署契约和知识校验 |
 | PDF 售后报告 | `【已验证】` | 并发请求返回同一报告；PDF 采用目标锁、临时文件和原子替换，验证 `%PDF-`/`%%EOF`；Edge 下载校验文件存在、非空和文件头 |
 | 管理员后端与审计 | `【已验证】` | 普通列表不返回故障正文、错误码、阻断原因或关联用户/设备 ID；报告、诊断和安全阻断详情按需读取并在返回前写入不含正文的 fail-closed 审计 |
 | 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；本机 Edge 已验证普通用户访问管理员页面被拒绝，管理员内容运营 E2E 仍为【计划】 |
@@ -176,7 +179,7 @@ robotcare-ai/
 - P50U1：https://www.haier.com/xjd/sdjqr/20200831_146586.shtml
 - 海尔服务支持：https://www.haier.com/support/
 
-其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和 SQLite 开发环境向量化；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的双方言类型、查询和迁移代码已完成单元/静态验证，但真实 PostgreSQL 运行仍为【待验证】。113 条评测数据和三项离线审计已经存在，但全部用例仍待人工复核，五项在线 RAG/LLM 指标仍为【计划】。
+其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和 SQLite 开发环境向量化；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的双方言类型、查询、迁移、HNSW 与型号级 Top-K 已在 GitHub Actions 的真实 PostgreSQL 16 + pgvector service 中通过。113 条评测数据和三项离线审计已经存在，但全部用例仍待人工复核，五项在线 RAG/LLM 指标仍为【计划】。
 
 ## 管理员账户与当前管理范围
 

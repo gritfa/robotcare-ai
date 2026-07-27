@@ -2,9 +2,8 @@
 
 ## 状态边界
 
-- `【已验证：静态配置】` 仓库已配置 GitHub Actions 工作流 `.github/workflows/ci.yml`，包含 SQLite 后端回归、PostgreSQL 16 + pgvector 集成、前端测试/构建、Playwright Chromium E2E、部署配置契约和知识数据检查。
-- `【待验证：远端运行】` 只有 GitHub Actions 页面出现对应提交的真实成功记录后，才能将该提交的 CI 运行状态改记为 `【已验证】`。
-- 本文不声称 GitHub Actions 已经运行，也不把本地命令成功等同于远端 CI 成功。
+- `【已验证：远端运行】` 提交 `1bccb82` 的 [GitHub Actions CI](https://github.com/gritfa/robotcare-ai/actions/runs/30235510993) 已完成并全绿，包含 SQLite 后端回归、PostgreSQL 16 + pgvector 集成、前端测试/构建、Playwright Chromium E2E、部署配置契约和知识数据检查。
+- 该结果证明对应提交和 CI service 环境，不自动证明本机 Docker、生产部署、多实例压力、HTTPS 或真实用户负载。
 
 ## CI 检查项
 
@@ -32,7 +31,7 @@ python -m pytest tests/test_postgres_integration.py -v
 python ../scripts/postgres_integration_smoke.py
 ```
 
-该 job 计划验证：`vector` 扩展、`vector(256)` 字段、HNSW 索引、数据库 Top-K、型号隔离、Alembic head、应用 `/ready`、种子型号以及附件/报告目录可写。`【待验证】` 工作流尚未在 GitHub Actions 实际运行，所以不能将这些运行结果记为已通过。
+该 job 已验证：`vector` 扩展、`vector(256)` 字段、HNSW 索引、数据库 Top-K、型号隔离、Alembic head、应用 `/ready`、种子型号以及附件/报告目录可写。状态为 `【已验证：GitHub Actions】`；多实例并发和生产数据规模仍未验证。
 
 ### Frontend
 
@@ -66,7 +65,7 @@ npm run test:e2e:edge
 # 8 passed (44.9s)，进程正常以 0 退出
 ```
 
-E2E 包装脚本直接管理 Uvicorn/Vite 子进程；正常通过和故意失败路径均已验证释放隔离端口。测试仅用 `/health` 等待进程启动，并由测试配置显式自动建表；这不替代生产 Alembic revision 门禁，也不证明 PostgreSQL、Docker、HTTPS 或多浏览器兼容。`【已验证：工作流配置】` CI 另配置 Chromium E2E 和失败证据上传；`【待验证：远端运行】` 尚无 GitHub Actions 成功记录。
+E2E 包装脚本直接管理 Uvicorn/Vite 子进程；正常通过和故意失败路径均已验证释放隔离端口。测试仅用 `/health` 等待进程启动，并由测试配置显式自动建表；这不替代生产 Alembic revision 门禁，也不证明 Docker、HTTPS 或多浏览器兼容。Chromium E2E 已在 GitHub Actions 远端成功，状态为 `【已验证】`。
 
 ### Knowledge
 
@@ -89,7 +88,7 @@ E2E 包装脚本直接管理 Uvicorn/Vite 子进程；正常通过和故意失�
 
 ## Docker 验证边界
 
-- `【已验证：静态契约】` `scripts/verify_deployment_config.py` 检查 pgvector 镜像、`/ready` 健康检查、持久卷、启动 Alembic、外部密钥、认证生产门禁、前后端回环绑定、Noto CJK 字体、Nginx 安全/健康端点和 CI 必需任务；CI 的 deployment-config job 还计划执行 `docker compose config --quiet`。
+- `【已验证：静态契约与远端 CI】` `scripts/verify_deployment_config.py` 检查 pgvector 镜像、`/ready` 健康检查、持久卷、启动 Alembic、外部密钥、认证生产门禁、前后端回环绑定、Noto CJK 字体、Nginx 安全/健康端点和 CI 必需任务；远端 deployment-config Job 已成功执行 `docker compose config --quiet`。
 - `【待验证】` 当前 CI 不执行 `docker compose build`、容器启动或容器端到端测试；本机也没有 Docker 可供运行。
 - Dockerfile 和 `docker-compose.yml` 的存在不等于镜像能够构建或服务能够正常启动。
 - 在 GitHub Actions 增加真实 Docker job，并保存对应提交的构建与健康检查证据之前，不得将 Docker 部署标为 `【已验证】`。
@@ -123,4 +122,4 @@ python -m pytest tests/test_postgres_integration.py -v
 python ..\scripts\postgres_integration_smoke.py
 ```
 
-Docker 验收还应执行 `docker compose config --quiet`、`docker compose build`、`docker compose up -d`、`docker compose ps`，并分别请求回环地址上的后端 `/health`、`/ready` 与前端 `/healthz`；前端容器健康检查应从容器网络直连 `backend:8000/ready`，公共 Nginx 不暴露详细 readiness。随后验证 HTTPS 反代与容器重建后数据仍保留。远端 CI 验收必须记录提交 SHA、workflow URL、各 job 结论和失败日志；没有这些证据时保持【待验证】。
+远端 CI 已记录提交 `1bccb82`、workflow URL 和六个成功 Job。Docker 验收仍应执行 `docker compose build`、`docker compose up -d`、`docker compose ps`，并分别请求回环地址上的后端 `/health`、`/ready` 与前端 `/healthz`；随后验证 HTTPS 反代与容器重建后数据仍保留。没有这些证据时，Docker 实际部署保持【待验证】。

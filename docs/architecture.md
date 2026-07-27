@@ -35,7 +35,7 @@ FastAPI /api/v1
 - 【已验证】管理员授权由 FastAPI 依赖在服务器端执行；`AuditLog` 记录型号启停、管理员创建/提升和敏感详情读取。敏感读取先提交审计再返回正文，审计失败关闭为 503；前端路由守卫不作为安全边界。
 - 【已验证】数据层已实现 SQLite/PostgreSQL 双方言：SQLite 用 JSON Text 保存 256 维向量并在 Python 中计算余弦相似度；PostgreSQL 使用 `vector(256)` 和数据库内余弦 Top-K SQL。
 - 【已验证：实现与静态/单元验证】PostgreSQL 查询保持 HNSW 索引列无 CAST，并在数据库层完成型号过滤、阈值、排序和 LIMIT；迁移定义 `vector` 扩展和 `vector_cosine_ops` HNSW 索引。
-- 【待验证】真实 PostgreSQL 尚未运行集成测试；当前不能声称扩展安装、迁移执行、HNSW 可用、查询计划或运行健康已经验证。
+- 【已验证：GitHub Actions】PostgreSQL 16 + pgvector service 已运行迁移和集成测试，验证扩展、`vector(256)`、HNSW、数据库 Top-K、型号隔离和 `/ready`；本机 Docker、生产数据规模和查询计划调优仍未验证。
 - 【已验证】附件开发期使用本地目录，已实现真实图片解码、格式一致性、大小/像素/数量/会话状态限制、随机文件名、所有权隔离和删除失败追踪；切换 MinIO 仍为【计划】。
 - 【已验证】诊断反馈分支使用 LangGraph StateGraph；数据库负责会话持久化。LangGraph checkpointer、中断恢复图和模型分类仍为【计划】。
 
@@ -62,9 +62,9 @@ FastAPI /api/v1
 
 1. 【已验证】JH69U1、VC35U1 官方 PDF 已登记来源 URL、SHA256、型号和页码，并完成本地解析与目视检查；管理员可查看数量健康，但知识上传/重建/停用和逐条人工审核仍为【计划】。
 2. 【已验证】入库按 SHA256 幂等处理；同型号同来源发生变化时，在一个数据库事务内替换旧分片；模拟提交失败的回滚测试证明旧文档和旧分片仍保留。完整版本管理、停用和删除 API 仍为【计划】。
-3. 【已验证】SQLite/PostgreSQL 查询按型号过滤；普通用户不能控制 `min_score`，服务端可按全局、型号或型号+知识 SHA256 配置。真实 PostgreSQL 执行仍为【待验证】，默认阈值也尚未经过完整评测校准。
+3. 【已验证】SQLite/PostgreSQL 查询按型号过滤；普通用户不能控制 `min_score`，服务端可按全局、型号或型号+知识 SHA256 配置。PostgreSQL 路径已在远端 CI 执行；默认阈值仍未经过完整评测校准。
 4. 【已验证】检索接口返回内容片段、相关度、来源标题、URL 和页码；113 条评测数据已建立，三项离线规则/目录检查已执行。生成式回答以及型号隔离、检索召回、拒答、分类和忠实度真实链路评测仍为【计划】。
-5. 【已验证】状态接口可对比每个型号的文档数、分片数和向量数；当前 SQLite 结果为 JH69U1 `1/31/31`、VC35U1 `1/22/22`。PostgreSQL/pgvector 健康检查脚本已编写，但真实运行仍为【待验证】。
+5. 【已验证】状态接口可对比每个型号的文档数、分片数和向量数；当前 SQLite 结果为 JH69U1 `1/31/31`、VC35U1 `1/22/22`。PostgreSQL/pgvector smoke 已在 GitHub Actions 成功运行。
 6. 【已验证】检索入口先执行与诊断相同的安全规则，高风险请求不调用 Embedding；`/knowledge/health` 区分正常、知识降级和外部模型不可用。独立 `knowledge_cli release` 读取外部只读发布包，校验 SHA256/模型/维度并在一个事务内幂等发布。
 
 ### 3.4 附件与报告
@@ -104,7 +104,7 @@ FastAPI /api/v1
 - 【已验证：本机关键链路】Playwright 已在真实 Microsoft Edge 上完成 8 条 E2E：闭环、恢复、越权、分类、安全阻断以及注册/附件/报告与 PDF 限流；命令 `44.9s` 正常退出，自管服务脚本成功与失败路径均释放测试端口。隔离 SQLite 不替代生产 PostgreSQL/Alembic/Docker/HTTPS 验收。
 - 【已验证：静态契约】Docker Compose、Dockerfile、启动迁移、外部密钥、PostgreSQL/附件/报告持久卷、Noto CJK 字体、服务健康检查和 CI PostgreSQL job 已通过静态配置检查。
 - 【已验证：静态契约】Compose 前后端端口都只绑定主机回环地址；Nginx 配置 CSP、`nosniff`、Referrer Policy 与 Permissions Policy，并且不公开详细 backend readiness。真实 HTTPS 反向代理与浏览器响应头仍需 Docker/E2E 运行确认。
-- 【待验证：真实运行】当前环境没有 Docker/psql，镜像未构建、Compose 未启动、PostgreSQL 集成测试未运行，GitHub Actions 也尚无远端成功记录。配置存在不能替代运行证据。
+- 【已验证：远端 CI】PostgreSQL + pgvector 集成、Chromium E2E、前后端测试/构建、知识校验和 Compose 配置解析已成功。【待验证：实际部署】本机没有 Docker/psql，镜像未构建、Compose 未启动，HTTPS 和持久化重建尚无证据。
 
 ## 6. 管理员边界
 

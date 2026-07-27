@@ -58,8 +58,11 @@ jobs:
       ROBOTCARE_ALLOW_DESTRUCTIVE_POSTGRES_TESTS: "1"
       ROBOTCARE_JWT_SECRET: ci-only-secret-not-for-deployment
       ROBOTCARE_AUTO_CREATE_SCHEMA: "false"
-      ROBOTCARE_ATTACHMENT_DIR: ${{ runner.temp }}/robotcare-attachments
-      ROBOTCARE_REPORT_DIR: ${{ runner.temp }}/robotcare-reports
+      # The `runner` context is not available while GitHub evaluates job-level
+      # env. Use runner-local absolute paths so the workflow can be parsed
+      # before a hosted runner is assigned.
+      ROBOTCARE_ATTACHMENT_DIR: /tmp/robotcare-attachments
+      ROBOTCARE_REPORT_DIR: /tmp/robotcare-reports
       ROBOTCARE_DASHSCOPE_API_KEY: ""
     defaults:
       run:

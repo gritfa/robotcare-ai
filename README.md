@@ -8,7 +8,7 @@
 
 | 子系统 | 状态 | 说明 |
 | --- | --- | --- |
-| FastAPI 后端 | `【已验证】` | 分类冲突、知识安全/健康、业务限流、认证、数据库约束、敏感读取审计及既有主链路全量回归为 `168 passed, 1 skipped`；唯一跳过项是真实 PostgreSQL 集成测试 |
+| FastAPI 后端 | `【已验证】` | 分类冲突、知识安全/健康、业务限流、认证、数据库约束、敏感读取审计、合成演示数据及既有主链路全量回归为 `171 passed, 1 skipped`；唯一跳过项是真实 PostgreSQL 集成测试 |
 | Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康及认证恢复共 `36 passed`；生产构建通过，Vite 转换 1706 个模块 |
 | Microsoft Edge E2E | `【已验证：本机关键链路】` | 本机真实 Edge 完成闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流，共 `8 passed (44.9s)`；自管服务脚本在成功和失败路径均释放端口，隔离 SQLite 不代表 PostgreSQL/Docker/HTTPS |
 | 分类与流程一致性 | `【已验证】` | 型号级确定性关键词/错误码候选；明显冲突拒绝创建，模糊场景要求用户确认；用户选择、系统候选和最终类别写入会话与报告 |
@@ -42,7 +42,7 @@
 cd backend
 $base = Join-Path $env:TEMP ('robotcare_pytest_' + [guid]::NewGuid().ToString('N'))
 python -m pytest -q -p no:cacheprovider --basetemp $base
-# 168 passed, 1 skipped
+# 171 passed, 1 skipped
 ```
 
 前端：
@@ -80,6 +80,33 @@ npm.cmd run test:e2e:edge
 PDF 视觉证据：`docs/evidence/sample_service_report.pdf`。该文件使用脱敏演示数据，已渲染检查中文字体、A4 页面、内容裁切和页脚。
 
 简历可用表述、量化证据和禁止夸大的边界：`docs/resume_evidence.md`。
+
+## 隐私安全的全状态演示数据
+
+本地开发环境可加载一套确定性的合成消费者数据。它不包含真实姓名、手机号、地址、设备照片或真实序列号，所有账号均使用 `example.com` 保留域名，图片明确标记为 synthetic。工具在 `production` 环境会拒绝运行。
+
+```powershell
+cd backend
+$env:ROBOTCARE_DEMO_PASSWORD='Demo123456'  # 可选；仅当前进程
+.\.venv\Scripts\python.exe -m app.demo_data_cli load --replace --yes
+.\.venv\Scripts\python.exe -m app.demo_data_cli summary
+Remove-Item Env:ROBOTCARE_DEMO_PASSWORD -ErrorAction SilentlyContinue
+```
+
+已生成的数据覆盖：7 个合成账号（含管理员和停用账号）、10 台设备、4 条发布流程、12 个诊断（进行中/已解决/未解决各 4 个）、4 张真实 PNG 文件、4 份文本/PDF 报告、4 个高风险阻断和 4 条管理员审计记录。
+
+默认检查账号仅用于本地开发：
+
+- 普通用户：`demo.alice@example.com` / `Demo123456`
+- 管理员：`demo.admin@example.com` / `Demo123456`
+
+只删除该工具管理的合成数据及其文件：
+
+```powershell
+.\.venv\Scripts\python.exe -m app.demo_data_cli reset --yes
+```
+
+详细覆盖矩阵和检查顺序见 `docs/demo_data.md`。这套数据用于页面、权限和业务生命周期演示，不等同于真实用户 Beta、生产负载、PostgreSQL 多实例或线上隐私合规验证。
 
 ## 第一阶段目标
 

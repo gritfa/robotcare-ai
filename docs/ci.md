@@ -18,7 +18,7 @@ python -m pip install -e ".[test]"
 python -m pytest
 ```
 
-本地完整回归的当前证据为 `168 passed, 1 skipped`；新增登录时序防护、三桶认证限流、业务/Embedding 配额、敏感读取审计、数据库状态约束及 Alembic `20260722_0007`。唯一跳过项需要 `ROBOTCARE_TEST_POSTGRES_URL` 和显式破坏性测试开关。
+本地完整回归的当前证据为 `171 passed, 1 skipped`；包含登录时序防护、三桶认证限流、业务/Embedding 配额、敏感读取审计、数据库状态约束、全状态合成数据及 Alembic `20260722_0007`。唯一跳过项需要 `ROBOTCARE_TEST_POSTGRES_URL` 和显式破坏性测试开关。
 
 ### Backend PostgreSQL + pgvector
 

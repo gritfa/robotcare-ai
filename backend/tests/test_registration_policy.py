@@ -119,6 +119,18 @@ def test_production_rejects_missing_embedding_configuration():
         )
 
 
+def test_production_rejects_insecure_dashscope_base_url():
+    with pytest.raises(ValidationError, match="DASHSCOPE_BASE_URL must use HTTPS"):
+        Settings(
+            environment="production",
+            jwt_secret="s" * 40,
+            registration_mode="closed",
+            dashscope_api_key="production-embedding-key",
+            dashscope_base_url="http://workspace.example.com/api/v1",
+            _env_file=None,
+        )
+
+
 @pytest.mark.parametrize(
     "invite_secret",
     [

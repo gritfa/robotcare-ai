@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     attachment_dir: str = "./data/attachments"
     report_dir: str = "./data/reports"
     dashscope_api_key: str | None = None
+    dashscope_base_url: str | None = None
     knowledge_min_score: float = Field(default=0.25, ge=0, le=1)
     knowledge_min_score_overrides: str = "{}"
     auto_create_schema: bool = False
@@ -109,6 +110,8 @@ class Settings(BaseSettings):
                 "ROBOTCARE_DASHSCOPE_API_KEY is required in production; "
                 "knowledge capability must not start silently disabled"
             )
+        if self.dashscope_base_url and not self.dashscope_base_url.startswith("https://"):
+            raise ValueError("ROBOTCARE_DASHSCOPE_BASE_URL must use HTTPS in production")
         secret = self.jwt_secret.strip()
         lowered_secret = secret.lower()
         if (

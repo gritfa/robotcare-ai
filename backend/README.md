@@ -62,7 +62,10 @@ python -m app.knowledge_cli ingest --model-code JH69U1 --pdf .\manual.pdf --sour
 
 The ingester uses SHA-256 to skip unchanged files. When the same model/source
 URL changes, its old chunks are replaced in one transaction. Set
-`ROBOTCARE_DASHSCOPE_API_KEY` before using the real embedding provider.
+Set `ROBOTCARE_DASHSCOPE_API_KEY` before using the real embedding provider. For
+an Alibaba Cloud Model Studio workspace endpoint, also set
+`ROBOTCARE_DASHSCOPE_BASE_URL` to the region-specific DashScope SDK URL ending
+in `/api/v1` (not the OpenAI-compatible URL ending in `/compatible-mode/v1`).
 
 Core request shapes are deliberately stable for the Vue client:
 

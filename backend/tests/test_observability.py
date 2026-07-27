@@ -418,19 +418,25 @@ def test_embedding_log_records_model_latency_and_failure_without_input(monkeypat
                 },
             )
 
-    monkeypatch.setitem(sys.modules, "dashscope", SimpleNamespace(TextEmbedding=FakeTextEmbedding))
+    dashscope_module = SimpleNamespace(TextEmbedding=FakeTextEmbedding, base_http_api_url=None)
+    monkeypatch.setitem(sys.modules, "dashscope", dashscope_module)
     stream = StringIO()
     capture = logging.StreamHandler(stream)
     capture.setFormatter(logging.Formatter("%(message)s"))
     request_logger.addHandler(capture)
     try:
-        vectors = DashScopeEmbeddingProvider(api_key="private-api-key").embed_documents(
-            ["private-embedding-input"]
-        )
+        vectors = DashScopeEmbeddingProvider(
+            api_key="private-api-key",
+            base_url="https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/",
+        ).embed_documents(["private-embedding-input"])
     finally:
         request_logger.removeHandler(capture)
 
     assert len(vectors) == 1
+    assert (
+        dashscope_module.base_http_api_url
+        == "https://workspace.cn-beijing.maas.aliyuncs.com/api/v1"
+    )
     entry = next(
         json.loads(line)
         for line in stream.getvalue().splitlines()

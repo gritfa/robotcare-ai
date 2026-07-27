@@ -44,7 +44,8 @@ def main(argv: Sequence[str] | None = None, provider: EmbeddingProvider | None =
         with session_factory() as db:
             seed_database(db)
             embedding_provider = provider or DashScopeEmbeddingProvider(
-                settings.dashscope_api_key
+                settings.dashscope_api_key,
+                settings.dashscope_base_url,
             )
             if args.command == "release":
                 result = release_knowledge_package(

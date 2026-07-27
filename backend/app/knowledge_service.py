@@ -35,8 +35,9 @@ class EmbeddingProvider(Protocol):
 class DashScopeEmbeddingProvider:
     """DashScope TextEmbedding v4 adapter with the product's fixed settings."""
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
         self.api_key = api_key
+        self.base_url = (base_url or "").strip().rstrip("/") or None
 
     def _embed(self, texts: Sequence[str], text_type: str) -> list[list[float]]:
         if not texts:
@@ -45,6 +46,9 @@ class DashScopeEmbeddingProvider:
             raise ValueError(f"DashScope embedding batch cannot exceed {EMBEDDING_BATCH_SIZE}")
 
         import dashscope
+
+        if self.base_url:
+            dashscope.base_http_api_url = self.base_url
 
         kwargs: dict[str, object] = {
             "model": EMBEDDING_MODEL,

@@ -41,7 +41,8 @@ def create_app(
     application = FastAPI(title="RobotCare AI API", version="0.1.0", lifespan=lifespan)
     application.state.session_factory = session_factory
     application.state.embedding_provider = embedding_provider or DashScopeEmbeddingProvider(
-        settings.dashscope_api_key
+        settings.dashscope_api_key,
+        settings.dashscope_base_url,
     )
     application.state.knowledge_search_cache = KnowledgeSearchCache(
         settings.knowledge_search_cache_ttl_seconds

@@ -1,6 +1,6 @@
 {
   "report_schema_version": "1.0",
-  "generated_at": "2026-07-30T08:00:34.066786+00:00",
+  "generated_at": "2026-07-30T08:54:49.174767+00:00",
   "dataset_path": "knowledge/eval_cases.jsonl",
   "overall_status": "passed_with_not_run_metrics",
   "dataset_summary": {
@@ -76,7 +76,7 @@
       "passed_cases": 25,
       "failed_cases": 0,
       "score": 1.0,
-      "reason": "内存库 + 合成说明书 + 确定性 hashing 词面向量真实执行；结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过（跳过 14 条真实型号用例）",
+      "reason": "评测 PG 库 + 合成说明书 + 确定性 hashing 词面向量真实执行；结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过（跳过 14 条真实型号用例）",
       "failures": []
     },
     "retrieval_recall": {
@@ -87,7 +87,7 @@
       "passed_cases": 55,
       "failed_cases": 0,
       "score": 1.0,
-      "reason": "内存库 + 合成说明书 + 确定性 hashing 词面向量真实执行；结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过（跳过 14 条真实型号用例）",
+      "reason": "评测 PG 库 + 合成说明书 + 确定性 hashing 词面向量真实执行；结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过（跳过 14 条真实型号用例）",
       "failures": []
     },
     "source_page": {

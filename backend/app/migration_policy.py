@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 
-# This PostgreSQL-only HNSW index is intentionally created by the explicit
-# migration rather than Base.metadata, because SQLite remains the lightweight
-# development/test dialect and must not receive a meaningless vector index.
+# The HNSW index is intentionally created by the explicit migration rather
+# than Base.metadata, so autogenerate/compare_metadata never tries to drop or
+# recreate an index the ORM does not model.
 MIGRATION_MANAGED_INDEXES = {"ix_knowledge_chunks_embedding_hnsw"}
 
 

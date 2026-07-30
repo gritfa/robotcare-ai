@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from alembic import command
 from alembic.autogenerate import compare_metadata
-from alembic.config import Config
 from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
 import pytest
@@ -13,13 +10,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import Base
+from app.migration_policy import include_migration_object
 from app.models import DiagnosticFlow, DiagnosticStep, RobotModel, User
 from app.main import create_app
 from app.migration_guard import ensure_database_at_head
 from app.seed import seed_database
+from conftest import alembic_config, fresh_database
 
-
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 STATE_CHECK_CONSTRAINTS = {
     "api_rate_limits": {
@@ -115,17 +112,10 @@ def insert_state_constraint_fixture(engine) -> None:
         )
 
 
-def alembic_config(database_url: str) -> Config:
-    config = Config(str(BACKEND_ROOT / "alembic.ini"))
-    config.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
-    return config
-
-
-def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkeypatch):
-    database_path = tmp_path / "migration.db"
-    database_url = f"sqlite:///{database_path.as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+def test_upgrade_head_creates_complete_schema_and_supports_seed(
+    tmp_path, migration_database_url
+):
+    database_url = migration_database_url
 
     command.upgrade(alembic_config(database_url), "head")
 
@@ -253,11 +243,31 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkey
     assert {"ix_diagnostic_flows_stable_key", "ix_diagnostic_flows_status"} <= flow_indexes
     assert_state_check_constraints(engine)
 
+    # pgvector schema evidence: the embedding column and its HNSW index come
+    # from the explicit migration, not from metadata auto-creation.
+    with engine.connect() as connection:
+        assert connection.scalar(
+            text(
+                "SELECT format_type(a.atttypid, a.atttypmod) "
+                "FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid "
+                "WHERE c.relname='knowledge_chunks' AND a.attname='embedding'"
+            )
+        ) == "vector(256)"
+        assert connection.scalar(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM pg_indexes "
+                "WHERE indexname='ix_knowledge_chunks_embedding_hnsw')"
+            )
+        ) is True
+
     # This comparison is deliberately broader than the spot checks above: it
     # fails whenever a mapped table, column, constraint, index, or type is not
     # represented by the explicit baseline migration.
     with engine.connect() as connection:
-        migration_context = MigrationContext.configure(connection)
+        migration_context = MigrationContext.configure(
+            connection,
+            opts={"compare_type": True, "include_object": include_migration_object},
+        )
         assert compare_metadata(migration_context, Base.metadata) == []
 
     with Session(engine) as session:
@@ -282,38 +292,35 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(tmp_path, monkey
     engine.dispose()
 
 
-def test_unversioned_database_is_rejected_by_production_startup(tmp_path):
-    database_url = f"sqlite:///{(tmp_path / 'unversioned.db').as_posix()}"
-    engine = create_engine(database_url)
+def test_unversioned_database_is_rejected_by_production_startup(
+    migration_database_url,
+):
+    engine = create_engine(migration_database_url)
     with pytest.raises(RuntimeError, match="alembic upgrade head"):
         ensure_database_at_head(engine)
     engine.dispose()
 
 
-def test_environment_database_url_takes_precedence(tmp_path, monkeypatch):
-    environment_database = tmp_path / "from-environment.db"
-    configured_database = tmp_path / "from-config.db"
-    monkeypatch.setenv(
-        "ROBOTCARE_DATABASE_URL", f"sqlite:///{environment_database.as_posix()}"
-    )
+def test_environment_database_url_takes_precedence(
+    migration_database_url, monkeypatch
+):
+    environment_database_url = fresh_database("robotcare_migration_env")
+    monkeypatch.setenv("ROBOTCARE_DATABASE_URL", environment_database_url)
 
-    command.upgrade(
-        alembic_config(f"sqlite:///{configured_database.as_posix()}"),
-        "head",
-    )
+    command.upgrade(alembic_config(migration_database_url), "head")
 
-    assert environment_database.exists()
-    assert "alembic_version" in inspect(
-        create_engine(f"sqlite:///{environment_database.as_posix()}")
-    ).get_table_names()
-    assert not configured_database.exists()
+    environment_engine = create_engine(environment_database_url)
+    configured_engine = create_engine(migration_database_url)
+    assert "alembic_version" in inspect(environment_engine).get_table_names()
+    assert inspect(configured_engine).get_table_names() == []
+    environment_engine.dispose()
+    configured_engine.dispose()
 
 
 def test_audit_log_migration_upgrades_existing_0001_database_without_data_loss(
-    tmp_path, monkeypatch
+    migration_database_url,
 ):
-    database_url = f"sqlite:///{(tmp_path / 'upgrade-0002.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    database_url = migration_database_url
     config = alembic_config(database_url)
     command.upgrade(config, "20260720_0001")
 
@@ -345,10 +352,9 @@ def test_audit_log_migration_upgrades_existing_0001_database_without_data_loss(
 
 
 def test_auth_migration_upgrades_0002_and_preserves_users_and_audit_logs(
-    tmp_path, monkeypatch
+    migration_database_url,
 ):
-    database_url = f"sqlite:///{(tmp_path / 'upgrade-0003.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    database_url = migration_database_url
     config = alembic_config(database_url)
     command.upgrade(config, "20260720_0002")
 
@@ -400,10 +406,9 @@ def test_auth_migration_upgrades_0002_and_preserves_users_and_audit_logs(
 
 
 def test_state_constraint_migration_upgrades_0004_without_data_loss(
-    tmp_path, monkeypatch
+    migration_database_url,
 ):
-    database_url = f"sqlite:///{(tmp_path / 'upgrade-0005.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    database_url = migration_database_url
     config = alembic_config(database_url)
     command.upgrade(config, "20260720_0004")
 
@@ -431,10 +436,9 @@ def test_state_constraint_migration_upgrades_0004_without_data_loss(
 
 
 def test_state_constraint_migration_rejects_all_invalid_historical_rows_before_ddl(
-    tmp_path, monkeypatch
+    migration_database_url,
 ):
-    database_url = f"sqlite:///{(tmp_path / 'invalid-0005.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    database_url = migration_database_url
     config = alembic_config(database_url)
     command.upgrade(config, "20260720_0004")
 
@@ -496,10 +500,9 @@ def test_state_constraint_migration_rejects_all_invalid_historical_rows_before_d
 
 
 def test_independent_ip_throttle_migration_preserves_existing_rows_and_enforces_keys(
-    tmp_path, monkeypatch
+    migration_database_url,
 ):
-    database_url = f"sqlite:///{(tmp_path / 'upgrade-0006.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    database_url = migration_database_url
     config = alembic_config(database_url)
     command.upgrade(config, "20260722_0005")
     engine = create_engine(database_url)
@@ -559,9 +562,8 @@ def test_independent_ip_throttle_migration_preserves_existing_rows_and_enforces_
     engine.dispose()
 
 
-def test_api_rate_limit_migration_constraints_and_downgrade(tmp_path, monkeypatch):
-    database_url = f"sqlite:///{(tmp_path / 'upgrade-0007.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+def test_api_rate_limit_migration_constraints_and_downgrade(migration_database_url):
+    database_url = migration_database_url
     config = alembic_config(database_url)
     command.upgrade(config, "20260722_0006")
     engine = create_engine(database_url)
@@ -616,10 +618,9 @@ def test_api_rate_limit_migration_constraints_and_downgrade(tmp_path, monkeypatc
 
 
 def test_independent_ip_throttle_migration_rejects_invalid_legacy_scope_keys(
-    tmp_path, monkeypatch
+    migration_database_url,
 ):
-    database_url = f"sqlite:///{(tmp_path / 'invalid-upgrade-0006.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    database_url = migration_database_url
     config = alembic_config(database_url)
     command.upgrade(config, "20260722_0005")
     engine = create_engine(database_url)
@@ -649,10 +650,9 @@ def test_independent_ip_throttle_migration_rejects_invalid_legacy_scope_keys(
 
 
 def test_independent_ip_throttle_downgrade_refuses_to_delete_ip_history(
-    tmp_path, monkeypatch
+    migration_database_url,
 ):
-    database_url = f"sqlite:///{(tmp_path / 'refuse-downgrade-0006.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    database_url = migration_database_url
     config = alembic_config(database_url)
     command.upgrade(config, "20260722_0006")
     engine = create_engine(database_url)
@@ -687,32 +687,3 @@ def test_independent_ip_throttle_downgrade_refuses_to_delete_ip_history(
 def connection_revision(engine) -> str:
     with engine.connect() as connection:
         return connection.scalar(text("SELECT version_num FROM alembic_version"))
-
-
-@pytest.mark.parametrize(
-    "statement",
-    [
-        "UPDATE users SET role = 'owner' WHERE id = 9001",
-        "UPDATE diagnostic_flows SET status = 'broken' "
-        "WHERE id = (SELECT MIN(id) FROM diagnostic_flows)",
-        "UPDATE diagnostic_flows SET version = 0 "
-        "WHERE id = (SELECT MIN(id) FROM diagnostic_flows)",
-        "UPDATE diagnostic_sessions SET status = 'paused' WHERE id = 9001",
-        "UPDATE diagnostic_sessions SET current_position = -1 WHERE id = 9001",
-        "UPDATE step_executions SET outcome = 'skipped' WHERE id = 9001",
-        "UPDATE safety_block_events SET risk_level = 'unknown' WHERE id = 9001",
-        "UPDATE diagnostic_steps SET evidence_level = 'guess' "
-        "WHERE id = (SELECT MIN(id) FROM diagnostic_steps)",
-    ],
-)
-def test_sqlite_rejects_invalid_database_states(tmp_path, monkeypatch, statement):
-    database_url = f"sqlite:///{(tmp_path / 'invalid-state.db').as_posix()}"
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
-    command.upgrade(alembic_config(database_url), "head")
-    engine = create_engine(database_url)
-    insert_state_constraint_fixture(engine)
-
-    with pytest.raises(IntegrityError):
-        with engine.begin() as connection:
-            connection.execute(text(statement))
-    engine.dispose()

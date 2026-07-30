@@ -70,8 +70,8 @@ def _reject_invalid_history() -> None:
 
 
 def upgrade() -> None:
-    # Validate every target before the first DDL statement. This keeps a failed
-    # SQLite batch migration from leaving a partially upgraded schema.
+    # Validate every target before the first DDL statement so a failing check
+    # aborts the migration before any constraint is created.
     _reject_invalid_history()
 
     with op.batch_alter_table("users") as batch_op:

@@ -10,6 +10,33 @@ const forwardedArgs = process.argv.slice(3)
 const backendPort = process.env.ROBOTCARE_E2E_BACKEND_PORT || '8000'
 const frontendPort = process.env.ROBOTCARE_E2E_FRONTEND_PORT || '5173'
 const inviteCode = process.env.ROBOTCARE_E2E_INVITE_CODE || '7cYp9N2mK4qR8vTx'
+// 单方言：E2E 也跑在 PostgreSQL 测试容器上（本机默认 55433 的 pgvector 容器，
+// CI 用 workflow service）。库在启动前自动创建并清空。
+const e2eDatabaseUrl = process.env.ROBOTCARE_E2E_DATABASE_URL
+  || 'postgresql+psycopg://postgres:test@127.0.0.1:55433/robotcare_e2e'
+
+const prepareDatabaseScript = `
+import os
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
+
+url = make_url(os.environ["ROBOTCARE_DATABASE_URL"])
+name = url.database
+admin = create_engine(url.set(database="postgres"), poolclass=NullPool, isolation_level="AUTOCOMMIT")
+with admin.connect() as connection:
+    exists = connection.scalar(text("SELECT 1 FROM pg_database WHERE datname = :n"), {"n": name})
+    if not exists:
+        connection.execute(text(f'CREATE DATABASE "{name}"'))
+admin.dispose()
+engine = create_engine(url, poolclass=NullPool)
+with engine.begin() as connection:
+    connection.execute(text("DROP SCHEMA public CASCADE"))
+    connection.execute(text("CREATE SCHEMA public"))
+    connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+engine.dispose()
+print("e2e database ready:", name)
+`
 const python = process.env.ROBOTCARE_E2E_PYTHON || (process.platform === 'win32'
   ? path.join(backendDir, '.venv', 'Scripts', 'python.exe')
   : 'python')
@@ -77,6 +104,19 @@ const sharedEnvironment = {
   ROBOTCARE_DEV_API_TARGET: `http://127.0.0.1:${backendPort}`,
 }
 
+const prepareDatabase = start(
+  python,
+  ['-c', prepareDatabaseScript],
+  {
+    cwd: backendDir,
+    env: { ...sharedEnvironment, ROBOTCARE_DATABASE_URL: e2eDatabaseUrl },
+  },
+)
+if (await waitForExit(prepareDatabase) !== 0) {
+  console.error(`Failed to prepare the E2E PostgreSQL database: ${e2eDatabaseUrl}`)
+  process.exit(1)
+}
+
 const backend = start(
   python,
   ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', backendPort],
@@ -84,7 +124,7 @@ const backend = start(
     cwd: backendDir,
     env: {
       ...sharedEnvironment,
-      ROBOTCARE_DATABASE_URL: 'sqlite:///./data/e2e/robotcare-e2e.db',
+      ROBOTCARE_DATABASE_URL: e2eDatabaseUrl,
       ROBOTCARE_ENVIRONMENT: 'development',
       ROBOTCARE_AUTO_CREATE_SCHEMA: 'true',
       ROBOTCARE_REGISTRATION_MODE: 'invite',

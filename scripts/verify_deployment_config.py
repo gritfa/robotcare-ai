@@ -211,7 +211,8 @@ def main() -> None:
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     for token in (
         "pgvector/pgvector:pg16",
-        "test_postgres_integration.py",
+        # 单方言：PG 集成测试并入完整 pytest；契约改为检查测试库注入与冒烟脚本。
+        "ROBOTCARE_TEST_DATABASE_URL",
         "postgres_integration_smoke.py",
         "audit_eval_dataset.py",
         "npm run test",

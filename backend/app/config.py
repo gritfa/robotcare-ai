@@ -25,7 +25,7 @@ INSECURE_INVITE_SECRET_MARKERS = (
 
 
 class Settings(BaseSettings):
-    database_url: str = "sqlite:///./data/robotcare.db"
+    database_url: str = "postgresql+psycopg://robotcare:robotcare@localhost:5432/robotcare"
     environment: str = "development"
     jwt_secret: str = DEFAULT_DEVELOPMENT_JWT_SECRET
     registration_mode: Literal["open", "invite", "closed"] = "open"

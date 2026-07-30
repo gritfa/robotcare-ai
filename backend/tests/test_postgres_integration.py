@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 from alembic import command
 from alembic.autogenerate import compare_metadata
-from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.exc import IntegrityError
@@ -21,15 +18,7 @@ from app.migration_policy import include_migration_object
 from app.models import ApiRateLimit, KnowledgeChunk, KnowledgeDocument, RobotModel
 from app.rate_limit_service import RateQuota, consume_rate_quotas
 from app.seed import seed_database
-
-
-POSTGRES_URL = os.getenv("ROBOTCARE_TEST_POSTGRES_URL")
-ALLOW_DESTRUCTIVE = os.getenv("ROBOTCARE_ALLOW_DESTRUCTIVE_POSTGRES_TESTS") == "1"
-pytestmark = pytest.mark.skipif(
-    not POSTGRES_URL or not ALLOW_DESTRUCTIVE,
-    reason="Set a dedicated ROBOTCARE_TEST_POSTGRES_URL and destructive-test opt-in",
-)
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
+from conftest import alembic_config
 
 STATE_CHECK_CONSTRAINTS = {
     "api_rate_limits": {
@@ -61,17 +50,13 @@ class FakeProvider:
         return vector(1.0)
 
 
-def config() -> Config:
-    value = Config(str(BACKEND_ROOT / "alembic.ini"))
-    value.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
-    value.set_main_option("sqlalchemy.url", POSTGRES_URL or "")
-    return value
+def test_postgres_vector_schema_index_model_filter_and_top_k(migration_database_url):
+    POSTGRES_URL = migration_database_url
 
+    def config():
+        return alembic_config(POSTGRES_URL)
 
-def test_postgres_vector_schema_index_model_filter_and_top_k(monkeypatch):
-    assert POSTGRES_URL is not None
-    assert "robotcare_test" in POSTGRES_URL, "Integration tests require a dedicated test database"
-    monkeypatch.setenv("ROBOTCARE_DATABASE_URL", POSTGRES_URL)
+    command.upgrade(config(), "head")
     command.downgrade(config(), "base")
     command.upgrade(config(), "20260720_0004")
     pre_constraint_factory = build_session_factory(POSTGRES_URL)

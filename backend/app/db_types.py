@@ -4,7 +4,6 @@ import json
 from typing import Any
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import Text
 from sqlalchemy.engine import Dialect
 from sqlalchemy.types import TypeDecorator
 
@@ -26,27 +25,15 @@ def normalize_embedding(value: Any) -> list[float] | None:
 
 
 class EmbeddingVector(TypeDecorator):
-    """Use pgvector in PostgreSQL while keeping JSON text for SQLite tests."""
+    """PostgreSQL 单方言：直接以 pgvector VECTOR(256) 存储嵌入向量。"""
 
-    impl = Text
+    impl = VECTOR(EMBEDDING_DIMENSION)
     cache_ok = True
 
-    def load_dialect_impl(self, dialect: Dialect):
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(VECTOR(EMBEDDING_DIMENSION))
-        return dialect.type_descriptor(Text())
-
     def process_bind_param(self, value: Any, dialect: Dialect):
-        vector = normalize_embedding(value)
-        if vector is None:
-            return None
-        if dialect.name == "postgresql":
-            return vector
-        return json.dumps(vector, separators=(",", ":"))
+        return normalize_embedding(value)
 
     def process_result_value(self, value: Any, dialect: Dialect):
         if value is None:
             return None
-        if dialect.name == "postgresql":
-            return [float(item) for item in value]
-        return value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
+        return [float(item) for item in value]

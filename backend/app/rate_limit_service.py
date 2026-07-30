@@ -14,7 +14,6 @@ from typing import Iterator, Sequence, TypeVar
 from fastapi import HTTPException, Request, status
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from .auth_service import client_ip, normalize_email
@@ -71,13 +70,7 @@ def consume_rate_quotas(
 
     resolved_settings = settings or get_settings()
     resolved_now = now or utcnow()
-    dialect_name = db.get_bind().dialect.name
-    if dialect_name == "sqlite":
-        insert_factory = sqlite_insert
-    elif dialect_name == "postgresql":
-        insert_factory = postgresql_insert
-    else:  # pragma: no cover - supported deployments use SQLite or PostgreSQL
-        raise RuntimeError(f"API rate limiting is not implemented for {dialect_name}")
+    insert_factory = postgresql_insert
 
     blocked: tuple[RateQuota, datetime] | None = None
     for quota in quotas:

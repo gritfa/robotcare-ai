@@ -25,10 +25,13 @@ dependencies = [
   "reportlab>=4.4,<5",
   "Pillow>=11,<13",
   "pgvector>=0.4,<1",
+  "psycopg[binary]>=3.2,<4",
 ]
 
 [project.optional-dependencies]
-postgres = ["psycopg[binary]>=3.2,<4"]
+# PostgreSQL is the only supported dialect; psycopg moved into core
+# dependencies. The empty extra keeps `pip install .[postgres]` working.
+postgres = []
 test = ["pytest>=8.3,<10", "httpx>=0.28,<1"]
 
 [tool.pytest.ini_options]

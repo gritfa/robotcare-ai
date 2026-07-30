@@ -19,9 +19,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    is_postgresql = op.get_bind().dialect.name == "postgresql"
-    if is_postgresql:
-        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     op.create_table(
         "issue_categories",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -167,18 +165,17 @@ def upgrade() -> None:
         sa.Column("chunk_index", sa.Integer(), nullable=False),
         sa.Column("page_number", sa.Integer(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("embedding", VECTOR(256) if is_postgresql else sa.Text(), nullable=True),
+        sa.Column("embedding", VECTOR(256), nullable=True),
         sa.ForeignKeyConstraint(["document_id"], ["knowledge_documents.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("document_id", "chunk_index"),
     )
     op.create_index("ix_knowledge_chunks_document_id", "knowledge_chunks", ["document_id"])
-    if is_postgresql:
-        op.execute(
-            "CREATE INDEX ix_knowledge_chunks_embedding_hnsw "
-            "ON knowledge_chunks USING hnsw (embedding vector_cosine_ops) "
-            "WITH (m = 16, ef_construction = 64)"
-        )
+    op.execute(
+        "CREATE INDEX ix_knowledge_chunks_embedding_hnsw "
+        "ON knowledge_chunks USING hnsw (embedding vector_cosine_ops) "
+        "WITH (m = 16, ef_construction = 64)"
+    )
 
     op.create_table(
         "safety_block_events",

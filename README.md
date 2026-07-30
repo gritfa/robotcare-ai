@@ -10,9 +10,9 @@
 
 | 子系统 | 状态 | 说明 |
 | --- | --- | --- |
-| FastAPI 后端 | `【已验证】` | 分类冲突、知识安全/健康、业务限流、认证、数据库约束、敏感读取审计、合成演示数据及既有主链路全量回归为 `171 passed, 1 skipped`；唯一跳过项是真实 PostgreSQL 集成测试 |
+| FastAPI 后端 | `【已验证】` | 单方言重构后全部测试直接跑在 PostgreSQL 16 + pgvector 测试容器上：`180 passed, 0 skipped (29.7s)`；原独立 PG 集成测试并入常规回归，不再有 skip |
 | Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康及认证恢复共 `36 passed`；生产构建通过，Vite 转换 1706 个模块 |
-| Microsoft Edge E2E | `【已验证：本机关键链路】` | 本机真实 Edge 完成闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流，共 `8 passed (44.9s)`；自管服务脚本在成功和失败路径均释放端口，隔离 SQLite 不代表 PostgreSQL/Docker/HTTPS |
+| Microsoft Edge E2E | `【已验证：本机关键链路】` | 本机真实 Edge 完成闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流，共 `8 passed (44.9s)`（该证据基于当时的隔离 SQLite 库）；现 E2E 脚本已改为使用隔离 PostgreSQL 测试库（`ROBOTCARE_E2E_DATABASE_URL`），改造后的 E2E 尚未在本机重新跑过，仍不代表 Docker/HTTPS |
 | 分类与流程一致性 | `【已验证】` | 型号级确定性关键词/错误码候选；明显冲突拒绝创建，模糊场景要求用户确认；用户选择、系统候选和最终类别写入会话与报告 |
 | 知识安全与业务健康 | `【已验证：本地】` | 高风险检索在 Embedding 前阻断；普通用户不能覆盖阈值；`/knowledge/health` 区分正常、知识降级和外部模型不可用；版本化发布清单支持 SHA256 校验、幂等与事务回滚 |
 | 认证生命周期 | `【已验证】` | 登录不存在用户时使用固定 Argon2 dummy hash；email、email/IP、独立 IP 三桶原子限流、可信代理 CIDR、清理 CLI，以及刷新轮换/重放撤销、退出失效和用户状态均有测试 |
@@ -20,17 +20,17 @@
 | 可观测性基线 | `【已验证】` | `X-Request-ID`、JSON 请求/领域事件日志、递归脱敏、带 `trace_id` 的安全错误响应以及数据库/Alembic/存储就绪检查均通过测试；尚未接入外部日志、告警或 OpenTelemetry |
 | 高风险输入阻断 | `【已验证】` | 诊断和知识检索共享确定性规则；覆盖主要高风险类别和“没有冒烟”等否定语义；前端使用持久安全卡片而非仅 Toast |
 | 反馈幂等与并发 | `【已验证】` | 请求携带当前 `step_id`；重复、旧步骤和两请求并发只允许一条执行记录，冲突返回 409 |
-| 图片上传安全 | `【已验证】` | Pillow 真实解码及既有限制不变；SQLite 进程锁/PostgreSQL 会话行锁保证并发上传最多 5 张，失败不遗留数据库记录或孤立文件 |
+| 图片上传安全 | `【已验证】` | Pillow 真实解码及既有限制不变；PostgreSQL 会话行锁（`SELECT ... FOR UPDATE`）保证并发上传最多 5 张，失败不遗留数据库记录或孤立文件 |
 | 官方说明书证据 | `【已验证】` | JH69U1、VC35U1 官方 PDF 已下载、校验 SHA256、按页解析并完成指定页面目视检查；原始 PDF 不提交公开仓库 |
 | 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；4 条逐步骤说明书复核流程已发布，1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
-| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；Alembic head `20260722_0007` 增加状态约束、独立 IP 登录桶和 API 配额表；本地 SQLite 已备份升级并通过完整性、外键与零漂移检查 |
+| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；迁移链单方言化后在空 PostgreSQL 库完成 `upgrade head → downgrade base → upgrade head` 往返，head `20260730_0008`，metadata 零漂移 |
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
 | RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 375 条（113 条原有 + 262 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 39/39`、`step_selection 39/39`、`model_isolation 25/25`、`retrieval_recall 55/55`、`classification 50/50`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
 | LLM 生成层（强制引用/拒答/留痕） | `【已验证：本地 mock】` | `POST /knowledge/answer`：安全前置阻断→检索→生成；检索空/低于阈值不调模型直接拒答，引用缺失/越界拒答，回答命中安全规则拦截留痕；generation_records 全量留痕（prompt 版本/模型/片段 SHA/引用/耗时）；6 项 pytest 用 mock Provider 验证，真实 DashScope 生成调用未在本机执行 |
 | faithfulness 在线评测 | `【待验证】` | 唯一剩余 `not_run` 指标；`scripts/run_online_generation_eval.py` 已交付，需在持有 DashScope key 的机器执行，无 key 时脚本明确拒绝伪造结果 |
-| PostgreSQL + pgvector 实现 | `【已验证】` | 双方言 256 维字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚已通过单元、静态编译与 SQLite 回归 |
+| PostgreSQL + pgvector 实现 | `【已验证】` | 单方言：`vector(256)` 字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚全部直接在真实 PostgreSQL 上回归（SQLite 双方言分叉已删除） |
 | PostgreSQL + pgvector 真实运行 | `【已验证：GitHub Actions】` | PostgreSQL 16 + pgvector Job 已验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；本机 Docker、多实例压力与生产数据仍未验证 |
-| 远端 CI | `【已验证】` | 提交 `1bccb82` 的 GitHub Actions 六个 Job 全绿：SQLite、PostgreSQL + pgvector、前端、Chromium E2E、部署契约和知识校验 |
+| 远端 CI | `【已验证：历史提交】/【待验证：新工作流】` | 提交 `1bccb82` 的六个 Job 全绿是双方言时期的证据；单方言重构后工作流改为五个 Job（PG 回归、前端、Chromium E2E、部署契约、知识校验，全部 PG service），改造后的工作流尚未在远端跑过 |
 | PDF 售后报告 | `【已验证】` | 并发请求返回同一报告；PDF 采用目标锁、临时文件和原子替换，验证 `%PDF-`/`%%EOF`；Edge 下载校验文件存在、非空和文件头 |
 | 管理员后端与审计 | `【已验证】` | 普通列表不返回故障正文、错误码、阻断原因或关联用户/设备 ID；报告、诊断和安全阻断详情按需读取并在返回前写入不含正文的 fail-closed 审计 |
 | 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；本机 Edge 已验证普通用户访问管理员页面被拒绝，管理员内容运营 E2E 仍为【计划】 |
@@ -180,7 +180,7 @@ robotcare-ai/
 - P50U1：https://www.haier.com/xjd/sdjqr/20200831_146586.shtml
 - 海尔服务支持：https://www.haier.com/support/
 
-其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和 SQLite 开发环境向量化；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的双方言类型、查询、迁移、HNSW 与型号级 Top-K 已在 GitHub Actions 的真实 PostgreSQL 16 + pgvector service 中通过。113 条评测数据和三项离线审计已经存在，但全部用例仍待人工复核，五项在线 RAG/LLM 指标仍为【计划】。
+其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和开发环境向量化（历史向量最初落在 SQLite 开发库，可用 `backend/scripts/migrate_legacy_sqlite.py` 一次性迁入 PG）；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的单方言类型、查询、迁移、HNSW 与型号级 Top-K 已在本地 PostgreSQL 16 + pgvector 测试容器全量回归通过。113 条评测数据和三项离线审计已经存在，但全部用例仍待人工复核，五项在线 RAG/LLM 指标仍为【计划】。
 
 ## 管理员账户与当前管理范围
 
@@ -188,7 +188,7 @@ robotcare-ai/
 
 ```powershell
 cd D:\个人项目\robotcare-ai\backend
-$env:ROBOTCARE_DATABASE_URL='sqlite:///./data/robotcare.db'
+$env:ROBOTCARE_DATABASE_URL='postgresql+psycopg://robotcare:<password>@127.0.0.1:5432/robotcare'
 $env:ROBOTCARE_ADMIN_PASSWORD='<8-128位强密码>'
 python -m app.admin_cli create --email admin@example.com
 Remove-Item Env:ROBOTCARE_ADMIN_PASSWORD
@@ -204,20 +204,19 @@ Remove-Item Env:ROBOTCARE_ADMIN_PASSWORD
 
 【待验证】`docker-compose.yml` 默认使用 `ROBOTCARE_ENVIRONMENT=production` 与安全刷新 Cookie，因此必须部署在 HTTPS 反向代理之后。仅限本机 HTTP 调试时，复制 `.env.compose-local.example` 为本地环境文件，以 `development` 和 `ROBOTCARE_REFRESH_COOKIE_SECURE=false` 覆盖；不得把这套配置用于公网。
 
-以下命令是待执行的运行验收，不是当前已完成证据。必须使用名称包含 `robotcare_test` 的专用测试库；集成测试会执行 Alembic downgrade/upgrade，禁止指向开发库或生产库。
+单方言测试基线：全部后端测试直接跑在专用 PostgreSQL 测试容器上。先起测试库容器（含 pgvector），再运行完整回归；测试会在该服务器上按需自建 `robotcare_migration` / `robotcare_eval` 库并执行 Alembic downgrade/upgrade，禁止指向开发库或生产库。
 
-```powershell
+```bash
+# 一次性：启动专用测试库容器（默认连接串即下面这个）
+docker run -d --name robotcare-test-pg -p 55433:5432 \
+  -e POSTGRES_PASSWORD=test -e POSTGRES_DB=robotcare_test \
+  pgvector/pgvector:pg16
+
 cd backend
-python -m pip install -e ".[test,postgres]"
-$env:ROBOTCARE_TEST_POSTGRES_URL='postgresql+psycopg://robotcare:<password>@127.0.0.1:5432/robotcare_test'
-$env:ROBOTCARE_DATABASE_URL=$env:ROBOTCARE_TEST_POSTGRES_URL
-$env:ROBOTCARE_ALLOW_DESTRUCTIVE_POSTGRES_TESTS='1'
-$env:ROBOTCARE_JWT_SECRET='<test-only-secret>'
-$env:ROBOTCARE_ATTACHMENT_DIR="$env:TEMP\robotcare-attachments"
-$env:ROBOTCARE_REPORT_DIR="$env:TEMP\robotcare-reports"
-alembic upgrade head
-python -m pytest tests/test_postgres_integration.py -v
-python ../scripts/postgres_integration_smoke.py
+python -m pip install -e ".[test]"
+# 缺省即为 postgresql+psycopg://postgres:test@127.0.0.1:55433/robotcare_test，
+# 需要覆盖时设置 ROBOTCARE_TEST_DATABASE_URL
+python -m pytest
 ```
 
 ```powershell

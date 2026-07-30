@@ -11,9 +11,18 @@ uvicorn app.main:app --reload
 
 OpenAPI documentation: `http://127.0.0.1:8000/docs`.
 
-SQLite is used by default. Set `ROBOTCARE_DATABASE_URL` to a SQLAlchemy PostgreSQL URL for deployment. The first application startup creates tables and seeds two Haier models (`JH69U1`, `VC35U1`) with deterministic flows for failure to dock and Wi-Fi setup failure.
+PostgreSQL (with pgvector) is the only supported database. Set
+`ROBOTCARE_DATABASE_URL` to a SQLAlchemy PostgreSQL URL
+(`postgresql+psycopg://...`); run `alembic upgrade head` before starting the
+API. Startup seeds two Haier models (`JH69U1`, `VC35U1`) with deterministic
+flows for failure to dock and Wi-Fi setup failure.
 
 ## Test
+
+Tests run against a dedicated PostgreSQL test container
+(`pgvector/pgvector:pg16`, default URL
+`postgresql+psycopg://postgres:test@127.0.0.1:55433/robotcare_test`, override
+with `ROBOTCARE_TEST_DATABASE_URL`):
 
 ```powershell
 python -m pytest
@@ -94,7 +103,7 @@ state transitions return `409`; request validation returns `422`.
 
 ## Proven in the current MVP
 
-- SQLite tables are created and the two initial flows are seeded at startup.
+- Database tables come from Alembic migrations; the two initial flows are seeded at startup.
 - JWT authentication uses Argon2 password hashes.
 - Device, diagnostic, feedback, and report routes enforce resource ownership.
 - Automated tests cover registration/login, isolation, both terminal states,

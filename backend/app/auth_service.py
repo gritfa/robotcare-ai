@@ -12,7 +12,6 @@ from uuid import uuid4
 from fastapi import HTTPException, Request, Response, status
 from sqlalchemy import case, delete, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from .config import Settings, get_settings
@@ -217,24 +216,13 @@ def acquire_login_attempt_lock(
     """
 
     resolved_settings = settings or get_settings()
-    dialect_name = db.get_bind().dialect.name
-    if dialect_name == "sqlite":
-        # SQLite is the local-development dialect. BEGIN IMMEDIATE serializes
-        # writers before the rate-limit read; PostgreSQL remains account-scoped.
-        db.execute(text("BEGIN IMMEDIATE"))
-        return
-    if dialect_name == "postgresql":
-        # All callers acquire the same lock set in numeric order, preventing
-        # deadlocks when requests share an email, an IP, or both.
-        for lock_id in login_attempt_lock_ids(email, request, resolved_settings):
-            db.execute(
-                text("SELECT pg_advisory_xact_lock(:lock_id)"),
-                {"lock_id": lock_id},
-            )
-        return
-    raise RuntimeError(
-        f"Login attempt locking is not implemented for {dialect_name}"
-    )
+    # All callers acquire the same lock set in numeric order, preventing
+    # deadlocks when requests share an email, an IP, or both.
+    for lock_id in login_attempt_lock_ids(email, request, resolved_settings):
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_id)"),
+            {"lock_id": lock_id},
+        )
 
 
 def record_login_failure(
@@ -250,15 +238,7 @@ def record_login_failure(
 
     for key in login_throttle_keys(email, request, resolved_settings):
         maximum_failures = login_throttle_limit(key, resolved_settings)
-        dialect_name = db.get_bind().dialect.name
-        if dialect_name == "sqlite":
-            insert_statement = sqlite_insert(LoginThrottle)
-        elif dialect_name == "postgresql":
-            insert_statement = postgresql_insert(LoginThrottle)
-        else:  # pragma: no cover - supported deployments use SQLite or PostgreSQL
-            raise RuntimeError(
-                f"Atomic login throttling is not implemented for {dialect_name}"
-            )
+        insert_statement = postgresql_insert(LoginThrottle)
 
         existing_window_is_current = LoginThrottle.window_started_at > window_cutoff
         next_failure_count = case(

@@ -4,39 +4,25 @@ import json
 import logging
 import sys
 from io import StringIO
-from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 
-from alembic import command
-from alembic.config import Config
 from fastapi import Request
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import create_engine, select, text
 
 from app.knowledge_service import DashScopeEmbeddingProvider
 from app.main import create_app
 from app.models import KnowledgeChunk, KnowledgeDocument, RobotModel
 from app.observability import TRACE_HEADER, configure_json_logging, redact, request_logger
-from conftest import auth, register
-
-
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _alembic_config(database_url: str) -> Config:
-    config = Config(str(BACKEND_ROOT / "alembic.ini"))
-    config.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
-    return config
+from conftest import TEST_DATABASE_URL, auth, register
 
 
 def _migrated_client(tmp_path, monkeypatch) -> tuple[TestClient, object]:
-    database_url = f"sqlite:///{(tmp_path / 'ready.db').as_posix()}"
+    # The shared test database is migrated to head once per session by conftest.
     monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
-    command.upgrade(_alembic_config(database_url), "head")
     app = create_app(
-        database_url,
+        TEST_DATABASE_URL,
         attachment_dir=tmp_path / "attachments",
         report_dir=tmp_path / "reports",
         auto_create_schema=False,
@@ -85,10 +71,10 @@ def test_http_and_validation_errors_keep_detail_and_add_top_level_trace(client):
 
 def test_unhandled_exception_is_generic_and_does_not_log_exception_message(tmp_path):
     app = create_app(
-        f"sqlite:///{(tmp_path / 'error.db').as_posix()}",
+        TEST_DATABASE_URL,
         attachment_dir=tmp_path / "attachments",
         report_dir=tmp_path / "reports",
-        auto_create_schema=True,
+        auto_create_schema=False,
     )
 
     @app.get("/test-unhandled")
@@ -159,8 +145,25 @@ def test_ready_fails_closed_but_health_remains_live(tmp_path, monkeypatch):
     assert health.json() == {"status": "ok"}
 
 
-def test_ready_rejects_an_unversioned_but_reachable_database(client):
-    response = client.get("/ready", headers={TRACE_HEADER: "unversioned-db"})
+def test_ready_rejects_an_unversioned_but_reachable_database(
+    tmp_path, migration_database_url
+):
+    # A reachable database whose schema was auto-created without Alembic
+    # stamping must fail readiness.
+    engine = create_engine(migration_database_url)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    engine.dispose()
+    app = create_app(
+        migration_database_url,
+        attachment_dir=tmp_path / "attachments",
+        report_dir=tmp_path / "reports",
+        auto_create_schema=True,
+    )
+    with TestClient(app) as unversioned_client:
+        response = unversioned_client.get(
+            "/ready", headers={TRACE_HEADER: "unversioned-db"}
+        )
 
     assert response.status_code == 503
     payload = response.json()
@@ -216,10 +219,10 @@ def test_redact_recursively_covers_identity_credentials_and_image_content():
 
 def test_request_log_is_json_and_excludes_headers_query_and_body(tmp_path):
     app = create_app(
-        f"sqlite:///{(tmp_path / 'logging.db').as_posix()}",
+        TEST_DATABASE_URL,
         attachment_dir=tmp_path / "attachments",
         report_dir=tmp_path / "reports",
-        auto_create_schema=True,
+        auto_create_schema=False,
     )
 
     @app.post("/test-log")

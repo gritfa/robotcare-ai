@@ -11,7 +11,6 @@ from pathlib import Path
 from time import perf_counter
 from typing import Protocol
 
-import numpy as np
 from pypdf import PdfReader
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import Float, bindparam, case, delete, distinct, func, select
@@ -427,17 +426,6 @@ def release_knowledge_package(
     }
 
 
-def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float | None:
-    left_vector = np.asarray(left, dtype=np.float64)
-    right_vector = np.asarray(right, dtype=np.float64)
-    if left_vector.ndim != 1 or right_vector.ndim != 1 or left_vector.shape != right_vector.shape:
-        return None
-    denominator = float(np.linalg.norm(left_vector) * np.linalg.norm(right_vector))
-    if denominator == 0:
-        return None
-    return float(np.dot(left_vector, right_vector) / denominator)
-
-
 def search_knowledge(
     db: Session,
     *,
@@ -450,46 +438,13 @@ def search_knowledge(
     query_vector = normalize_embedding(provider.embed_query(query))
     if query_vector is None:
         return []
-    if db.bind is not None and db.bind.dialect.name == "postgresql":
-        return _search_knowledge_postgresql(
-            db,
-            robot_model_id=robot_model_id,
-            query_vector=query_vector,
-            top_k=top_k,
-            min_score=min_score,
-        )
-    rows = db.execute(
-        select(KnowledgeChunk, KnowledgeDocument)
-        .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
-        .where(
-            KnowledgeDocument.robot_model_id == robot_model_id,
-            KnowledgeChunk.embedding.is_not(None),
-        )
-    ).all()
-
-    results: list[SearchResult] = []
-    for chunk, document in rows:
-        try:
-            stored_vector = normalize_embedding(chunk.embedding)
-        except (TypeError, ValueError):
-            continue
-        if stored_vector is None:
-            continue
-        score = _cosine_similarity(query_vector, stored_vector)
-        if score is None or score < min_score:
-            continue
-        results.append(
-            SearchResult(
-                score=score,
-                content=chunk.content,
-                document_title=document.title,
-                document_sha256=document.sha256,
-                source_url=document.source_url,
-                page_number=chunk.page_number,
-            )
-        )
-    results.sort(key=lambda item: item.score, reverse=True)
-    return results[:top_k]
+    return _search_knowledge_postgresql(
+        db,
+        robot_model_id=robot_model_id,
+        query_vector=query_vector,
+        top_k=top_k,
+        min_score=min_score,
+    )
 
 
 def _search_knowledge_postgresql(

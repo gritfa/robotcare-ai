@@ -11,11 +11,12 @@ _locks: dict[tuple[str, object], tuple[Lock, int]] = {}
 
 @contextmanager
 def resource_lock(namespace: str, key: object) -> Iterator[None]:
-    """Serialize one resource inside a process without leaking lock entries.
+    """Serialize duplicate local filesystem work inside one process.
 
-    PostgreSQL callers still take a database row lock for cross-process safety.
-    This lock supplies deterministic SQLite semantics and avoids duplicate local
-    filesystem work.
+    Database-backed resources rely on PostgreSQL row/advisory locks for
+    cross-process correctness. This lock only prevents one process from
+    rendering the same local artifact (for example a report PDF) twice
+    concurrently; cross-process safety comes from atomic file replacement.
     """
 
     resource_key = (namespace, key)

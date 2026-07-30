@@ -1,28 +1,18 @@
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.auth_maintenance_cli import main
 from app.config import get_settings
 from app.models import ApiRateLimit, LoginThrottle
-
-
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
+from conftest import TEST_DATABASE_URL
 
 
 def test_cleanup_login_throttles_command_deletes_expired_bucket(
-    tmp_path, monkeypatch, capsys
+    monkeypatch, capsys
 ):
-    database_url = f"sqlite:///{(tmp_path / 'maintenance.db').as_posix()}"
-    config = Config(str(BACKEND_ROOT / "alembic.ini"))
-    config.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
-    config.set_main_option("sqlalchemy.url", database_url)
-    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
-    command.upgrade(config, "head")
+    database_url = TEST_DATABASE_URL
 
     now = datetime.now(timezone.utc)
     engine = create_engine(database_url)

@@ -363,16 +363,14 @@ class _MustNotCallProvider:
 
 
 def _evaluate_with_synthetic_retrieval(cases: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """用内存库 + 合成说明书 + 确定性 hashing 向量真实执行四个检索类指标。
+    """用评测 PG 库 + 合成说明书 + 确定性 hashing 向量真实执行四个检索类指标。
 
     只评测合成型号（RC-*）的用例：真实型号的官方 PDF 不入库，无法离线复现检索。
     hashing 向量是词面相似度而非语义相似度——分数结论不能外推到 DashScope
     语义向量，报告 reason 中已声明该边界。
     """
-    from sqlalchemy import create_engine, select
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import select
 
-    from app.database import Base
     from app.generation_service import generate_answer
     from app.issue_classifier import classify_issue
     from app.knowledge_service import (
@@ -382,11 +380,11 @@ def _evaluate_with_synthetic_retrieval(cases: list[dict[str, Any]]) -> dict[str,
     )
     from app.models import RobotModel
     from app.seed import seed_database
+    from scripts.eval_db import fresh_eval_session_factory
     from scripts.synthetic_flows_data import SYNTHETIC_FLOWS
 
-    engine = create_engine("sqlite://")
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    factory = fresh_eval_session_factory()
+    engine = factory.kw["bind"]
     provider = HashingNgramEmbeddingProvider()
     synthetic_dir = project_root() / "knowledge" / "synthetic"
 
@@ -411,7 +409,7 @@ def _evaluate_with_synthetic_retrieval(cases: list[dict[str, Any]]) -> dict[str,
             return evaluable, skipped
 
         boundary = (
-            "内存库 + 合成说明书 + 确定性 hashing 词面向量真实执行；"
+            "评测 PG 库 + 合成说明书 + 确定性 hashing 词面向量真实执行；"
             "结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过"
         )
 

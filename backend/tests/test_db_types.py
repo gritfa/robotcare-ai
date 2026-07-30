@@ -2,15 +2,13 @@ import json
 
 import pytest
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import Text
-from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.dialects import postgresql
 
 from app.db_types import EMBEDDING_DIMENSION, EmbeddingVector, normalize_embedding
 
 
-def test_embedding_type_uses_text_for_sqlite_and_vector_for_postgres():
+def test_embedding_type_is_pgvector_with_fixed_dimension():
     field = EmbeddingVector()
-    assert isinstance(field.load_dialect_impl(sqlite.dialect()), Text)
     postgres_type = field.load_dialect_impl(postgresql.dialect())
     assert isinstance(postgres_type, VECTOR)
     assert postgres_type.dim == EMBEDDING_DIMENSION

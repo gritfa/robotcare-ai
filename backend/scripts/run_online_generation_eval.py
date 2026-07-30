@@ -3,7 +3,7 @@
 用法（在持有 ROBOTCARE_DASHSCOPE_API_KEY 的机器上）：
     python scripts/run_online_generation_eval.py --limit 20
 
-流程：内存库入库合成说明书（hashing 向量保证检索确定性）→ 对 faithfulness 用例真实调用
+流程：评测 PG 库入库合成说明书（hashing 向量保证检索确定性）→ 对 faithfulness 用例真实调用
 生成模型 → 校验：回答仅引用检索片段（引用页码 ⊆ 检索页码）、必须引用期望来源、
 回答不触发安全规则；对 refusal 用例校验模型层拒答（检索有命中但内容不支持时输出 REFUSE）。
 结果写 docs/evidence/generation_online_eval.json，不改动离线审计报告。
@@ -20,16 +20,15 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_ROOT.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from sqlalchemy import create_engine, select  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy import select  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
-from app.database import Base  # noqa: E402
 from app.generation_service import DashScopeGenerationProvider, generate_answer  # noqa: E402
 from app.knowledge_service import HashingNgramEmbeddingProvider, ingest_pdf  # noqa: E402
 from app.models import RobotModel  # noqa: E402
 from app.safety import detect_safety_block  # noqa: E402
 from app.seed import seed_database  # noqa: E402
+from scripts.eval_db import fresh_eval_session_factory  # noqa: E402
 
 SYNTHETIC_MODEL_CODES = ("RC-S200", "RC-M500", "RC-X800")
 
@@ -51,9 +50,7 @@ def main() -> int:
         settings.dashscope_api_key, settings.generation_model, settings.dashscope_base_url
     )
     embedding = HashingNgramEmbeddingProvider()
-    engine = create_engine("sqlite://")
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    factory = fresh_eval_session_factory()
 
     cases = [
         json.loads(line)

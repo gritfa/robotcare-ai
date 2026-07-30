@@ -1,18 +1,113 @@
-import pytest
-from fastapi.testclient import TestClient
+import os
 from io import BytesIO
+from pathlib import Path
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 
 from app.main import create_app
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+# 单方言：所有测试都跑在专用 PostgreSQL 测试容器上（pgvector/pgvector:pg16）。
+TEST_DATABASE_URL = os.getenv(
+    "ROBOTCARE_TEST_DATABASE_URL",
+    "postgresql+psycopg://postgres:test@127.0.0.1:55433/robotcare_test",
+)
+
+
+def alembic_config(database_url: str) -> Config:
+    config = Config(str(BACKEND_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_ROOT / "migrations"))
+    config.set_main_option("sqlalchemy.url", database_url)
+    return config
+
+
+def _reset_schema(database_url: str) -> None:
+    engine = create_engine(database_url, poolclass=NullPool)
+    with engine.begin() as connection:
+        connection.execute(text("DROP SCHEMA public CASCADE"))
+        connection.execute(text("CREATE SCHEMA public"))
+    engine.dispose()
+
+
+def fresh_database(database_name: str) -> str:
+    """Return the URL of an empty database on the test server, creating it on demand."""
+
+    base = make_url(TEST_DATABASE_URL)
+    admin = create_engine(base, poolclass=NullPool, isolation_level="AUTOCOMMIT")
+    with admin.connect() as connection:
+        exists = connection.scalar(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"),
+            {"name": database_name},
+        )
+        if not exists:
+            connection.execute(text(f'CREATE DATABASE "{database_name}"'))
+    admin.dispose()
+    database_url = base.set(database=database_name).render_as_string(hide_password=False)
+    _reset_schema(database_url)
+    return database_url
+
+
+@pytest.fixture(scope="session")
+def database_schema():
+    """Migrate the shared test database to head exactly once per session."""
+
+    _reset_schema(TEST_DATABASE_URL)
+    previous = os.environ.pop("ROBOTCARE_DATABASE_URL", None)
+    try:
+        command.upgrade(alembic_config(TEST_DATABASE_URL), "head")
+    finally:
+        if previous is not None:
+            os.environ["ROBOTCARE_DATABASE_URL"] = previous
+    engine = create_engine(TEST_DATABASE_URL, poolclass=NullPool)
+    tables = [
+        name
+        for name in inspect(engine).get_table_names()
+        if name != "alembic_version"
+    ]
+    yield engine, tables
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _clean_database(database_schema):
+    """Truncate every table after each test; keeps the migrated schema in place."""
+
+    engine, tables = database_schema
+    yield
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "TRUNCATE TABLE "
+                + ", ".join(f'"{name}"' for name in tables)
+                + " RESTART IDENTITY CASCADE"
+            )
+        )
+
+
+@pytest.fixture
+def migration_database_url(monkeypatch):
+    """A dedicated empty database for migration tests (never the shared test DB)."""
+
+    monkeypatch.delenv("ROBOTCARE_DATABASE_URL", raising=False)
+    return fresh_database("robotcare_migration")
 
 
 @pytest.fixture
 def client(tmp_path):
     app = create_app(
-        f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        TEST_DATABASE_URL,
         attachment_dir=tmp_path / "attachments",
         report_dir=tmp_path / "reports",
-        auto_create_schema=True,
+        auto_create_schema=False,
     )
     with TestClient(app) as test_client:
         yield test_client

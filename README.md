@@ -36,7 +36,7 @@
 | 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；本机 Edge 已验证普通用户访问管理员页面被拒绝，管理员内容运营 E2E 仍为【计划】 |
 | 管理员完整内容运营 | `【计划】` | 知识上传/重建/停用、流程审核发布、评测执行与结果持久化尚未实现，不能称管理后台全部完成 |
 | Docker 静态部署契约 | `【已验证】` | 部署检查脚本执行与 py_compile 通过；静态检查覆盖启动迁移、外部密钥、认证生产门禁、PostgreSQL/附件/报告持久卷、`/ready` 健康检查和 Noto CJK 字体配置 |
-| Docker 实际部署 | `【待验证】` | 本机没有 Docker，尚未实际构建镜像、启动 Compose、执行迁移或验证重建后数据保持 |
+| Docker 实际部署 | `【已验证：本机 development】` | Docker 29.5.2 实测：镜像构建、Compose 三服务 healthy、启动自动迁移至 head、pgvector 就绪、down/up 重建数据保持；production 无 key 启动被门禁拒绝（按设计）；带 key 的 production 启动仍待持 key 机器执行（docs/evidence/docker_deploy_20260730.md） |
 
 ## 已验证命令
 

@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
-import type { AdminAuditLog, AdminDiagnosticDetail, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
+import type { AdminAuditLog, AdminDiagnosticDetail, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
+  KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
 
 export { TOKEN_KEY } from './authSession'
@@ -341,6 +342,8 @@ export const knowledgeApi = {
     const response = await http.post('/knowledge/search', body)
     return listPayload<KnowledgeSearchResult>(response.data)
   },
+  answer: async (body: { robot_model_id: number; query: string; top_k?: number }) =>
+    payload<KnowledgeAnswer>((await http.post('/knowledge/answer', body)).data),
   health: async () => payload<KnowledgeHealth>((await http.get('/knowledge/health')).data),
   status: async () => listPayload<KnowledgeModelStatus>((await http.get('/knowledge/status')).data),
 }

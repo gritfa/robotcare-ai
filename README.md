@@ -25,8 +25,9 @@
 | 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；4 条逐步骤说明书复核流程已发布，1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
 | 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；Alembic head `20260722_0007` 增加状态约束、独立 IP 登录桶和 API 配额表；本地 SQLite 已备份升级并通过完整性、外键与零漂移检查 |
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
-| RAG/安全评测数据与离线审计 | `【已验证】` | 已形成 113 条分项用例；离线实际执行 `safety_block 15/15`、`source_page 14/14`、`step_selection 14/14`，JSON/Markdown 报告已保存；113 条均为 `needs_human_review` |
-| 完整 RAG 在线评测 | `【计划】` | `model_isolation`、`retrieval_recall`、`refusal`、`classification`、`faithfulness` 均为 `not_run`；当前不生成自然语言答案，也不能称评测集已人工审核 |
+| RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 375 条（113 条原有 + 262 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 39/39`、`step_selection 39/39`、`model_isolation 25/25`、`retrieval_recall 55/55`、`classification 50/50`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
+| LLM 生成层（强制引用/拒答/留痕） | `【已验证：本地 mock】` | `POST /knowledge/answer`：安全前置阻断→检索→生成；检索空/低于阈值不调模型直接拒答，引用缺失/越界拒答，回答命中安全规则拦截留痕；generation_records 全量留痕（prompt 版本/模型/片段 SHA/引用/耗时）；6 项 pytest 用 mock Provider 验证，真实 DashScope 生成调用未在本机执行 |
+| faithfulness 在线评测 | `【待验证】` | 唯一剩余 `not_run` 指标；`scripts/run_online_generation_eval.py` 已交付，需在持有 DashScope key 的机器执行，无 key 时脚本明确拒绝伪造结果 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 双方言 256 维字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚已通过单元、静态编译与 SQLite 回归 |
 | PostgreSQL + pgvector 真实运行 | `【已验证：GitHub Actions】` | PostgreSQL 16 + pgvector Job 已验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；本机 Docker、多实例压力与生产数据仍未验证 |
 | 远端 CI | `【已验证】` | 提交 `1bccb82` 的 GitHub Actions 六个 Job 全绿：SQLite、PostgreSQL + pgvector、前端、Chromium E2E、部署契约和知识校验 |

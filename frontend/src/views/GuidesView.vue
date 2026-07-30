@@ -3,8 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Document, InfoFilled, Link, Reading, Refresh, Search } from '@element-plus/icons-vue'
 import { apiError, deviceApi, knowledgeApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
+import { refusalPresentation } from '../answerDisplay'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
-import type { Device, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, RobotModel } from '../types'
+import type { Device, KnowledgeAnswer, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, RobotModel } from '../types'
 
 const TOP_K = 3
 const devices = ref<Device[]>([])
@@ -22,6 +23,9 @@ const searchError = ref('')
 const statusError = ref('')
 const safetyError = ref<ApiErrorInfo | null>(null)
 const knowledgeHealth = ref<KnowledgeHealth | null>(null)
+const answering = ref(false)
+const answerResult = ref<KnowledgeAnswer | null>(null)
+const answerError = ref('')
 
 const selectedModel = computed(() => models.value.find(model => String(model.id) === selectedModelId.value))
 const selectedStatus = computed(() => statuses.value.find(status => String(status.robot_model_id) === selectedModelId.value))
@@ -76,6 +80,30 @@ function clearSearch() {
   searchAttempted.value = false
   searchError.value = ''
   safetyError.value = null
+  answerResult.value = null
+  answerError.value = ''
+}
+
+async function askAnswer() {
+  const robotModelId = Number(selectedModelId.value)
+  const normalizedQuery = query.value.trim()
+  if (!Number.isFinite(robotModelId) || !normalizedQuery) return
+  answering.value = true
+  answerError.value = ''
+  answerResult.value = null
+  safetyError.value = null
+  try {
+    answerResult.value = await knowledgeApi.answer({ robot_model_id: robotModelId, query: normalizedQuery })
+  } catch (error) {
+    const parsed = parseApiError(error, '智能回答服务暂不可用，请稍后重试')
+    if (parsed.code === 'SAFETY_BLOCKED') {
+      safetyError.value = parsed
+    } else {
+      answerError.value = userFacingApiError(error, '智能回答服务暂不可用，请稍后重试')
+    }
+  } finally {
+    answering.value = false
+  }
 }
 
 async function loadStatus() {
@@ -184,7 +212,10 @@ function safeSourceUrl(value: string) {
           </el-form-item>
           <div class="search-actions">
             <span>按 Ctrl + Enter 也可检索；最多返回 {{ TOP_K }} 条相关资料。</span>
-            <el-button class="brand-button" type="primary" size="large" :icon="Search" :loading="searching" :disabled="!canSearch" @click="searchKnowledge">检索官方资料</el-button>
+            <div class="action-buttons">
+              <el-button size="large" :loading="answering" :disabled="!canSearch" @click="askAnswer">智能回答（附引用）</el-button>
+              <el-button class="brand-button" type="primary" size="large" :icon="Search" :loading="searching" :disabled="!canSearch" @click="searchKnowledge">检索官方资料</el-button>
+            </div>
           </div>
         </el-form>
       </section>
@@ -214,6 +245,34 @@ function safeSourceUrl(value: string) {
         <p class="status-note"><el-icon><InfoFilled /></el-icon>数量来自服务端实时状态，不代表资料已覆盖所有问题。</p>
       </aside>
     </div>
+
+    <section v-if="answerError || answerResult" class="results-section">
+      <el-alert v-if="answerError" :title="answerError" type="error" :closable="false" show-icon />
+      <template v-else-if="answerResult">
+        <el-alert
+          v-if="answerResult.status === 'refused'"
+          :title="refusalPresentation(answerResult.refusal_reason).title"
+          :description="refusalPresentation(answerResult.refusal_reason).description"
+          :type="refusalPresentation(answerResult.refusal_reason).type"
+          :closable="false"
+          show-icon
+        />
+        <article v-else class="panel answer-card">
+          <div class="answer-head">
+            <h2>智能回答</h2>
+            <el-tag effect="plain" type="success">每条论断均标注资料来源</el-tag>
+          </div>
+          <p class="answer-body">{{ answerResult.answer }}</p>
+          <div class="answer-citations">
+            <span class="citations-title">引用来源：</span>
+            <el-tag v-for="citation in answerResult.citations" :key="citation.index" effect="light" class="citation-tag">
+              [{{ citation.index }}] 说明书第 {{ citation.page_number }} 页
+            </el-tag>
+          </div>
+          <p class="answer-note">回答只依据已收录资料生成，不代表官方诊断；涉及安全问题请联系官方售后。</p>
+        </article>
+      </template>
+    </section>
 
     <section class="results-section">
       <div class="results-head">
@@ -250,5 +309,5 @@ function safeSourceUrl(value: string) {
 </template>
 
 <style scoped>
-.guide-page{max-width:1320px}.disclaimer-alert{margin-bottom:20px}.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px}.search-panel{padding:28px}.section-title{display:flex;gap:14px;align-items:center;margin-bottom:25px}.section-title h2,.status-head h2,.results-head h2{margin:0;font-size:19px}.section-title p,.status-head p,.results-head p{margin:5px 0 0;color:var(--muted);font-size:12px}.title-icon{width:45px;height:45px;border-radius:12px;background:var(--soft);color:var(--brand);display:grid;place-items:center;font-size:22px}.selector-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.option-count{float:right;margin-left:24px;color:var(--muted)}.search-actions{display:flex;align-items:center;justify-content:space-between;gap:20px}.search-actions>span{font-size:11px;color:var(--muted)}.status-panel{padding:24px;align-self:start}.status-head{display:flex;justify-content:space-between;align-items:start;padding-bottom:19px;border-bottom:1px solid var(--line)}.health-alert{margin-top:16px}.model-code{display:inline-block;margin:20px 0 8px;padding:4px 9px;border-radius:6px;background:var(--soft);color:var(--brand);font-size:12px;font-weight:800;letter-spacing:.6px}.status-panel>strong{display:block;font-size:14px}.status-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:18px 0}.status-stats div{background:#f6f9f8;border-radius:10px;padding:12px 5px;text-align:center}.status-stats b,.status-stats span{display:block}.status-stats b{font-size:19px;color:var(--brand)}.status-stats span{font-size:10px;color:var(--muted);margin-top:4px}.status-note{display:flex;align-items:flex-start;gap:7px;color:var(--muted);font-size:11px;line-height:1.6;margin:18px 0 0}.status-note .el-icon{margin-top:2px;color:var(--brand);flex:none}.results-section{margin-top:25px}.results-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.result-list{display:grid;gap:12px}.result-card{display:grid;grid-template-columns:42px 1fr;padding:22px;gap:15px}.result-rank{width:34px;height:34px;border-radius:10px;background:#153e33;color:#fff;display:grid;place-items:center;font-weight:800}.result-meta,.source-row{display:flex;align-items:center;justify-content:space-between;gap:14px}.result-meta>span{display:flex;align-items:center;gap:7px;font-weight:750;font-size:13px}.result-meta .el-icon{color:var(--brand)}.result-content>p{margin:14px 0;color:#40534b;line-height:1.85;white-space:pre-wrap}.source-row{justify-content:flex-start;padding-top:13px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}.source-row a{display:flex;align-items:center;gap:4px;color:var(--brand);font-weight:700}.missing-source{color:#a26a13}.empty-result,.result-placeholder{min-height:150px;display:flex;align-items:center;justify-content:center;gap:17px;padding:28px;color:var(--muted);text-align:left}.empty-result{flex-direction:column;text-align:center}.empty-result>.el-icon,.result-placeholder>.el-icon{font-size:34px;color:#8eb6a7}.empty-result h3,.result-placeholder h3{margin:0;color:var(--ink);font-size:16px}.empty-result p,.result-placeholder p{margin:6px 0 0;font-size:12px;line-height:1.7;max-width:650px}@media(max-width:1000px){.workspace-grid{grid-template-columns:1fr}.status-panel{width:100%}}@media(max-width:760px){.selector-grid{grid-template-columns:1fr}.search-actions{align-items:flex-start;flex-direction:column}.search-actions .el-button{width:100%}}
+.guide-page{max-width:1320px}.disclaimer-alert{margin-bottom:20px}.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px}.search-panel{padding:28px}.section-title{display:flex;gap:14px;align-items:center;margin-bottom:25px}.section-title h2,.status-head h2,.results-head h2{margin:0;font-size:19px}.section-title p,.status-head p,.results-head p{margin:5px 0 0;color:var(--muted);font-size:12px}.title-icon{width:45px;height:45px;border-radius:12px;background:var(--soft);color:var(--brand);display:grid;place-items:center;font-size:22px}.selector-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.option-count{float:right;margin-left:24px;color:var(--muted)}.search-actions{display:flex;align-items:center;justify-content:space-between;gap:20px}.action-buttons{display:flex;gap:10px}.answer-card{padding:26px}.answer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.answer-head h2{margin:0;font-size:18px}.answer-body{margin:0 0 16px;line-height:1.9;color:#2d3f38;white-space:pre-wrap}.answer-citations{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:14px;border-top:1px solid var(--line)}.citations-title{font-size:12px;color:var(--muted)}.citation-tag{font-size:12px}.answer-note{margin:12px 0 0;font-size:11px;color:var(--muted)}.search-actions>span{font-size:11px;color:var(--muted)}.status-panel{padding:24px;align-self:start}.status-head{display:flex;justify-content:space-between;align-items:start;padding-bottom:19px;border-bottom:1px solid var(--line)}.health-alert{margin-top:16px}.model-code{display:inline-block;margin:20px 0 8px;padding:4px 9px;border-radius:6px;background:var(--soft);color:var(--brand);font-size:12px;font-weight:800;letter-spacing:.6px}.status-panel>strong{display:block;font-size:14px}.status-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:18px 0}.status-stats div{background:#f6f9f8;border-radius:10px;padding:12px 5px;text-align:center}.status-stats b,.status-stats span{display:block}.status-stats b{font-size:19px;color:var(--brand)}.status-stats span{font-size:10px;color:var(--muted);margin-top:4px}.status-note{display:flex;align-items:flex-start;gap:7px;color:var(--muted);font-size:11px;line-height:1.6;margin:18px 0 0}.status-note .el-icon{margin-top:2px;color:var(--brand);flex:none}.results-section{margin-top:25px}.results-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.result-list{display:grid;gap:12px}.result-card{display:grid;grid-template-columns:42px 1fr;padding:22px;gap:15px}.result-rank{width:34px;height:34px;border-radius:10px;background:#153e33;color:#fff;display:grid;place-items:center;font-weight:800}.result-meta,.source-row{display:flex;align-items:center;justify-content:space-between;gap:14px}.result-meta>span{display:flex;align-items:center;gap:7px;font-weight:750;font-size:13px}.result-meta .el-icon{color:var(--brand)}.result-content>p{margin:14px 0;color:#40534b;line-height:1.85;white-space:pre-wrap}.source-row{justify-content:flex-start;padding-top:13px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}.source-row a{display:flex;align-items:center;gap:4px;color:var(--brand);font-weight:700}.missing-source{color:#a26a13}.empty-result,.result-placeholder{min-height:150px;display:flex;align-items:center;justify-content:center;gap:17px;padding:28px;color:var(--muted);text-align:left}.empty-result{flex-direction:column;text-align:center}.empty-result>.el-icon,.result-placeholder>.el-icon{font-size:34px;color:#8eb6a7}.empty-result h3,.result-placeholder h3{margin:0;color:var(--ink);font-size:16px}.empty-result p,.result-placeholder p{margin:6px 0 0;font-size:12px;line-height:1.7;max-width:650px}@media(max-width:1000px){.workspace-grid{grid-template-columns:1fr}.status-panel{width:100%}}@media(max-width:760px){.selector-grid{grid-template-columns:1fr}.search-actions{align-items:flex-start;flex-direction:column}.search-actions .el-button{width:100%}}
 </style>

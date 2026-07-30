@@ -141,3 +141,19 @@ export interface AdminAuditLog {
   details_json: Record<string, unknown>
   created_at: string
 }
+
+export interface AnswerCitation {
+  index: number
+  source_url: string
+  page_number: number
+  score: number
+  document_sha256: string
+}
+
+export interface KnowledgeAnswer {
+  status: 'answered' | 'refused'
+  answer: string | null
+  citations: AnswerCitation[]
+  refusal_reason: 'knowledge_gap' | 'model_refused' | 'citation_invalid' | 'unsafe_answer' | null
+  record_id: number
+}

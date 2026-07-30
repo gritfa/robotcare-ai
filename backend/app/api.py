@@ -33,6 +33,7 @@ from .config import Settings, get_settings
 from .database import get_db
 from .diagnostic_graph import feedback_decision_graph
 from .issue_classifier import classify_issue
+from .alerting import send_alert
 from .generation_service import generate_answer
 from .knowledge_service import get_knowledge_health, get_knowledge_status, search_knowledge
 from .models import (
@@ -507,6 +508,7 @@ def knowledge_answer(
             robot_model_id=payload.robot_model_id,
             error_type=type(exc).__name__,
         )
+        send_alert("generation_unavailable", "智能回答服务调用失败（生成模型不可用），请检查 DashScope 配置与额度")
         raise HTTPException(status_code=503, detail="Generation service unavailable") from exc
     return KnowledgeAnswerResponse(
         status=result.status,
@@ -997,6 +999,10 @@ def create_diagnostic(
             )
         )
         db.commit()
+        send_alert(
+            f"safety_block:{safety_block.category}",
+            f"触发高危阻断：{safety_block.category}（详情见管理员后台安全阻断页）",
+        )
         emit_json_log(
             logging.WARNING,
             "safety_block",

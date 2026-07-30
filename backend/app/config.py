@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     knowledge_answer_user_per_minute: int = Field(default=6, ge=1, le=1000)
     knowledge_answer_ip_per_minute: int = Field(default=20, ge=1, le=5000)
     generation_model: str = "qwen-plus"
+    alert_webhook_url: str | None = None
+    alert_webhook_format: str = "wecom"  # wecom | dingtalk | generic
+    alert_cooldown_seconds: int = Field(default=14400, ge=60, le=86400)
     knowledge_search_cache_ttl_seconds: int = Field(default=30, ge=1, le=300)
     cors_origins: str = "http://localhost:5173"
     attachment_dir: str = "./data/attachments"

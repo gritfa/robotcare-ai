@@ -134,6 +134,7 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(
         "issue_categories",
         "knowledge_chunks",
         "knowledge_documents",
+        "knowledge_gap_events",
         "login_throttles",
         "pending_file_deletions",
         "refresh_tokens",
@@ -430,7 +431,7 @@ def test_state_constraint_migration_upgrades_0004_without_data_loss(
             text("SELECT outcome FROM step_executions WHERE id = 9001")
         ) == "not_resolved"
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-            "20260730_0008"
+            "20260730_0009"
         )
     engine.dispose()
 

@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
-import type { AdminAuditLog, AdminDiagnosticDetail, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
+import type { AdminAuditLog, AdminContentGap, AdminDiagnosticDetail, AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
   KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
 
@@ -353,6 +353,8 @@ export const adminApi = {
   models: async () => listPayload<AdminModel>((await http.get('/admin/models')).data),
   setModelActive: async (id: EntityId, active: boolean) => payload<AdminModel>((await http.patch(`/admin/models/${id}`, { active })).data),
   knowledgeStatus: async () => listPayload<KnowledgeModelStatus>((await http.get('/admin/knowledge/status')).data),
+  contentGaps: async (days = 30, limit = 20) => listPayload<AdminContentGap>((await http.get('/admin/content-gaps', { params: { days, limit } })).data),
+  uploadKnowledge: async (form: FormData) => payload<AdminKnowledgeUploadResult>((await http.post('/admin/knowledge/upload', form)).data),
   safetyBlocks: async (limit = 20) => listPayload<AdminSafetyBlock>((await http.get('/admin/safety-blocks', { params: { limit } })).data),
   safetyBlockDetail: async (id: EntityId) => payload<AdminSafetyBlockDetail>((await http.get(`/admin/safety-blocks/${id}`)).data),
   unresolvedReports: async (limit = 20) => listPayload<AdminUnresolvedReport>((await http.get('/admin/unresolved-reports', { params: { limit } })).data),

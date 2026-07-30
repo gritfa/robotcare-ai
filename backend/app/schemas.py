@@ -48,6 +48,12 @@ class AdminModelUpdate(BaseModel):
     active: bool
 
 
+class AdminGenerationStatsRead(BaseModel):
+    answered_count: int
+    refused_count: int
+    refusal_by_reason: dict[str, int]
+
+
 class AdminOverviewRead(BaseModel):
     user_count: int
     active_model_count: int
@@ -57,6 +63,25 @@ class AdminOverviewRead(BaseModel):
     safety_block_count: int
     unresolved_diagnostic_count: int
     service_report_count: int
+    generation_stats: AdminGenerationStatsRead
+    content_gap_count: int
+
+
+class AdminContentGapRead(BaseModel):
+    """内容缺口榜条目：只含聚合后的查询与型号，不含任何用户信息。"""
+
+    query_normalized: str
+    count: int
+    model_codes: list[str]
+    last_seen_at: datetime
+
+
+class AdminKnowledgeUploadRead(BaseModel):
+    document_id: int
+    created: bool
+    changed: bool
+    chunk_count: int
+    sha256: str
 
 
 class AdminSafetyBlockRead(BaseModel):

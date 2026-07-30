@@ -62,9 +62,11 @@ from .models import (
     DiagnosticFlow,
     DiagnosticSession,
     DiagnosticStep,
+    GenerationRecord,
     IssueCategory,
     KnowledgeChunk,
     KnowledgeDocument,
+    KnowledgeGapEvent,
     PendingFileDeletion,
     RobotModel,
     SafetyBlockEvent,
@@ -90,8 +92,11 @@ from .schemas import (
     AnswerCitationRead,
     AttachmentRead,
     AdminAuditLogRead,
+    AdminContentGapRead,
     AdminDiagnosticDetailRead,
     AdminDiagnosticSummary,
+    AdminGenerationStatsRead,
+    AdminKnowledgeUploadRead,
     AdminModelRead,
     AdminModelUpdate,
     AdminOverviewRead,
@@ -163,7 +168,13 @@ from .routers._shared import (
 from .routers.auth import get_me, login, logout, refresh_authentication, register
 from .routers.catalog import list_diagnostic_options, list_models
 from .routers.devices import create_device, delete_device, get_device, list_devices, update_device
-from .routers.knowledge import knowledge_answer, knowledge_health, knowledge_search, knowledge_status
+from .routers.knowledge import (
+    knowledge_answer,
+    knowledge_health,
+    knowledge_search,
+    knowledge_status,
+    record_knowledge_gap_event,
+)
 from .routers.diagnostics import (
     create_diagnostic,
     create_report,
@@ -184,8 +195,10 @@ from .routers.diagnostics import (
 )
 from .routers.admin import (
     admin_audit_logs,
+    admin_content_gaps,
     admin_diagnostic_detail,
     admin_knowledge_status,
+    admin_knowledge_upload,
     admin_list_models,
     admin_overview,
     admin_report_detail,

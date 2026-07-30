@@ -12,6 +12,7 @@ ADMIN_PATHS = (
     "/api/v1/admin/overview",
     "/api/v1/admin/models",
     "/api/v1/admin/knowledge/status",
+    "/api/v1/admin/content-gaps",
     "/api/v1/admin/safety-blocks",
     "/api/v1/admin/unresolved-reports",
     "/api/v1/admin/audit-logs",
@@ -128,6 +129,12 @@ def test_admin_reads_operational_overview_without_sensitive_payloads(client: Tes
         "safety_block_count": 1,
         "unresolved_diagnostic_count": 1,
         "service_report_count": 1,
+        "generation_stats": {
+            "answered_count": 0,
+            "refused_count": 0,
+            "refusal_by_reason": {},
+        },
+        "content_gap_count": 0,
     }
 
     models = client.get("/api/v1/admin/models", headers=auth(admin_token))

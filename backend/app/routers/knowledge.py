@@ -12,7 +12,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..generation_service import generate_answer
 from ..knowledge_service import get_knowledge_health, get_knowledge_status, search_knowledge
-from ..models import KnowledgeDocument, RobotModel, User
+from ..models import KnowledgeDocument, KnowledgeGapEvent, RobotModel, User
 from ..observability import emit_json_log, request_trace_id
 from ..rate_limit_service import (
     aggregate_knowledge_version,
@@ -35,6 +35,37 @@ from ..schemas import (
 from ..security import get_current_user
 
 router = APIRouter(prefix="/api/v1")
+
+
+def record_knowledge_gap_event(
+    db: Session,
+    *,
+    robot_model_id: int,
+    query_normalized: str,
+    source: str,
+    trace_id: str | None = None,
+) -> None:
+    """内容缺口埋点：写入失败只记日志，绝不影响检索/回答主流程。"""
+
+    try:
+        db.add(
+            KnowledgeGapEvent(
+                robot_model_id=robot_model_id,
+                query_normalized=query_normalized,
+                source=source,
+            )
+        )
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - 埋点失败不允许打断主流程
+        db.rollback()
+        emit_json_log(
+            logging.ERROR,
+            "knowledge_gap_event_write_failed",
+            trace_id=trace_id,
+            robot_model_id=robot_model_id,
+            source=source,
+            error_type=type(exc).__name__,
+        )
 
 
 @router.post("/knowledge/search", response_model=list[KnowledgeSearchResult])
@@ -118,6 +149,15 @@ def knowledge_search(
                     cache_hit=True,
                     duration_ms=round((perf_counter() - started_at) * 1000, 3),
                 )
+                # 缓存命中的空结果同样是内容缺口：命中与否不影响埋点。
+                if not results:
+                    record_knowledge_gap_event(
+                        db,
+                        robot_model_id=payload.robot_model_id,
+                        query_normalized=normalized_query,
+                        source="search_empty",
+                        trace_id=request_trace_id(request),
+                    )
                 return results
             enforce_embedding_rate_limit(
                 db,
@@ -158,6 +198,14 @@ def knowledge_search(
                 for item in raw_results
             ],
         )
+        if not results:
+            record_knowledge_gap_event(
+                db,
+                robot_model_id=payload.robot_model_id,
+                query_normalized=normalized_query,
+                source="search_empty",
+                trace_id=request_trace_id(request),
+            )
         return results
     except RuntimeError as exc:
         emit_json_log(
@@ -219,12 +267,13 @@ def knowledge_answer(
         .limit(1)
     )
     min_score = settings.knowledge_score_threshold(robot_model.code, threshold_version)
+    normalized_query = normalize_knowledge_query(payload.query)
     try:
         result = generate_answer(
             db,
             user_id=user.id,
             robot_model_id=payload.robot_model_id,
-            query=normalize_knowledge_query(payload.query),
+            query=normalized_query,
             embedding_provider=request.app.state.embedding_provider,
             generation_provider=request.app.state.generation_provider,
             top_k=payload.top_k,
@@ -240,6 +289,14 @@ def knowledge_answer(
         )
         send_alert("generation_unavailable", "智能回答服务调用失败（生成模型不可用），请检查 DashScope 配置与额度")
         raise HTTPException(status_code=503, detail="Generation service unavailable") from exc
+    if result.status == "refused" and result.refusal_reason == "knowledge_gap":
+        record_knowledge_gap_event(
+            db,
+            robot_model_id=payload.robot_model_id,
+            query_normalized=normalized_query,
+            source="answer_knowledge_gap",
+            trace_id=request_trace_id(request),
+        )
     return KnowledgeAnswerResponse(
         status=result.status,
         answer=result.answer,

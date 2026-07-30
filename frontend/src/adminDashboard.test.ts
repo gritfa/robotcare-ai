@@ -12,6 +12,8 @@ const overview: AdminOverview = {
   safety_block_count: 3,
   unresolved_diagnostic_count: 1,
   service_report_count: 5,
+  generation_stats: { answered_count: 7, refused_count: 2, refusal_by_reason: { knowledge_gap: 2 } },
+  content_gap_count: 2,
 }
 
 const model = (): AdminModel => ({ id: 1, code: 'JH69U1', name: 'JH69U1 扫地机器人', brand: 'Haier', active: true })
@@ -22,6 +24,10 @@ function createApi(overrides: Partial<AdminDashboardApi> = {}): AdminDashboardAp
     models: vi.fn().mockResolvedValue([model()]),
     setModelActive: vi.fn().mockImplementation(async (_id, active) => ({ ...model(), active })),
     knowledgeStatus: vi.fn().mockResolvedValue([{ robot_model_id: 1, model_code: 'JH69U1', document_count: 1, chunk_count: 31, vector_count: 31 }]),
+    contentGaps: vi.fn().mockResolvedValue([
+      { query_normalized: '石头卡住 怎么办', count: 3, model_codes: ['JH69U1', 'VC35U1'], last_seen_at: '2026-07-30T00:00:00Z' },
+    ]),
+    uploadKnowledge: vi.fn().mockResolvedValue({ document_id: 9, created: true, changed: false, chunk_count: 12, sha256: 'a'.repeat(64) }),
     safetyBlocks: vi.fn().mockResolvedValue([]),
     safetyBlockDetail: vi.fn().mockResolvedValue({
       id: 3, user_id: 4, device_id: 5, model_code: 'JH69U1', category: 'smoke',
@@ -57,8 +63,36 @@ describe('admin dashboard state', () => {
     expect(dashboard.loading.value).toBe(false)
     expect(dashboard.loaded.value).toBe(true)
     expect(dashboard.overview.value.user_count).toBe(12)
+    expect(dashboard.overview.value.generation_stats.answered_count).toBe(7)
+    expect(dashboard.overview.value.content_gap_count).toBe(2)
     expect(dashboard.models.value[0].code).toBe('JH69U1')
     expect(dashboard.knowledgeHealthy.value).toBe(true)
+    expect(dashboard.contentGaps.value[0].query_normalized).toBe('石头卡住 怎么办')
+    expect(dashboard.contentGaps.value[0].model_codes).toEqual(['JH69U1', 'VC35U1'])
+  })
+
+  it('uploads a knowledge PDF, refreshes the dashboard, and surfaces failures', async () => {
+    const api = createApi()
+    const dashboard = useAdminDashboard(api)
+    await dashboard.load()
+
+    const form = new FormData()
+    const outcome = await dashboard.uploadKnowledge(form)
+
+    expect(outcome.ok).toBe(true)
+    expect(outcome.result?.chunk_count).toBe(12)
+    expect(api.uploadKnowledge).toHaveBeenCalledWith(form)
+    // 上传成功后整体刷新（知识状态 + 概览一起更新）
+    expect(api.knowledgeStatus).toHaveBeenCalledTimes(2)
+    expect(api.overview).toHaveBeenCalledTimes(2)
+    expect(dashboard.uploadingKnowledge.value).toBe(false)
+
+    const failing = useAdminDashboard(createApi({
+      uploadKnowledge: vi.fn().mockRejectedValue(new Error('not a pdf')),
+    }))
+    const failure = await failing.uploadKnowledge(new FormData())
+    expect(failure.ok).toBe(false)
+    expect(failure.error).toBe('not a pdf')
   })
 
   it('persists a model switch and prevents a duplicate request while it is pending', async () => {

@@ -433,3 +433,26 @@ class GenerationRecord(Base):
     snippet_count: Mapped[int] = mapped_column(Integer)
     latency_ms: Mapped[float] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class KnowledgeGapEvent(Base):
+    """内容缺口事件：检索空结果 / 生成层资料缺口拒答各记一行，支撑内容缺口榜。
+
+    只保存归一化后的查询与型号，不保存用户身份——缺口榜是运营数据，不追人。
+    """
+
+    __tablename__ = "knowledge_gap_events"
+    __table_args__ = (
+        CheckConstraint(
+            "source IN ('search_empty', 'answer_knowledge_gap')",
+            name="ck_knowledge_gap_events_source",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    robot_model_id: Mapped[int] = mapped_column(ForeignKey("robot_models.id"), index=True)
+    query_normalized: Mapped[str] = mapped_column(String(2000))
+    source: Mapped[str] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )

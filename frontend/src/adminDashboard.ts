@@ -1,13 +1,15 @@
 import axios from 'axios'
 import { computed, reactive, ref } from 'vue'
 import { adminApi, apiError } from './api'
-import type { AdminAuditLog, AdminDiagnosticDetail, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, EntityId, KnowledgeModelStatus } from './types'
+import type { AdminAuditLog, AdminContentGap, AdminDiagnosticDetail, AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, EntityId, KnowledgeModelStatus } from './types'
 
 export interface AdminDashboardApi {
   overview(): Promise<AdminOverview>
   models(): Promise<AdminModel[]>
   setModelActive(id: EntityId, active: boolean): Promise<AdminModel>
   knowledgeStatus(): Promise<KnowledgeModelStatus[]>
+  contentGaps(days?: number, limit?: number): Promise<AdminContentGap[]>
+  uploadKnowledge(form: FormData): Promise<AdminKnowledgeUploadResult>
   safetyBlocks(limit?: number): Promise<AdminSafetyBlock[]>
   safetyBlockDetail(id: EntityId): Promise<AdminSafetyBlockDetail>
   unresolvedReports(limit?: number): Promise<AdminUnresolvedReport[]>
@@ -21,6 +23,12 @@ export interface ModelUpdateResult {
   error?: string
 }
 
+export interface KnowledgeUploadOutcome {
+  ok: boolean
+  error?: string
+  result?: AdminKnowledgeUploadResult
+}
+
 const emptyOverview = (): AdminOverview => ({
   user_count: 0,
   active_model_count: 0,
@@ -30,6 +38,8 @@ const emptyOverview = (): AdminOverview => ({
   safety_block_count: 0,
   unresolved_diagnostic_count: 0,
   service_report_count: 0,
+  generation_stats: { answered_count: 0, refused_count: 0, refusal_by_reason: {} },
+  content_gap_count: 0,
 })
 
 export function adminErrorMessage(error: unknown, fallback = '管理员数据加载失败，请稍后重试。') {
@@ -46,6 +56,7 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
   const overview = ref<AdminOverview>(emptyOverview())
   const models = ref<AdminModel[]>([])
   const knowledgeStatus = ref<KnowledgeModelStatus[]>([])
+  const contentGaps = ref<AdminContentGap[]>([])
   const safetyBlocks = ref<AdminSafetyBlock[]>([])
   const unresolvedReports = ref<AdminUnresolvedReport[]>([])
   const auditLogs = ref<AdminAuditLog[]>([])
@@ -67,10 +78,11 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     loading.value = true
     loadError.value = ''
     try {
-      const [overviewData, modelData, knowledgeData, safetyData, reportData, auditData] = await Promise.all([
+      const [overviewData, modelData, knowledgeData, gapData, safetyData, reportData, auditData] = await Promise.all([
         api.overview(),
         api.models(),
         api.knowledgeStatus(),
+        api.contentGaps(30, 20),
         api.safetyBlocks(20),
         api.unresolvedReports(20),
         api.auditLogs(20),
@@ -78,6 +90,7 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
       overview.value = overviewData
       models.value = modelData
       knowledgeStatus.value = knowledgeData
+      contentGaps.value = gapData
       safetyBlocks.value = safetyData
       unresolvedReports.value = reportData
       auditLogs.value = auditData
@@ -109,6 +122,22 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
 
   function isModelUpdating(id: EntityId) {
     return updatingModelIds.has(id)
+  }
+
+  const uploadingKnowledge = ref(false)
+
+  async function uploadKnowledge(form: FormData): Promise<KnowledgeUploadOutcome> {
+    if (uploadingKnowledge.value) return { ok: false }
+    uploadingKnowledge.value = true
+    try {
+      const result = await api.uploadKnowledge(form)
+      await load()
+      return { ok: true, result }
+    } catch (error) {
+      return { ok: false, error: adminErrorMessage(error, '知识上传失败，请检查型号、来源 URL 与 PDF 文件后重试。') }
+    } finally {
+      uploadingKnowledge.value = false
+    }
   }
 
   async function loadSensitiveDetail<T>(loader: () => Promise<T>): Promise<T | null> {
@@ -147,6 +176,7 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     models,
     knowledgeStatus,
     knowledgeHealthy,
+    contentGaps,
     safetyBlocks,
     unresolvedReports,
     auditLogs,
@@ -158,6 +188,8 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     load,
     setModelActive,
     isModelUpdating,
+    uploadingKnowledge,
+    uploadKnowledge,
     openSafetyBlock,
     openDiagnostic,
     openReport,

@@ -1,30 +1,39 @@
-"""/admin/* routes: overview, models, knowledge status, safety blocks, reports, audit logs."""
+"""/admin/* routes: overview, models, knowledge status/upload, content gaps, safety blocks, reports, audit logs."""
 
 import logging
+import tempfile
+from datetime import timedelta
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..knowledge_service import get_knowledge_status
+from ..knowledge_service import get_knowledge_status, ingest_pdf
 from ..models import (
     AuditLog,
     DiagnosticFlow,
     DiagnosticSession,
+    GenerationRecord,
     KnowledgeChunk,
     KnowledgeDocument,
+    KnowledgeGapEvent,
     RobotModel,
     SafetyBlockEvent,
     ServiceReport,
     User,
     UserDevice,
+    utcnow,
 )
 from ..observability import emit_json_log, request_trace_id
 from ..schemas import (
     AdminAuditLogRead,
+    AdminContentGapRead,
     AdminDiagnosticDetailRead,
     AdminDiagnosticSummary,
+    AdminGenerationStatsRead,
+    AdminKnowledgeUploadRead,
     AdminModelRead,
     AdminModelUpdate,
     AdminOverviewRead,
@@ -42,6 +51,9 @@ from ._shared import audit_sensitive_admin_read, mask_email
 
 router = APIRouter(prefix="/api/v1")
 
+OPERATION_STATS_WINDOW_DAYS = 30
+MAX_KNOWLEDGE_PDF_BYTES = 30 * 1024 * 1024
+
 
 @router.get("/admin/overview", response_model=AdminOverviewRead)
 def admin_overview(
@@ -52,6 +64,18 @@ def admin_overview(
     def count(statement) -> int:
         return int(db.scalar(statement) or 0)
 
+    stats_since = utcnow() - timedelta(days=OPERATION_STATS_WINDOW_DAYS)
+    refusal_rows = db.execute(
+        select(GenerationRecord.refusal_reason, func.count())
+        .where(
+            GenerationRecord.status == "refused",
+            GenerationRecord.created_at >= stats_since,
+        )
+        .group_by(GenerationRecord.refusal_reason)
+    ).all()
+    refusal_by_reason = {
+        reason: int(reason_count) for reason, reason_count in refusal_rows if reason
+    }
     return AdminOverviewRead(
         user_count=count(select(func.count()).select_from(User)),
         active_model_count=count(
@@ -74,7 +98,63 @@ def admin_overview(
             .where(DiagnosticSession.status == "unresolved")
         ),
         service_report_count=count(select(func.count()).select_from(ServiceReport)),
+        generation_stats=AdminGenerationStatsRead(
+            answered_count=count(
+                select(func.count())
+                .select_from(GenerationRecord)
+                .where(
+                    GenerationRecord.status == "answered",
+                    GenerationRecord.created_at >= stats_since,
+                )
+            ),
+            refused_count=sum(refusal_by_reason.values()),
+            refusal_by_reason=refusal_by_reason,
+        ),
+        content_gap_count=count(
+            select(func.count())
+            .select_from(KnowledgeGapEvent)
+            .where(KnowledgeGapEvent.created_at >= stats_since)
+        ),
     )
+
+
+@router.get("/admin/content-gaps", response_model=list[AdminContentGapRead])
+def admin_content_gaps(
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> list[AdminContentGapRead]:
+    """内容缺口榜：按归一化查询聚合缺口事件；只返回运营聚合数据，不含用户信息。"""
+
+    del admin
+    since = utcnow() - timedelta(days=days)
+    rows = db.execute(
+        select(
+            KnowledgeGapEvent.query_normalized,
+            func.count().label("event_count"),
+            func.max(KnowledgeGapEvent.created_at).label("last_seen_at"),
+            func.array_agg(RobotModel.code.distinct()).label("model_codes"),
+        )
+        .join(RobotModel, RobotModel.id == KnowledgeGapEvent.robot_model_id)
+        .where(KnowledgeGapEvent.created_at >= since)
+        .group_by(KnowledgeGapEvent.query_normalized)
+        .order_by(
+            func.count().desc(),
+            func.max(KnowledgeGapEvent.created_at).desc(),
+            KnowledgeGapEvent.query_normalized,
+        )
+        .limit(limit)
+    ).all()
+    return [
+        AdminContentGapRead(
+            query_normalized=row.query_normalized,
+            count=int(row.event_count),
+            model_codes=sorted(row.model_codes),
+            last_seen_at=row.last_seen_at,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/admin/models", response_model=list[AdminModelRead])
@@ -131,6 +211,96 @@ def admin_knowledge_status(
 ) -> list[KnowledgeStatusRead]:
     del admin
     return [KnowledgeStatusRead(**item.__dict__) for item in get_knowledge_status(db)]
+
+
+@router.post(
+    "/admin/knowledge/upload",
+    response_model=AdminKnowledgeUploadRead,
+    status_code=201,
+)
+def admin_knowledge_upload(
+    request: Request,
+    model_code: str = Form(min_length=1, max_length=50),
+    source_url: str = Form(min_length=1, max_length=2000),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> AdminKnowledgeUploadRead:
+    """管理员上传 PDF 入知识库：魔数/大小/型号校验 → ingest → 审计，一个事务不留半条记录。"""
+
+    robot_model = db.scalar(select(RobotModel).where(RobotModel.code == model_code))
+    if robot_model is None:
+        raise HTTPException(status_code=404, detail="Robot model not found")
+    content = file.file.read(MAX_KNOWLEDGE_PDF_BYTES + 1)
+    if len(content) > MAX_KNOWLEDGE_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="PDF exceeds the 30MB upload limit")
+    if not content.startswith(b"%PDF-"):
+        raise HTTPException(status_code=415, detail="Uploaded file is not a PDF")
+
+    title = Path(file.filename).stem if file.filename else None
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as handle:
+        handle.write(content)
+        pdf_path = Path(handle.name)
+    try:
+        # ingest 与审计写入同一事务：任何一步失败整体回滚，不留半条记录。
+        result = ingest_pdf(
+            db,
+            robot_model_id=robot_model.id,
+            pdf_path=pdf_path,
+            source_url=source_url,
+            provider=request.app.state.embedding_provider,
+            title=title or None,
+            commit=False,
+        )
+        db.add(
+            AuditLog(
+                actor_user_id=admin.id,
+                action="admin.knowledge.upload",
+                resource_type="knowledge_document",
+                resource_id=str(result.document_id),
+                details_json={
+                    "model_code": robot_model.code,
+                    "sha256": result.sha256,
+                    "chunk_count": result.chunk_count,
+                    "created": result.created,
+                    "trace_id": request_trace_id(request),
+                },
+            )
+        )
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        db.rollback()
+        emit_json_log(
+            logging.ERROR,
+            "admin_knowledge_upload_failed",
+            trace_id=request_trace_id(request),
+            robot_model_id=robot_model.id,
+            error_type=type(exc).__name__,
+        )
+        raise HTTPException(status_code=503, detail="Embedding service unavailable") from exc
+    finally:
+        pdf_path.unlink(missing_ok=True)
+    emit_json_log(
+        logging.INFO,
+        "admin_knowledge_uploaded",
+        trace_id=request_trace_id(request),
+        actor_user_id=admin.id,
+        robot_model_id=robot_model.id,
+        document_id=result.document_id,
+        sha256=result.sha256,
+        chunk_count=result.chunk_count,
+        created=result.created,
+    )
+    return AdminKnowledgeUploadRead(
+        document_id=result.document_id,
+        created=result.created,
+        changed=result.changed,
+        chunk_count=result.chunk_count,
+        sha256=result.sha256,
+    )
 
 
 @router.get("/admin/safety-blocks", response_model=list[AdminSafetyBlockRead])

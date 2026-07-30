@@ -58,6 +58,12 @@ export interface KnowledgeHealth {
   models: KnowledgeModelHealth[]
 }
 
+export interface AdminGenerationStats {
+  answered_count: number
+  refused_count: number
+  refusal_by_reason: Record<string, number>
+}
+
 export interface AdminOverview {
   user_count: number
   active_model_count: number
@@ -67,6 +73,23 @@ export interface AdminOverview {
   safety_block_count: number
   unresolved_diagnostic_count: number
   service_report_count: number
+  generation_stats: AdminGenerationStats
+  content_gap_count: number
+}
+
+export interface AdminContentGap {
+  query_normalized: string
+  count: number
+  model_codes: string[]
+  last_seen_at: string
+}
+
+export interface AdminKnowledgeUploadResult {
+  document_id: EntityId
+  created: boolean
+  changed: boolean
+  chunk_count: number
+  sha256: string
 }
 
 export interface AdminModel {

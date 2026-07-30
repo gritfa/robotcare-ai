@@ -23,7 +23,7 @@
 | 图片上传安全 | `【已验证】` | Pillow 真实解码及既有限制不变；PostgreSQL 会话行锁（`SELECT ... FOR UPDATE`）保证并发上传最多 5 张，失败不遗留数据库记录或孤立文件 |
 | 官方说明书证据 | `【已验证】` | JH69U1、VC35U1 官方 PDF 已下载、校验 SHA256、按页解析并完成指定页面目视检查；原始 PDF 不提交公开仓库 |
 | 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；4 条逐步骤说明书复核流程已发布，1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
-| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；迁移链单方言化后在空 PostgreSQL 库完成 `upgrade head → downgrade base → upgrade head` 往返，head `20260730_0008`，metadata 零漂移 |
+| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；迁移链单方言化后在空 PostgreSQL 库完成 `upgrade head → downgrade base → upgrade head` 往返，head `20260730_0009`，metadata 零漂移 |
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
 | RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 375 条（113 条原有 + 262 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 39/39`、`step_selection 39/39`、`model_isolation 25/25`、`retrieval_recall 55/55`、`classification 50/50`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
 | LLM 生成层（强制引用/拒答/留痕） | `【已验证：本地 mock】` | `POST /knowledge/answer`：安全前置阻断→检索→生成；检索空/低于阈值不调模型直接拒答，引用缺失/越界拒答，回答命中安全规则拦截留痕；generation_records 全量留痕（prompt 版本/模型/片段 SHA/引用/耗时）；6 项 pytest 用 mock Provider 验证，真实 DashScope 生成调用未在本机执行 |
@@ -34,7 +34,8 @@
 | PDF 售后报告 | `【已验证】` | 并发请求返回同一报告；PDF 采用目标锁、临时文件和原子替换，验证 `%PDF-`/`%%EOF`；Edge 下载校验文件存在、非空和文件头 |
 | 管理员后端与审计 | `【已验证】` | 普通列表不返回故障正文、错误码、阻断原因或关联用户/设备 ID；报告、诊断和安全阻断详情按需读取并在返回前写入不含正文的 fail-closed 审计 |
 | 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；本机 Edge 已验证普通用户访问管理员页面被拒绝，管理员内容运营 E2E 仍为【计划】 |
-| 管理员完整内容运营 | `【计划】` | 知识上传/重建/停用、流程审核发布、评测执行与结果持久化尚未实现，不能称管理后台全部完成 |
+| 运营闭环（缺口榜/看板/知识上传） | `【已验证：本地】` | 检索空结果与资料缺口拒答双埋点写 `knowledge_gap_events`（埋点失败不影响主流程）；`GET /admin/content-gaps` 按归一化查询聚合（次数/型号/最近发生，不含用户信息）；overview 增加近 30 天回答/拒答/拒答原因分布与缺口数；`POST /admin/knowledge/upload` 管理员上传 PDF（魔数/30MB/型号校验，ingest 与审计同事务）；前端缺口榜/生成统计/上传入口已通过单元测试与生产构建；真实语义向量下的缺口数据尚未积累 |
+| 管理员完整内容运营 | `【部分实现】` | 知识 PDF 上传已进后台（见上行）；流程审核发布仍走 catalog JSON 文件 + 代码评审，知识重建/停用、评测执行与结果持久化仍未实现，不能称管理后台全部完成 |
 | Docker 静态部署契约 | `【已验证】` | 部署检查脚本执行与 py_compile 通过；静态检查覆盖启动迁移、外部密钥、认证生产门禁、PostgreSQL/附件/报告持久卷、`/ready` 健康检查和 Noto CJK 字体配置 |
 | Docker 实际部署 | `【已验证：本机 development】` | Docker 29.5.2 实测：镜像构建、Compose 三服务 healthy、启动自动迁移至 head、pgvector 就绪、down/up 重建数据保持；production 无 key 启动被门禁拒绝（按设计）；带 key 的 production 启动仍待持 key 机器执行（docs/evidence/docker_deploy_20260730.md） |
 
@@ -132,7 +133,7 @@ cd backend
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 
-API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260722_0007`：`0005` 增加数据库状态约束，`0006` 增加独立 IP 登录桶与可信代理配套，`0007` 增加 API/Embedding 配额表；`create_all()` 仅保留给显式开启的隔离测试。
+API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260730_0009`：`0005` 增加数据库状态约束，`0006` 增加独立 IP 登录桶与可信代理配套，`0007` 增加 API/Embedding 配额表，`0008` 增加生成层留痕表 generation_records，`0009` 增加内容缺口事件表 knowledge_gap_events；`create_all()` 仅保留给显式开启的隔离测试。
 
 本地开发库已备份为 `robotcare.db.pre-0007-20260722.bak` 并升级到 `0007`；4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留，`PRAGMA integrity_check=ok` 且无外键异常。
 

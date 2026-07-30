@@ -1,0 +1,126 @@
+"""/auth/* routes: register, login, refresh, logout, me."""
+
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from ..auth_service import (
+    REFRESH_COOKIE_NAME,
+    acquire_login_attempt_lock,
+    clear_login_failures,
+    delete_refresh_cookie,
+    enforce_login_rate_limit,
+    issue_authentication,
+    logout_refresh_token,
+    normalize_email,
+    record_login_failure,
+    revoke_session,
+    rotate_refresh_token,
+    set_refresh_cookie,
+)
+from ..config import get_settings
+from ..database import get_db
+from ..models import User
+from ..rate_limit_service import enforce_registration_rate_limit
+from ..schemas import LoginRequest, RegisterRequest, TokenResponse, UserRead
+from ..security import (
+    DUMMY_PASSWORD_HASH,
+    decode_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
+from ._shared import enforce_registration_policy, token_response
+
+router = APIRouter(prefix="/api/v1")
+
+
+@router.post("/auth/register", response_model=TokenResponse, status_code=201)
+def register(
+    payload: RegisterRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    email = normalize_email(str(payload.email))
+    enforce_registration_rate_limit(db, request, email)
+    enforce_registration_policy(payload, get_settings())
+    if db.scalar(select(User).where(User.email == email)) is not None:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    user = User(email=email, password_hash=hash_password(payload.password))
+    db.add(user)
+    try:
+        db.flush()
+        issued = issue_authentication(db, user)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Email already registered") from None
+    db.refresh(user)
+    set_refresh_cookie(response, issued.refresh_token)
+    return token_response(user, issued.access_token)
+
+
+@router.post("/auth/login", response_model=TokenResponse)
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    email = normalize_email(str(payload.email))
+    acquire_login_attempt_lock(db, email, request)
+    enforce_login_rate_limit(db, email, request)
+    user = db.scalar(select(User).where(User.email == email))
+    password_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+    password_valid = verify_password(payload.password, password_hash)
+    if user is None or not password_valid:
+        record_login_failure(db, email, request)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if user.status != "active":
+        raise HTTPException(status_code=403, detail="Account disabled")
+    clear_login_failures(db, email, request)
+    issued = issue_authentication(db, user)
+    db.commit()
+    set_refresh_cookie(response, issued.refresh_token)
+    return token_response(user, issued.access_token)
+
+
+@router.post("/auth/refresh", response_model=TokenResponse)
+def refresh_authentication(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    raw_refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if raw_refresh_token is None:
+        raise HTTPException(status_code=401, detail="Refresh token required")
+    user, issued = rotate_refresh_token(db, raw_refresh_token)
+    set_refresh_cookie(response, issued.refresh_token)
+    return token_response(user, issued.access_token)
+
+
+@router.post("/auth/logout", status_code=204)
+def logout(request: Request, db: Session = Depends(get_db)) -> Response:
+    revoked_session_id = logout_refresh_token(db, request.cookies.get(REFRESH_COOKIE_NAME))
+    if revoked_session_id is None:
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() == "bearer" and token:
+            try:
+                _user_id, access_session_id = decode_access_token(token)
+            except (ValueError, TypeError, jwt.PyJWTError):
+                pass
+            else:
+                revoke_session(db, access_session_id, reason="logout")
+                db.commit()
+    response = Response(status_code=204)
+    delete_refresh_cookie(response)
+    return response
+
+
+@router.get("/auth/me", response_model=UserRead)
+def get_me(user: User = Depends(get_current_user)) -> User:
+    return user

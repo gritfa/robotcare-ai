@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import router
+from .routers import router
 from .config import get_settings
 from .database import Base, build_session_factory
 from .generation_service import DashScopeGenerationProvider, GenerationProvider

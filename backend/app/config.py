@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     embedding_ip_per_minute: int = Field(default=30, ge=1, le=10000)
     embedding_user_per_day: int = Field(default=100, ge=1, le=100000)
     embedding_ip_per_day: int = Field(default=300, ge=1, le=500000)
+    knowledge_answer_user_per_minute: int = Field(default=6, ge=1, le=1000)
+    knowledge_answer_ip_per_minute: int = Field(default=20, ge=1, le=5000)
+    generation_model: str = "qwen-plus"
     knowledge_search_cache_ttl_seconds: int = Field(default=30, ge=1, le=300)
     cors_origins: str = "http://localhost:5173"
     attachment_dir: str = "./data/attachments"
@@ -158,6 +161,10 @@ class Settings(BaseSettings):
             "knowledge_search": (
                 self.knowledge_search_user_per_minute,
                 self.knowledge_search_ip_per_minute,
+            ),
+            "knowledge_answer": (
+                self.knowledge_answer_user_per_minute,
+                self.knowledge_answer_ip_per_minute,
             ),
             "diagnostic_create": (
                 self.diagnostic_create_user_per_minute,

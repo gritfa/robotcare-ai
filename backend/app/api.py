@@ -33,6 +33,7 @@ from .config import Settings, get_settings
 from .database import get_db
 from .diagnostic_graph import feedback_decision_graph
 from .issue_classifier import classify_issue
+from .generation_service import generate_answer
 from .knowledge_service import get_knowledge_health, get_knowledge_status, search_knowledge
 from .models import (
     Attachment,
@@ -65,6 +66,7 @@ from .rate_limit_service import (
 )
 from .safety import detect_safety_block
 from .schemas import (
+    AnswerCitationRead,
     AttachmentRead,
     AdminAuditLogRead,
     AdminDiagnosticDetailRead,
@@ -88,6 +90,8 @@ from .schemas import (
     FeedbackRequest,
     FeedbackResponse,
     LoginRequest,
+    KnowledgeAnswerRequest,
+    KnowledgeAnswerResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResult,
     KnowledgeHealthRead,
@@ -434,6 +438,83 @@ def knowledge_search(
             error_type=type(exc).__name__,
         )
         raise HTTPException(status_code=503, detail="Embedding service unavailable") from exc
+
+
+@router.post("/knowledge/answer", response_model=KnowledgeAnswerResponse)
+def knowledge_answer(
+    payload: KnowledgeAnswerRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> KnowledgeAnswerResponse:
+    """检索增强回答：安全前置阻断 → 检索 → 生成（强制引用/三类拒答）→ 留痕。"""
+    robot_model = db.scalar(select(RobotModel).where(RobotModel.id == payload.robot_model_id))
+    if robot_model is None:
+        raise HTTPException(status_code=404, detail="Robot model not found")
+    safety_block = detect_safety_block(payload.query)
+    if safety_block is not None:
+        emit_json_log(
+            logging.WARNING,
+            "knowledge_safety_block",
+            trace_id=request_trace_id(request),
+            robot_model_id=payload.robot_model_id,
+            category=safety_block.category,
+            risk_level=safety_block.risk_level,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "SAFETY_BLOCKED",
+                "blocked": True,
+                "category": safety_block.category,
+                "risk_level": safety_block.risk_level,
+                "reason": safety_block.reason,
+                "official_service_advice": safety_block.advice,
+            },
+        )
+    settings = get_settings()
+    enforce_business_rate_limit(
+        db,
+        request,
+        action="knowledge_answer",
+        user_id=user.id,
+        settings=settings,
+    )
+    enforce_embedding_rate_limit(db, request, user_id=user.id, settings=settings)
+    threshold_version = db.scalar(
+        select(KnowledgeDocument.sha256)
+        .where(KnowledgeDocument.robot_model_id == payload.robot_model_id)
+        .order_by(KnowledgeDocument.id.desc())
+        .limit(1)
+    )
+    min_score = settings.knowledge_score_threshold(robot_model.code, threshold_version)
+    try:
+        result = generate_answer(
+            db,
+            user_id=user.id,
+            robot_model_id=payload.robot_model_id,
+            query=normalize_knowledge_query(payload.query),
+            embedding_provider=request.app.state.embedding_provider,
+            generation_provider=request.app.state.generation_provider,
+            top_k=payload.top_k,
+            min_score=min_score,
+        )
+    except RuntimeError as exc:
+        emit_json_log(
+            logging.ERROR,
+            "knowledge_answer_failed",
+            trace_id=request_trace_id(request),
+            robot_model_id=payload.robot_model_id,
+            error_type=type(exc).__name__,
+        )
+        raise HTTPException(status_code=503, detail="Generation service unavailable") from exc
+    return KnowledgeAnswerResponse(
+        status=result.status,
+        answer=result.answer,
+        citations=[AnswerCitationRead(**item.__dict__) for item in result.citations],
+        refusal_reason=result.refusal_reason,
+        record_id=result.record_id,
+    )
 
 
 @router.get("/knowledge/status", response_model=list[KnowledgeStatusRead])

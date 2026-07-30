@@ -342,6 +342,197 @@ def _evaluate_step_selection(
     )
 
 
+SYNTHETIC_MODEL_CODES = ("RC-S200", "RC-M500", "RC-X800")
+
+
+def _synthetic_source_url(model_code: str) -> str:
+    return f"synthetic://robotcare-demo/{model_code.lower()}/manual"
+
+
+class _MustNotCallProvider:
+    """refusal 门控评测探针：知识缺口必须在检索层拒答，模型被调用即失败。"""
+
+    model_name = "gate-refusal-probe"
+
+    def __init__(self) -> None:
+        self.called_with: list[str] = []
+
+    def generate(self, *, system: str, prompt: str) -> str:
+        self.called_with.append(prompt)
+        return "本不应被调用 [1]"
+
+
+def _evaluate_with_synthetic_retrieval(cases: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """用内存库 + 合成说明书 + 确定性 hashing 向量真实执行四个检索类指标。
+
+    只评测合成型号（RC-*）的用例：真实型号的官方 PDF 不入库，无法离线复现检索。
+    hashing 向量是词面相似度而非语义相似度——分数结论不能外推到 DashScope
+    语义向量，报告 reason 中已声明该边界。
+    """
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.generation_service import generate_answer
+    from app.issue_classifier import classify_issue
+    from app.knowledge_service import (
+        HashingNgramEmbeddingProvider,
+        ingest_pdf,
+        search_knowledge,
+    )
+    from app.models import RobotModel
+    from app.seed import seed_database
+    from scripts.synthetic_flows_data import SYNTHETIC_FLOWS
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    provider = HashingNgramEmbeddingProvider()
+    synthetic_dir = project_root() / "knowledge" / "synthetic"
+
+    metrics: dict[str, dict[str, Any]] = {}
+    with factory() as db:
+        seed_database(db)
+        model_ids: dict[str, int] = {}
+        for code in SYNTHETIC_MODEL_CODES:
+            model_ids[code] = db.scalar(select(RobotModel.id).where(RobotModel.code == code))
+            ingest_pdf(
+                db,
+                robot_model_id=model_ids[code],
+                pdf_path=synthetic_dir / f"{code}_manual.pdf",
+                source_url=_synthetic_source_url(code),
+                provider=provider,
+            )
+
+        def synthetic_only(dimension: str):
+            selected = [case for case in cases if case.get("dimension") == dimension]
+            evaluable = [case for case in selected if case.get("model_code") in model_ids]
+            skipped = len(selected) - len(evaluable)
+            return evaluable, skipped
+
+        boundary = (
+            "内存库 + 合成说明书 + 确定性 hashing 词面向量真实执行；"
+            "结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过"
+        )
+
+        # model_isolation：结果必须全部来自本型号允许的来源
+        evaluable, skipped = synthetic_only("model_isolation")
+        failures: list[dict[str, str]] = []
+        for case in evaluable:
+            expected = case["expected"]
+            results = search_knowledge(
+                db,
+                robot_model_id=model_ids[case["model_code"]],
+                query=case["query"],
+                top_k=int(expected.get("top_k", 5)),
+                min_score=0.0,
+                provider=provider,
+            )
+            allowed_urls = {
+                _synthetic_source_url(case["model_code"])
+            }
+            if not results:
+                failures.append({"case_id": case["case_id"], "reason": "no retrieval results"})
+            elif any(item.source_url not in allowed_urls for item in results):
+                failures.append(
+                    {"case_id": case["case_id"], "reason": "results leaked from another model"}
+                )
+        metrics["model_isolation"] = _evaluated_metric(
+            "model_isolation", len(evaluable), failures,
+            f"{boundary}（跳过 {skipped} 条真实型号用例）",
+        )
+
+        # retrieval_recall：期望页码必须出现在 top_k 结果页中
+        evaluable, skipped = synthetic_only("retrieval_recall")
+        failures = []
+        for case in evaluable:
+            expected = case["expected"]
+            results = search_knowledge(
+                db,
+                robot_model_id=model_ids[case["model_code"]],
+                query=case["query"],
+                top_k=int(expected.get("top_k", 5)),
+                min_score=0.0,
+                provider=provider,
+            )
+            hit_pages = {item.page_number for item in results}
+            missing = set(expected.get("expected_pages", [])) - hit_pages
+            if missing:
+                failures.append(
+                    {
+                        "case_id": case["case_id"],
+                        "reason": f"expected pages {sorted(missing)} not in top-k pages {sorted(hit_pages)}",
+                    }
+                )
+        metrics["retrieval_recall"] = _evaluated_metric(
+            "retrieval_recall", len(evaluable), failures,
+            f"{boundary}（跳过 {skipped} 条真实型号用例）",
+        )
+
+        # classification：确定性关键词分类必须与期望类目一致
+        evaluable, skipped = synthetic_only("classification")
+        failures = []
+        categories_by_model = {
+            code: {flow[1] for flow in flows} for code, flows in SYNTHETIC_FLOWS.items()
+        }
+        for case in evaluable:
+            expected_code = case["expected"].get("issue_category_code")
+            decision = classify_issue(
+                model_code=case["model_code"],
+                selected_category_code=expected_code,
+                issue_description=case["query"],
+                error_code=None,
+                available_category_codes=categories_by_model[case["model_code"]],
+            )
+            if decision.kind != "consistent":
+                failures.append(
+                    {
+                        "case_id": case["case_id"],
+                        "reason": f"expected {expected_code}, decision {decision.kind} "
+                        f"suggested {decision.suggested_category_code}",
+                    }
+                )
+        metrics["classification"] = _evaluated_metric(
+            "classification", len(evaluable), failures,
+            f"确定性关键词分类离线执行（跳过 {skipped} 条真实型号用例）",
+        )
+
+        # refusal（门控层）：知识缺口问题必须在生成前拒答，模型被调用即失败
+        evaluable, skipped = synthetic_only("refusal")
+        failures = []
+        for case in evaluable:
+            probe = _MustNotCallProvider()
+            outcome = generate_answer(
+                db,
+                user_id=None,
+                robot_model_id=model_ids[case["model_code"]],
+                query=case["query"],
+                embedding_provider=provider,
+                generation_provider=probe,
+                min_score=0.25,
+                commit=False,
+            )
+            db.rollback()
+            if probe.called_with:
+                failures.append(
+                    {"case_id": case["case_id"], "reason": "generation model was invoked"}
+                )
+            elif outcome.status != "refused" or outcome.refusal_reason != "knowledge_gap":
+                failures.append(
+                    {
+                        "case_id": case["case_id"],
+                        "reason": f"expected knowledge_gap refusal, got {outcome.status}/{outcome.refusal_reason}",
+                    }
+                )
+        metrics["refusal"] = _evaluated_metric(
+            "refusal", len(evaluable), failures,
+            "门控层拒答离线执行：检索低于阈值必须拒答且不调用模型；"
+            f"模型层拒答仍需真实 LLM 另行评测（跳过 {skipped} 条真实型号用例）",
+        )
+    engine.dispose()
+    return metrics
+
+
 def audit_cases(
     cases: list[dict[str, Any]],
     *,
@@ -364,6 +555,7 @@ def audit_cases(
     metrics["source_page"] = _evaluate_source_pages(cases, catalog)
     metrics["safety_block"] = _evaluate_safety(cases)
     metrics["step_selection"] = _evaluate_step_selection(cases, catalog)
+    metrics.update(_evaluate_with_synthetic_retrieval(cases))
 
     safety_metric = metrics["safety_block"]
     safety_gate = {

@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from .api import router
 from .config import get_settings
 from .database import Base, build_session_factory
+from .generation_service import DashScopeGenerationProvider, GenerationProvider
 from .knowledge_service import DashScopeEmbeddingProvider, EmbeddingProvider
 from .migration_guard import ensure_database_at_head
 from .observability import install_observability, readiness_status, request_trace_id
@@ -20,6 +21,7 @@ def create_app(
     attachment_dir: str | Path | None = None,
     report_dir: str | Path | None = None,
     embedding_provider: EmbeddingProvider | None = None,
+    generation_provider: "GenerationProvider | None" = None,
     auto_create_schema: bool | None = None,
 ) -> FastAPI:
     settings = get_settings()
@@ -46,6 +48,14 @@ def create_app(
     )
     application.state.knowledge_search_cache = KnowledgeSearchCache(
         settings.knowledge_search_cache_ttl_seconds
+    )
+    application.state.generation_provider = generation_provider or DashScopeGenerationProvider(
+        settings.dashscope_api_key,
+        settings.generation_model,
+        settings.dashscope_base_url,
+    )
+    application.state.generation_configured = bool(
+        generation_provider is not None or (settings.dashscope_api_key or "").strip()
     )
     application.state.environment = settings.environment.strip().lower()
     application.state.embedding_configured = bool(

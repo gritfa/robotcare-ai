@@ -89,8 +89,8 @@
       "entry_status": "【已验证】",
       "verification_scope": "合成演示数据：由 generate_synthetic_knowledge.py 确定性生成，可复现校验",
       "manual_local_path": "knowledge/synthetic/RC-S200_manual.pdf",
-      "manual_sha256": "7903907238684f78e48e38f88b432ca522587cb24e92c33af5d60567df52fe64",
-      "manual_size_bytes": 26388,
+      "manual_sha256": "b9be4b007b3e6ffef9c08d1bfb6bf29e4ddb554645bbc153245206fb25e9702b",
+      "manual_size_bytes": 26681,
       "origin": "synthetic_demo_20260730",
       "note": "虚构型号，仅参照公开资料的常见故障模式编写；向量化使用确定性 hashing-ngram-v1，不冒充语义向量。"
     },
@@ -104,8 +104,8 @@
       "entry_status": "【已验证】",
       "verification_scope": "合成演示数据：由 generate_synthetic_knowledge.py 确定性生成，可复现校验",
       "manual_local_path": "knowledge/synthetic/RC-M500_manual.pdf",
-      "manual_sha256": "32211ab426ba43095a4213cc49cbd7a8b3aa62c425a3dd7952fcd71ff4c9d4fe",
-      "manual_size_bytes": 26755,
+      "manual_sha256": "dfe88347d0de35c7dcabbb6bac75a7051e5b09cb70073df55047e6fc48527efb",
+      "manual_size_bytes": 27025,
       "origin": "synthetic_demo_20260730",
       "note": "虚构型号，仅参照公开资料的常见故障模式编写；向量化使用确定性 hashing-ngram-v1，不冒充语义向量。"
     },
@@ -119,8 +119,8 @@
       "entry_status": "【已验证】",
       "verification_scope": "合成演示数据：由 generate_synthetic_knowledge.py 确定性生成，可复现校验",
       "manual_local_path": "knowledge/synthetic/RC-X800_manual.pdf",
-      "manual_sha256": "15d3e0724f62f3ed852a7ab7e6af377c2ab0fbbc0aecb74afa42d6bc38c4de2c",
-      "manual_size_bytes": 25761,
+      "manual_sha256": "fe4270949fe155a374ac275c7f8511c610733c5a16dbf21a08c5c3b602deab0f",
+      "manual_size_bytes": 26023,
       "origin": "synthetic_demo_20260730",
       "note": "虚构型号，仅参照公开资料的常见故障模式编写；向量化使用确定性 hashing-ngram-v1，不冒充语义向量。"
     }

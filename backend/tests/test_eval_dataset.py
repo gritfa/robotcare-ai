@@ -95,13 +95,13 @@ def test_offline_audit_passes_structural_source_step_and_safety_checks():
     assert report["metrics"]["source_page"]["execution_status"] == "passed"
     assert report["metrics"]["safety_block"]["execution_status"] == "passed"
     assert report["metrics"]["step_selection"]["execution_status"] == "passed"
-    assert set(report["not_run_metrics"]) == {
-        "model_isolation",
-        "retrieval_recall",
-        "refusal",
-        "classification",
-        "faithfulness",
-    }
+    # 阶段1：四个检索/分类/门控指标已可离线真实执行（内存库+合成说明书+确定性向量）
+    assert report["metrics"]["model_isolation"]["execution_status"] == "passed"
+    assert report["metrics"]["retrieval_recall"]["execution_status"] == "passed"
+    assert report["metrics"]["classification"]["execution_status"] == "passed"
+    assert report["metrics"]["refusal"]["execution_status"] == "passed"
+    # faithfulness 仍需真实 LLM（run_online_generation_eval.py），离线保持 not_run
+    assert set(report["not_run_metrics"]) == {"faithfulness"}
 
 
 def test_report_cannot_hide_a_safety_failure_behind_other_metrics():

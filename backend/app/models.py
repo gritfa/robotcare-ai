@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -399,4 +400,36 @@ class PendingFileDeletion(Base):
     original_stored_filename: Mapped[str] = mapped_column(String(255))
     quarantined_filename: Mapped[str] = mapped_column(String(255), unique=True)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GenerationRecord(Base):
+    """生成层调用留痕：每次回答/拒答一行，可追溯可复算。"""
+
+    __tablename__ = "generation_records"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('answered', 'refused')",
+            name="ck_generation_records_status",
+        ),
+        CheckConstraint(
+            "refusal_reason IN ('knowledge_gap', 'model_refused', 'citation_invalid', "
+            "'unsafe_answer') OR refusal_reason IS NULL",
+            name="ck_generation_records_refusal_reason",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    robot_model_id: Mapped[int] = mapped_column(ForeignKey("robot_models.id"), index=True)
+    query: Mapped[str] = mapped_column(String(2000))
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    provider_model: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    citations_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list)
+    refusal_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    snippets_sha256: Mapped[str] = mapped_column(String(64))
+    snippet_count: Mapped[int] = mapped_column(Integer)
+    latency_ms: Mapped[float] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

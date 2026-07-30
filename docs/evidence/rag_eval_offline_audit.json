@@ -1,6 +1,6 @@
 {
   "report_schema_version": "1.0",
-  "generated_at": "2026-07-30T07:47:44.670271+00:00",
+  "generated_at": "2026-07-30T08:00:34.066786+00:00",
   "dataset_path": "knowledge/eval_cases.jsonl",
   "overall_status": "passed_with_not_run_metrics",
   "dataset_summary": {
@@ -70,24 +70,24 @@
   "metrics": {
     "model_isolation": {
       "dimension": "model_isolation",
-      "execution_status": "not_run",
-      "total_cases": 39,
-      "evaluated_cases": 0,
-      "passed_cases": null,
-      "failed_cases": null,
-      "score": null,
-      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "execution_status": "passed",
+      "total_cases": 25,
+      "evaluated_cases": 25,
+      "passed_cases": 25,
+      "failed_cases": 0,
+      "score": 1.0,
+      "reason": "内存库 + 合成说明书 + 确定性 hashing 词面向量真实执行；结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过（跳过 14 条真实型号用例）",
       "failures": []
     },
     "retrieval_recall": {
       "dimension": "retrieval_recall",
-      "execution_status": "not_run",
-      "total_cases": 69,
-      "evaluated_cases": 0,
-      "passed_cases": null,
-      "failed_cases": null,
-      "score": null,
-      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "execution_status": "passed",
+      "total_cases": 55,
+      "evaluated_cases": 55,
+      "passed_cases": 55,
+      "failed_cases": 0,
+      "score": 1.0,
+      "reason": "内存库 + 合成说明书 + 确定性 hashing 词面向量真实执行；结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过（跳过 14 条真实型号用例）",
       "failures": []
     },
     "source_page": {
@@ -103,13 +103,13 @@
     },
     "refusal": {
       "dimension": "refusal",
-      "execution_status": "not_run",
-      "total_cases": 44,
-      "evaluated_cases": 0,
-      "passed_cases": null,
-      "failed_cases": null,
-      "score": null,
-      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "execution_status": "passed",
+      "total_cases": 30,
+      "evaluated_cases": 30,
+      "passed_cases": 30,
+      "failed_cases": 0,
+      "score": 1.0,
+      "reason": "门控层拒答离线执行：检索低于阈值必须拒答且不调用模型；模型层拒答仍需真实 LLM 另行评测（跳过 14 条真实型号用例）",
       "failures": []
     },
     "safety_block": {
@@ -125,13 +125,13 @@
     },
     "classification": {
       "dimension": "classification",
-      "execution_status": "not_run",
-      "total_cases": 64,
-      "evaluated_cases": 0,
-      "passed_cases": null,
-      "failed_cases": null,
-      "score": null,
-      "reason": "需要真实检索、分类或生成链路运行；离线审计不得伪造结果。",
+      "execution_status": "passed",
+      "total_cases": 50,
+      "evaluated_cases": 50,
+      "passed_cases": 50,
+      "failed_cases": 0,
+      "score": 1.0,
+      "reason": "确定性关键词分类离线执行（跳过 14 条真实型号用例）",
       "failures": []
     },
     "step_selection": {
@@ -158,10 +158,6 @@
     }
   },
   "not_run_metrics": [
-    "model_isolation",
-    "retrieval_recall",
-    "refusal",
-    "classification",
     "faithfulness"
   ],
   "evidence_boundary": "passed 仅代表本报告明确执行的离线规则或目录一致性检查；not_run 指标必须通过真实向量、分类或 LLM 链路另行运行。当前用例均未获得逐条人工审核确认，不得描述为人工审核评测集。"

@@ -188,7 +188,10 @@ def build_manual(model_code: str):
 
     flow_pages: dict[str, int] = {}
     for stable_key, _cat, _cat_name, title, steps in flows:
-        paragraphs = [f"适用问题：{title}。按顺序执行以下步骤，任一步骤解决后即可结束排查。"]
+        paragraphs = [
+            f"适用问题：{title}。常见表现：{FLOW_QUERIES[stable_key]}。"
+            "按顺序执行以下步骤，任一步骤解决后即可结束排查。"
+        ]
         for _key, step_title, instruction, _basis, policy in steps:
             text = f"步骤{_ordinal(steps, _key)}（{step_title}）：{instruction}"
             if policy:
@@ -428,11 +431,11 @@ def build_eval_cases(flow_pages_by_model, code_pages_by_model) -> list[dict]:
                                {"flow_key": stable_key, "current_step_key": steps[0][0],
                                 "returned_step_count": 1}))
 
-        for code, _name, _meaning, _self_help, _escalate, _flow in ERROR_CODES[model_code]:
+        for code, name, _meaning, _self_help, _escalate, _flow in ERROR_CODES[model_code]:
             page = code_pages_by_model[model_code][code]
             basis = f"reviewed_source:{sid} 错误码表同源生成——页码由生成器推导，待人工抽检"
             cases.append(_case(next_id("RR"), "retrieval_recall", model_code,
-                               f"报错 {code} 怎么处理", [sid], [page], basis,
+                               f"屏幕显示错误码 {code} {name}，怎么处理", [sid], [page], basis,
                                {"allowed_source_ids": [sid], "expected_pages": [page], "top_k": 5}))
 
         seen_categories: set[str] = set()

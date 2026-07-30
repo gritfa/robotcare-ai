@@ -275,3 +275,27 @@ class KnowledgeHealthRead(BaseModel):
     ready: bool
     embedding_configured: bool
     models: list[KnowledgeModelHealthRead]
+
+
+class KnowledgeAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    robot_model_id: int = Field(gt=0)
+    query: str = Field(min_length=1, max_length=2000)
+    top_k: int = Field(default=5, ge=1, le=5)
+
+
+class AnswerCitationRead(BaseModel):
+    index: int
+    source_url: str
+    page_number: int
+    score: float
+    document_sha256: str
+
+
+class KnowledgeAnswerResponse(BaseModel):
+    status: str
+    answer: str | None
+    citations: list[AnswerCitationRead]
+    refusal_reason: str | None
+    record_id: int

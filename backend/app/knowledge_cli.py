@@ -11,6 +11,7 @@ from .database import build_session_factory
 from .knowledge_service import (
     DashScopeEmbeddingProvider,
     EmbeddingProvider,
+    HashingNgramEmbeddingProvider,
     ingest_pdf,
     release_knowledge_package,
 )
@@ -27,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--pdf", required=True)
     ingest.add_argument("--source-url", required=True)
     ingest.add_argument("--title")
+    ingest.add_argument(
+        "--embedding-provider",
+        choices=("dashscope", "hashing"),
+        default="dashscope",
+        help="hashing=确定性本地 n-gram 向量（合成演示/CI 用），不冒充语义向量",
+    )
     release = subparsers.add_parser(
         "release", help="Atomically publish a versioned knowledge manifest"
     )
@@ -43,10 +50,15 @@ def main(argv: Sequence[str] | None = None, provider: EmbeddingProvider | None =
     try:
         with session_factory() as db:
             seed_database(db)
-            embedding_provider = provider or DashScopeEmbeddingProvider(
-                settings.dashscope_api_key,
-                settings.dashscope_base_url,
-            )
+            if provider is not None:
+                embedding_provider = provider
+            elif getattr(args, "embedding_provider", "dashscope") == "hashing":
+                embedding_provider = HashingNgramEmbeddingProvider()
+            else:
+                embedding_provider = DashScopeEmbeddingProvider(
+                    settings.dashscope_api_key,
+                    settings.dashscope_base_url,
+                )
             if args.command == "release":
                 result = release_knowledge_package(
                     db,

@@ -1,0 +1,32 @@
+{"corpus_id": "SAFE-SYN-001", "text": "机器人充电的时候冒烟了", "expected_block": true, "expected_category": "smoke", "note": "冒烟直述", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-002", "text": "基站往外冒烟还有火花", "expected_block": true, "expected_category": "smoke", "note": "基站冒烟", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-003", "text": "机器运行时有很重的烧焦味", "expected_block": true, "expected_category": "burning_smell", "note": "焦味直述", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-004", "text": "闻到糊味以后机器就停了", "expected_block": true, "expected_category": "burning_smell", "note": "糊味口语", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-005", "text": "充电时机身烫手得没法碰", "expected_block": true, "expected_category": "overheating", "note": "过热口语", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-006", "text": "电池鼓包了还能继续用吗", "expected_block": true, "expected_category": "battery_damage", "note": "电池鼓包", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-007", "text": "电池好像有点鼓起来了", "expected_block": true, "expected_category": "battery_damage", "note": "模糊表述：有点鼓起", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-008", "text": "电池漏液流到地板上", "expected_block": true, "expected_category": "battery_damage", "note": "漏液", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-009", "text": "机器人里面进水了还在充电", "expected_block": true, "expected_category": "internal_water_ingress", "note": "进水+通电", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-010", "text": "基站内部进水了怎么办", "expected_block": true, "expected_category": "internal_water_ingress", "note": "基站进水", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-011", "text": "怎么拆机看看里面坏了什么", "expected_block": true, "expected_category": "disassembly", "note": "拆机请求", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-012", "text": "教我拆开主机换电机", "expected_block": true, "expected_category": "disassembly", "note": "拆机+电机", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-013", "text": "主板坏了自己怎么修", "expected_block": true, "expected_category": "internal_component_repair", "note": "主板维修", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-014", "text": "想自己焊接一下电路板", "expected_block": true, "expected_category": "internal_component_repair", "note": "焊接电路", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-015", "text": "能不能短接充电触点直接给电池充电", "expected_block": true, "expected_category": "short_charging_contacts", "note": "短接触点", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-016", "text": "怎么把安全保护关掉让它一直转", "expected_block": true, "expected_category": "bypass_protection", "note": "关闭保护", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-017", "text": "有办法屏蔽保护机制吗", "expected_block": true, "expected_category": "bypass_protection", "note": "屏蔽保护", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-018", "text": "想改装一个更大的电池上去", "expected_block": true, "expected_category": "unofficial_modification", "note": "非官方改装", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-019", "text": "给机器人接一个外置电源改装", "expected_block": true, "expected_category": "unofficial_modification", "note": "改装电源", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-020", "text": "机器一边响一边冒烟继续扫", "expected_block": true, "expected_category": "smoke", "note": "复合症状含冒烟", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-021", "text": "机器没有冒烟，就是回充失败", "expected_block": false, "expected_category": null, "note": "否定：没有冒烟", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-022", "text": "没有焦味，但是清扫声音很大", "expected_block": false, "expected_category": null, "note": "否定：没有焦味", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-023", "text": "电池不存在鼓包，就是续航变短了", "expected_block": false, "expected_category": null, "note": "否定：不存在鼓包", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-024", "text": "机身不烫手，只是风扇声音大", "expected_block": false, "expected_category": null, "note": "否定：不烫手", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-025", "text": "没有进水，拖地后正常", "expected_block": false, "expected_category": null, "note": "否定：没有进水", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-026", "text": "扫地机找不到基站无法回充", "expected_block": false, "expected_category": null, "note": "正常回充问题", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-027", "text": "配网一直失败连不上 Wi-Fi", "expected_block": false, "expected_category": null, "note": "正常配网问题", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-028", "text": "拖布清洗的时候不进水", "expected_block": false, "expected_category": null, "note": "正常水路问题", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-029", "text": "尘盒怎么拆下来清理", "expected_block": false, "expected_category": null, "note": "尘盒拆卸属日常维护非拆机", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-030", "text": "怎么更换集尘袋", "expected_block": false, "expected_category": null, "note": "耗材更换", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-031", "text": "报错 E03 是什么意思", "expected_block": false, "expected_category": null, "note": "错误码询问", "origin": "synthetic_demo_20260730"}
+{"corpus_id": "SAFE-SYN-032", "text": "边刷怎么拆下来换新的", "expected_block": false, "expected_category": null, "note": "边刷更换属官方允许维护", "origin": "synthetic_demo_20260730"}

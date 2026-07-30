@@ -78,6 +78,51 @@
       "verification_scope": "只验证为可访问的 haier.com 官方支持入口",
       "content_ingestion_status": "【计划】",
       "content_ingestion_note": "后续用于展示官方报修入口和人工核验服务信息；不得将第三方产品描述为海尔官方服务。"
+    },
+    {
+      "source_id": "synthetic-rc-s200",
+      "brand": "RobotCare 演示",
+      "model_code": "RC-S200",
+      "source_type": "synthetic_demo_manual",
+      "title": "RC-S200 基础扫拖机器人（演示型号） 合成演示说明书",
+      "url": "synthetic://robotcare-demo/rc-s200/manual",
+      "entry_status": "【已验证】",
+      "verification_scope": "合成演示数据：由 generate_synthetic_knowledge.py 确定性生成，可复现校验",
+      "manual_local_path": "knowledge/synthetic/RC-S200_manual.pdf",
+      "manual_sha256": "7903907238684f78e48e38f88b432ca522587cb24e92c33af5d60567df52fe64",
+      "manual_size_bytes": 26388,
+      "origin": "synthetic_demo_20260730",
+      "note": "虚构型号，仅参照公开资料的常见故障模式编写；向量化使用确定性 hashing-ngram-v1，不冒充语义向量。"
+    },
+    {
+      "source_id": "synthetic-rc-m500",
+      "brand": "RobotCare 演示",
+      "model_code": "RC-M500",
+      "source_type": "synthetic_demo_manual",
+      "title": "RC-M500 自清洗基站扫拖机器人（演示型号） 合成演示说明书",
+      "url": "synthetic://robotcare-demo/rc-m500/manual",
+      "entry_status": "【已验证】",
+      "verification_scope": "合成演示数据：由 generate_synthetic_knowledge.py 确定性生成，可复现校验",
+      "manual_local_path": "knowledge/synthetic/RC-M500_manual.pdf",
+      "manual_sha256": "32211ab426ba43095a4213cc49cbd7a8b3aa62c425a3dd7952fcd71ff4c9d4fe",
+      "manual_size_bytes": 26755,
+      "origin": "synthetic_demo_20260730",
+      "note": "虚构型号，仅参照公开资料的常见故障模式编写；向量化使用确定性 hashing-ngram-v1，不冒充语义向量。"
+    },
+    {
+      "source_id": "synthetic-rc-x800",
+      "brand": "RobotCare 演示",
+      "model_code": "RC-X800",
+      "source_type": "synthetic_demo_manual",
+      "title": "RC-X800 激光导航旗舰扫拖机器人（演示型号） 合成演示说明书",
+      "url": "synthetic://robotcare-demo/rc-x800/manual",
+      "entry_status": "【已验证】",
+      "verification_scope": "合成演示数据：由 generate_synthetic_knowledge.py 确定性生成，可复现校验",
+      "manual_local_path": "knowledge/synthetic/RC-X800_manual.pdf",
+      "manual_sha256": "15d3e0724f62f3ed852a7ab7e6af377c2ab0fbbc0aecb74afa42d6bc38c4de2c",
+      "manual_size_bytes": 25761,
+      "origin": "synthetic_demo_20260730",
+      "note": "虚构型号，仅参照公开资料的常见故障模式编写；向量化使用确定性 hashing-ngram-v1，不冒充语义向量。"
     }
   ]
 }

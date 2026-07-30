@@ -121,8 +121,8 @@ def test_admin_reads_operational_overview_without_sensitive_payloads(client: Tes
     assert overview.status_code == 200
     assert overview.json() == {
         "user_count": 2,
-        "active_model_count": 2,
-        "published_flow_count": 4,
+        "active_model_count": 5,  # 2 真实型号 + 3 D1 合成演示型号
+        "published_flow_count": 29,  # 4 条真实 + 25 条 D1 合成演示流程
         "knowledge_document_count": 0,
         "knowledge_chunk_count": 0,
         "safety_block_count": 1,
@@ -132,12 +132,12 @@ def test_admin_reads_operational_overview_without_sensitive_payloads(client: Tes
 
     models = client.get("/api/v1/admin/models", headers=auth(admin_token))
     assert models.status_code == 200
-    assert {item["code"] for item in models.json()} == {"JH69U1", "VC35U1"}
+    assert {item["code"] for item in models.json()} == {"JH69U1", "VC35U1", "RC-S200", "RC-M500", "RC-X800"}
     assert all("active" in item for item in models.json())
 
     knowledge = client.get("/api/v1/admin/knowledge/status", headers=auth(admin_token))
     assert knowledge.status_code == 200
-    assert {item["model_code"] for item in knowledge.json()} == {"JH69U1", "VC35U1"}
+    assert {item["model_code"] for item in knowledge.json()} == {"JH69U1", "VC35U1", "RC-S200", "RC-M500", "RC-X800"}
 
     safety_blocks = client.get("/api/v1/admin/safety-blocks", headers=auth(admin_token))
     assert safety_blocks.status_code == 200

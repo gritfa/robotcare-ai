@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0",
-  "updated_at": "2026-07-20",
+  "updated_at": "2026-07-30",
   "flows": [
     {
       "stable_key": "jh69u1-return-to-dock",
@@ -242,6 +242,1291 @@
           "evidence_level": "partial",
           "evidence_basis": "说明书支持传感器维护，但未明确建立传感器灰尘与导航异常的因果关系。",
           "policy_note": "不使用液体，不拆开外壳。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-s200-return-to-dock",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-S200",
+      "model_name": "RC-S200 基础扫拖机器人（演示型号）",
+      "issue_category_code": "return_to_dock_failure",
+      "issue_category_name": "无法回充",
+      "title": "RC-S200 无法回充排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-dock-power",
+          "position": 1,
+          "title": "检查基站供电与摆放",
+          "instruction": "确认基站电源指示灯亮起，基站靠墙放置，前方 1.5 米、两侧 0.5 米内无障碍物和强反光物体。",
+          "source_label": "RC-S200 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站安装章要求靠墙、通电并保留回充空间。"
+        },
+        {
+          "stable_key": "clean-charge-contacts",
+          "position": 2,
+          "title": "清洁充电触点",
+          "instruction": "关机后用干燥软布轻擦主机充电极片与基站弹片，去除灰尘和毛发，不要使用湿布或金属工具。",
+          "source_label": "RC-S200 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求定期干布清洁充电触点。",
+          "policy_note": "平台禁止用金属工具刮擦或短接触点。"
+        },
+        {
+          "stable_key": "clear-dock-path",
+          "position": 3,
+          "title": "清理回充路径",
+          "instruction": "移开基站前方的地毯边缘、拖鞋和数据线等杂物，确保机器人能从任意方向接近基站。",
+          "source_label": "RC-S200 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题指出回充路径遮挡是回充失败的主要原因。"
+        },
+        {
+          "stable_key": "retry-return",
+          "position": 4,
+          "title": "近距离重试回充",
+          "instruction": "把机器人放到基站前约 1 米处，按机身回充键重试；仍失败请结束自助排查并联系售后。",
+          "source_label": "RC-S200 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书故障排除章要求近距离重试后仍失败即转人工。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-s200-wifi-setup",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-S200",
+      "model_name": "RC-S200 基础扫拖机器人（演示型号）",
+      "issue_category_code": "wifi_setup_failure",
+      "issue_category_name": "配网失败",
+      "title": "RC-S200 App 配网失败排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-24g",
+          "position": 1,
+          "title": "确认使用 2.4GHz 网络",
+          "instruction": "在路由器设置中确认手机连接的是 2.4GHz Wi-Fi；RC-S200 不支持 5GHz 单频网络。",
+          "source_label": "RC-S200 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书配网章标明仅支持 2.4GHz。"
+        },
+        {
+          "stable_key": "reset-network",
+          "position": 2,
+          "title": "重置机器网络配置",
+          "instruction": "长按回充键与电源键 3 秒直到提示音响起，机器进入配网模式，指示灯慢闪。",
+          "source_label": "RC-S200 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书配网章给出组合键重置网络的操作。"
+        },
+        {
+          "stable_key": "close-distance",
+          "position": 3,
+          "title": "靠近路由器重试",
+          "instruction": "将机器人和手机移动到路由器同一房间内重新配网，避开微波炉等干扰源。",
+          "source_label": "RC-S200 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题建议缩短与路由器距离并远离干扰。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-s200-cleaning-noise",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-S200",
+      "model_name": "RC-S200 基础扫拖机器人（演示型号）",
+      "issue_category_code": "cleaning_noise",
+      "issue_category_name": "清扫噪音异常",
+      "title": "RC-S200 清扫噪音异常排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-side-brush",
+          "position": 1,
+          "title": "检查边刷缠绕",
+          "instruction": "关机后取下边刷，清理缠绕的毛发和线头，确认边刷卡扣完好后重新装回。",
+          "source_label": "RC-S200 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求每周清理边刷缠绕物。"
+        },
+        {
+          "stable_key": "check-roller",
+          "position": 2,
+          "title": "清理滚刷与滚刷罩",
+          "instruction": "打开滚刷罩取出滚刷，用清洁工具割除缠发，检查滚刷两端轴承处是否卡入异物。",
+          "source_label": "RC-S200 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章给出滚刷拆装与清理步骤。"
+        },
+        {
+          "stable_key": "check-wheels",
+          "position": 3,
+          "title": "检查万向轮与驱动轮",
+          "instruction": "翻转机器检查万向轮转动是否顺畅，取出万向轮清理轴孔内的毛发和碎屑。",
+          "source_label": "RC-S200 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求定期清理万向轮轴孔。",
+          "policy_note": "驱动轮内部结构不可拆解，异响持续请转售后。"
+        },
+        {
+          "stable_key": "retry-quiet",
+          "position": 4,
+          "title": "空旷区域试运行",
+          "instruction": "在无地毯的空旷区域运行 2 分钟，若异响仍存在请记录声音位置并联系售后。",
+          "source_label": "RC-S200 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书故障排除章要求排除环境因素后仍异响即转人工。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-s200-suction-drop",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-S200",
+      "model_name": "RC-S200 基础扫拖机器人（演示型号）",
+      "issue_category_code": "suction_drop",
+      "issue_category_name": "吸力下降",
+      "title": "RC-S200 吸力下降排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "empty-dustbin",
+          "position": 1,
+          "title": "清空尘盒",
+          "instruction": "取出尘盒倒空垃圾，尘盒装满会直接导致吸力明显下降。",
+          "source_label": "RC-S200 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求每次使用后清空尘盒。"
+        },
+        {
+          "stable_key": "clean-filter",
+          "position": 2,
+          "title": "清理滤网",
+          "instruction": "取出海帕滤网轻拍除尘，滤网只能干洗晾干，严禁水洗后立即装回。",
+          "source_label": "RC-S200 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求滤网定期除尘并保持干燥。"
+        },
+        {
+          "stable_key": "check-inlet",
+          "position": 3,
+          "title": "检查吸尘口堵塞",
+          "instruction": "翻转机器检查吸尘口是否被纸团、袜子等大件异物堵住并清理。",
+          "source_label": "RC-S200 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题列出吸尘口堵塞为吸力下降主因。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-s200-mop-no-water",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-S200",
+      "model_name": "RC-S200 基础扫拖机器人（演示型号）",
+      "issue_category_code": "mop_water_issue",
+      "issue_category_name": "拖布不出水",
+      "title": "RC-S200 拖布不出水排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-tank",
+          "position": 1,
+          "title": "检查水箱水量与安装",
+          "instruction": "取下水箱确认水量充足，重新安装时听到咔哒声表示到位。",
+          "source_label": "RC-S200 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书拖地章要求水箱安装到位并保持水量。"
+        },
+        {
+          "stable_key": "check-mop-install",
+          "position": 2,
+          "title": "检查拖布安装",
+          "instruction": "确认拖布支架卡入机身，拖布魔术贴平整无褶皱，出水孔未被拖布挡住。",
+          "source_label": "RC-S200 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书拖地章给出拖布安装图示。"
+        },
+        {
+          "stable_key": "flush-outlet",
+          "position": 3,
+          "title": "疏通出水孔",
+          "instruction": "用随机附带的清理针轻轻疏通水箱出水孔，清除水垢堵塞。",
+          "source_label": "RC-S200 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章建议定期疏通出水孔防止水垢。",
+          "policy_note": "不要使用尖锐金属物大力捅刺出水孔。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-s200-power-on-failure",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-S200",
+      "model_name": "RC-S200 基础扫拖机器人（演示型号）",
+      "issue_category_code": "power_on_failure",
+      "issue_category_name": "无法开机",
+      "title": "RC-S200 无法开机排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "charge-first",
+          "position": 1,
+          "title": "先充电再开机",
+          "instruction": "电量耗尽后机器无法立即开机，将机器放上基站充电 30 分钟后再尝试开机。",
+          "source_label": "RC-S200 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题说明深度亏电需充电后才能开机。"
+        },
+        {
+          "stable_key": "check-switch",
+          "position": 2,
+          "title": "检查侧边总开关",
+          "instruction": "确认机身侧面的总电源开关处于 ON 位置；运输或收纳后开关常被拨到 OFF。",
+          "source_label": "RC-S200 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书首次使用章要求先打开总开关。"
+        },
+        {
+          "stable_key": "check-dock-output",
+          "position": 3,
+          "title": "确认基站充电正常",
+          "instruction": "机器放上基站后充电指示灯应亮起；不亮时更换插座并检查电源线两端插紧。",
+          "source_label": "RC-S200 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章说明充电指示灯行为。",
+          "policy_note": "电源线破损、发热冒烟属高危情况，立即停用并联系售后。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-s200-stuck-obstacle",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-S200",
+      "model_name": "RC-S200 基础扫拖机器人（演示型号）",
+      "issue_category_code": "stuck_navigation",
+      "issue_category_name": "被困与越障失败",
+      "title": "RC-S200 经常被困排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "clear-cables",
+          "position": 1,
+          "title": "收纳地面线缆",
+          "instruction": "清理地面数据线、充电线和窗帘绳，机器容易被线缆缠绕导致被困。",
+          "source_label": "RC-S200 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书使用环境章建议清理地面线缆。"
+        },
+        {
+          "stable_key": "check-threshold",
+          "position": 2,
+          "title": "确认门槛高度",
+          "instruction": "RC-S200 最大越障高度约 18 毫米，超过的门槛请设置虚拟墙或垫斜坡。",
+          "source_label": "RC-S200 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书规格章标注最大越障高度。"
+        },
+        {
+          "stable_key": "clean-cliff-sensor",
+          "position": 3,
+          "title": "清洁悬崖传感器",
+          "instruction": "用干布擦拭机身底部的悬崖传感器，传感器脏污会导致机器在深色地面误判被困。",
+          "source_label": "RC-S200 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求定期清洁悬崖传感器。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-s200-error-e01",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-S200",
+      "model_name": "RC-S200 基础扫拖机器人（演示型号）",
+      "issue_category_code": "error_code_drive",
+      "issue_category_name": "驱动轮错误码",
+      "title": "RC-S200 错误码 E01 驱动轮异常排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "power-off-check",
+          "position": 1,
+          "title": "关机检查驱动轮",
+          "instruction": "关机后按压两侧驱动轮，确认能正常回弹，清理轮轴处缠绕的毛发。",
+          "source_label": "RC-S200 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书错误码表 E01 指引检查驱动轮回弹与缠绕。"
+        },
+        {
+          "stable_key": "remove-jam",
+          "position": 2,
+          "title": "清除卡阻异物",
+          "instruction": "检查驱动轮与机身缝隙是否卡入石子或玩具零件并取出。",
+          "source_label": "RC-S200 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书错误码表要求清除轮组异物。"
+        },
+        {
+          "stable_key": "restart-verify",
+          "position": 3,
+          "title": "重启验证",
+          "instruction": "重新开机在平整地面试运行；E01 仍出现说明轮组内部故障，请联系售后。",
+          "source_label": "RC-S200 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-s200/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书错误码表说明重启后复现需专业维修。",
+          "policy_note": "驱动轮电机不可自行拆解维修。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-return-to-dock",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "return_to_dock_failure",
+      "issue_category_name": "无法回充",
+      "title": "RC-M500 无法回洗基站排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-station-power",
+          "position": 1,
+          "title": "检查基站供电",
+          "instruction": "确认基站电源接通、屏幕指示正常，断电重启基站一次。",
+          "source_label": "RC-M500 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章说明基站指示状态。"
+        },
+        {
+          "stable_key": "clear-station-area",
+          "position": 2,
+          "title": "清理基站周边",
+          "instruction": "基站前方 1.5 米、两侧 0.5 米不放置杂物，移除强反光的镜面和金属踢脚线遮挡。",
+          "source_label": "RC-M500 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书安装章给出基站空间要求。"
+        },
+        {
+          "stable_key": "clean-signal-window",
+          "position": 3,
+          "title": "清洁回充信号窗",
+          "instruction": "用干布擦拭基站正面信号发射窗与机身回充接收窗。",
+          "source_label": "RC-M500 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求清洁信号窗。"
+        },
+        {
+          "stable_key": "retry-return",
+          "position": 4,
+          "title": "近距离重试",
+          "instruction": "机器放到基站前 1 米按回充键重试，仍失败结束自助排查。",
+          "source_label": "RC-M500 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书故障排除章要求重试后转人工。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-wifi-setup",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "wifi_setup_failure",
+      "issue_category_name": "配网失败",
+      "title": "RC-M500 App 配网失败排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-24g",
+          "position": 1,
+          "title": "确认 2.4GHz 网络",
+          "instruction": "确认手机连接 2.4GHz Wi-Fi；若为双频合一路由建议临时分开 2.4G/5G 名称。",
+          "source_label": "RC-M500 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书配网章标明仅支持 2.4GHz 并建议分开双频。"
+        },
+        {
+          "stable_key": "reset-network",
+          "position": 2,
+          "title": "重置网络进入配网",
+          "instruction": "长按基站上的召回键与清洗键 3 秒，机器语音提示进入配网模式。",
+          "source_label": "RC-M500 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书配网章给出基站组合键操作。"
+        },
+        {
+          "stable_key": "rescan-qr",
+          "position": 3,
+          "title": "重新扫码绑定",
+          "instruction": "在 App 中删除旧设备记录后重新扫描水箱盖内侧二维码绑定。",
+          "source_label": "RC-M500 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书配网章说明二维码位置与重新绑定流程。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-mop-wash-no-water",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "base_station_water_tank_issue",
+      "issue_category_name": "基站清洗异常",
+      "title": "RC-M500 基站清洗拖布不进水排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-clean-tank",
+          "position": 1,
+          "title": "检查清水箱",
+          "instruction": "取出基站清水箱确认水量高于最低水位线，安装时按压到位听到咔哒声。",
+          "source_label": "RC-M500 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章要求清水箱水位与安装到位。"
+        },
+        {
+          "stable_key": "check-tank-valve",
+          "position": 2,
+          "title": "检查水箱出水阀",
+          "instruction": "检查清水箱底部出水阀是否被水垢卡住，用温水冲洗阀口。",
+          "source_label": "RC-M500 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章建议定期冲洗清水箱阀口。"
+        },
+        {
+          "stable_key": "clean-wash-tray",
+          "position": 3,
+          "title": "清理清洗槽",
+          "instruction": "取出清洗槽刮板，清理槽内毛发与污泥，喷水孔堵塞时用软毛刷清理。",
+          "source_label": "RC-M500 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章给出清洗槽拆洗步骤。"
+        },
+        {
+          "stable_key": "run-self-clean",
+          "position": 4,
+          "title": "手动触发自清洗验证",
+          "instruction": "在基站面板按下清洗键观察是否正常喷水；仍不进水请联系售后检查水泵。",
+          "source_label": "RC-M500 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书故障排除章要求验证后转人工。",
+          "policy_note": "基站水泵不可自行拆解。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-dirty-tank-alarm",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "dirty_tank_alarm",
+      "issue_category_name": "污水箱报警",
+      "title": "RC-M500 污水箱报警排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "empty-dirty-tank",
+          "position": 1,
+          "title": "倒空污水箱",
+          "instruction": "取出污水箱倒掉污水并用清水冲洗，污水箱满或浮子卡住都会触发报警。",
+          "source_label": "RC-M500 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章说明污水箱报警条件。"
+        },
+        {
+          "stable_key": "clean-float",
+          "position": 2,
+          "title": "清洁浮子传感器",
+          "instruction": "冲洗污水箱内的白色浮子并确认其上下浮动自如。",
+          "source_label": "RC-M500 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求清洁浮子防止误报。"
+        },
+        {
+          "stable_key": "reseat-tank",
+          "position": 3,
+          "title": "重新安装污水箱",
+          "instruction": "擦干污水箱底部与基站接口后装回，确认到位后报警应消除。",
+          "source_label": "RC-M500 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章要求接口干燥并安装到位。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-no-dust-collect",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "dust_collection_issue",
+      "issue_category_name": "基站不集尘",
+      "title": "RC-M500 基站不集尘排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-dust-bag",
+          "position": 1,
+          "title": "检查集尘袋",
+          "instruction": "打开基站上盖检查集尘袋是否装满或未卡入卡槽，更换新集尘袋。",
+          "source_label": "RC-M500 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章要求集尘袋正确安装并及时更换。"
+        },
+        {
+          "stable_key": "check-duct",
+          "position": 2,
+          "title": "检查集尘风道",
+          "instruction": "检查基站集尘口与机器尘盒对接处是否被纸屑堵塞并清理。",
+          "source_label": "RC-M500 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章给出风道清理位置。"
+        },
+        {
+          "stable_key": "check-dustbin-seal",
+          "position": 3,
+          "title": "检查尘盒密封胶条",
+          "instruction": "检查机器尘盒底盖密封胶条是否变形脱落，密封不良会导致集尘无力。",
+          "source_label": "RC-M500 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求检查尘盒密封状态。"
+        },
+        {
+          "stable_key": "manual-collect",
+          "position": 4,
+          "title": "手动集尘验证",
+          "instruction": "机器上基站后在 App 点击手动集尘，观察风机声音；无反应请联系售后。",
+          "source_label": "RC-M500 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书故障排除章要求手动验证后转人工。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-cleaning-noise",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "cleaning_noise",
+      "issue_category_name": "清扫噪音异常",
+      "title": "RC-M500 清扫噪音异常排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-brushes",
+          "position": 1,
+          "title": "清理边刷与滚刷",
+          "instruction": "关机后清理边刷和滚刷缠绕的毛发，检查滚刷浮动框架是否卡异物。",
+          "source_label": "RC-M500 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求定期清理刷组。"
+        },
+        {
+          "stable_key": "check-mop-plate",
+          "position": 2,
+          "title": "检查拖布支架",
+          "instruction": "确认两块旋转拖布支架安装到位，拖布脱落偏心旋转会产生异响。",
+          "source_label": "RC-M500 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书拖地章要求拖布支架卡紧。"
+        },
+        {
+          "stable_key": "station-noise",
+          "position": 3,
+          "title": "区分基站噪音",
+          "instruction": "若噪音只在回洗或集尘时出现，属基站风机与水泵正常工作音；音量突然增大请联系售后。",
+          "source_label": "RC-M500 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章说明基站工作音量范围。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-suction-drop",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "suction_drop",
+      "issue_category_name": "吸力下降",
+      "title": "RC-M500 吸力下降排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "empty-dustbin",
+          "position": 1,
+          "title": "清空尘盒并清理滤网",
+          "instruction": "倒空尘盒、轻拍海帕滤网除尘，滤网水洗后必须完全晾干再装回。",
+          "source_label": "RC-M500 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章给出尘盒滤网保养要求。"
+        },
+        {
+          "stable_key": "check-inlet",
+          "position": 2,
+          "title": "检查吸尘口",
+          "instruction": "翻转机器清理吸尘口堵塞的大件异物。",
+          "source_label": "RC-M500 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题列出吸尘口堵塞原因。"
+        },
+        {
+          "stable_key": "check-mode",
+          "position": 3,
+          "title": "确认吸力档位",
+          "instruction": "在 App 检查是否被设为节能档，地毯环境建议开启地毯增压。",
+          "source_label": "RC-M500 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书 App 章说明吸力档位与地毯增压。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-power-on-failure",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "power_on_failure",
+      "issue_category_name": "无法开机",
+      "title": "RC-M500 无法开机排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "charge-first",
+          "position": 1,
+          "title": "上基站充电 30 分钟",
+          "instruction": "深度亏电后需充电半小时才能开机，请先把机器放上基站。",
+          "source_label": "RC-M500 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题说明亏电恢复流程。"
+        },
+        {
+          "stable_key": "check-switch",
+          "position": 2,
+          "title": "检查总开关",
+          "instruction": "确认机身侧面总开关在 ON 位置。",
+          "source_label": "RC-M500 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书首次使用章要求打开总开关。"
+        },
+        {
+          "stable_key": "check-contact",
+          "position": 3,
+          "title": "检查充电对接",
+          "instruction": "确认机器充电极片与基站弹片贴合，指示灯亮起表示充电正常。",
+          "source_label": "RC-M500 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章说明充电指示行为。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-m500-error-e07",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-M500",
+      "model_name": "RC-M500 自清洗基站扫拖机器人（演示型号）",
+      "issue_category_code": "error_code_water",
+      "issue_category_name": "水路错误码",
+      "title": "RC-M500 错误码 E07 水路异常排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "refill-tank",
+          "position": 1,
+          "title": "补水并重新安装清水箱",
+          "instruction": "E07 表示供水异常，先确认清水箱水量并重新安装到位。",
+          "source_label": "RC-M500 合成演示说明书，第 17 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 17,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书错误码表 E07 指引检查供水。"
+        },
+        {
+          "stable_key": "clean-valve",
+          "position": 2,
+          "title": "清理出水阀水垢",
+          "instruction": "温水冲洗清水箱出水阀，硬水地区建议每月除垢一次。",
+          "source_label": "RC-M500 合成演示说明书，第 17 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 17,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章给出除垢建议。"
+        },
+        {
+          "stable_key": "restart-verify",
+          "position": 3,
+          "title": "重启验证",
+          "instruction": "重启基站后手动触发清洗验证；E07 复现请联系售后。",
+          "source_label": "RC-M500 合成演示说明书，第 17 页",
+          "source_url": "synthetic://robotcare-demo/rc-m500/manual",
+          "source_page": 17,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书错误码表要求复现即转人工。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-x800-return-to-dock",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-X800",
+      "model_name": "RC-X800 激光导航旗舰扫拖机器人（演示型号）",
+      "issue_category_code": "return_to_dock_failure",
+      "issue_category_name": "无法回充",
+      "title": "RC-X800 无法回充排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-dock",
+          "position": 1,
+          "title": "检查基站供电与位置",
+          "instruction": "确认基站通电且未被挪动；搬动基站后建议引导机器重新回充一次以更新基站位置。",
+          "source_label": "RC-X800 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书基站章说明基站位置变更的影响。"
+        },
+        {
+          "stable_key": "clean-lidar-window",
+          "position": 2,
+          "title": "清洁激光雷达与回充窗",
+          "instruction": "用干布轻擦机身顶部激光雷达罩和基站信号窗，脏污会干扰定位与对接。",
+          "source_label": "RC-X800 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求清洁激光罩与信号窗。"
+        },
+        {
+          "stable_key": "check-map-dock",
+          "position": 3,
+          "title": "确认地图中的基站标记",
+          "instruction": "在 App 地图确认基站图标位置与实际一致，不一致时执行重新定位。",
+          "source_label": "RC-X800 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书 App 章给出重新定位入口。"
+        },
+        {
+          "stable_key": "retry-return",
+          "position": 4,
+          "title": "近距离重试",
+          "instruction": "机器放到基站前 1 米重试回充，仍失败结束自助排查并联系售后。",
+          "source_label": "RC-X800 合成演示说明书，第 9 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 9,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书故障排除章要求重试后转人工。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-x800-map-lost",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-X800",
+      "model_name": "RC-X800 激光导航旗舰扫拖机器人（演示型号）",
+      "issue_category_code": "map_lost",
+      "issue_category_name": "地图丢失",
+      "title": "RC-X800 地图丢失与重建排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-dock-moved",
+          "position": 1,
+          "title": "确认基站是否被移动",
+          "instruction": "基站被移动到新位置后旧地图可能失效，将基站放回原位可恢复识别。",
+          "source_label": "RC-X800 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书地图章说明基站位置与地图的绑定关系。"
+        },
+        {
+          "stable_key": "check-app-map",
+          "position": 2,
+          "title": "检查 App 多地图管理",
+          "instruction": "在 App 地图管理中确认是否误切换或删除了当前楼层地图，可从备份恢复。",
+          "source_label": "RC-X800 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书 App 章给出多地图备份与恢复操作。"
+        },
+        {
+          "stable_key": "rebuild-map",
+          "position": 3,
+          "title": "全屋重建地图",
+          "instruction": "整理地面后从基站启动一次完整清扫以重建地图，重建过程不要人为搬动机器。",
+          "source_label": "RC-X800 合成演示说明书，第 10 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书地图章给出重建地图的条件。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-x800-missed-area",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-X800",
+      "model_name": "RC-X800 激光导航旗舰扫拖机器人（演示型号）",
+      "issue_category_code": "missed_cleaning_area",
+      "issue_category_name": "漏扫重复扫",
+      "title": "RC-X800 漏扫与重复清扫排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "clean-lidar",
+          "position": 1,
+          "title": "清洁激光雷达罩",
+          "instruction": "干布擦拭激光罩，指纹和灰尘会造成建图噪点导致漏扫。",
+          "source_label": "RC-X800 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求定期清洁激光罩。"
+        },
+        {
+          "stable_key": "check-forbidden-zone",
+          "position": 2,
+          "title": "检查禁区与虚拟墙设置",
+          "instruction": "在 App 地图检查是否有误设的禁区或虚拟墙挡住了漏扫区域。",
+          "source_label": "RC-X800 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书 App 章说明禁区设置的影响。"
+        },
+        {
+          "stable_key": "check-doorsill",
+          "position": 3,
+          "title": "检查房间门槛与地面落差",
+          "instruction": "确认漏扫房间门槛不超过 20 毫米越障上限，必要时加装门槛坡道。",
+          "source_label": "RC-X800 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书规格章标注越障上限。"
+        },
+        {
+          "stable_key": "re-clean",
+          "position": 4,
+          "title": "指定区域补扫验证",
+          "instruction": "对漏扫区域发起选区清扫验证；仍无法到达请保存地图截图联系售后。",
+          "source_label": "RC-X800 合成演示说明书，第 11 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书故障排除章要求验证后转人工。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-x800-collision",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-X800",
+      "model_name": "RC-X800 激光导航旗舰扫拖机器人（演示型号）",
+      "issue_category_code": "collision_damage",
+      "issue_category_name": "碰撞过猛",
+      "title": "RC-X800 碰撞家具过猛排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "clean-front-sensor",
+          "position": 1,
+          "title": "清洁前方避障传感器",
+          "instruction": "用干布擦拭前方 3D 避障镜头与两侧沿墙传感器，脏污会导致避障距离变短。",
+          "source_label": "RC-X800 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求清洁避障镜头。"
+        },
+        {
+          "stable_key": "check-bumper",
+          "position": 2,
+          "title": "检查防撞条回弹",
+          "instruction": "轻按前防撞条确认能自由回弹，卡住会导致碰撞检测失灵。",
+          "source_label": "RC-X800 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求检查防撞条状态。"
+        },
+        {
+          "stable_key": "set-gentle-mode",
+          "position": 3,
+          "title": "开启避障加强模式",
+          "instruction": "在 App 设置中开启深色家具避障加强，并为易碰撞家具设置禁区。",
+          "source_label": "RC-X800 合成演示说明书，第 12 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 12,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书 App 章说明避障模式选项。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-x800-wifi-setup",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-X800",
+      "model_name": "RC-X800 激光导航旗舰扫拖机器人（演示型号）",
+      "issue_category_code": "wifi_setup_failure",
+      "issue_category_name": "配网失败",
+      "title": "RC-X800 App 配网失败排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-band",
+          "position": 1,
+          "title": "确认网络频段",
+          "instruction": "RC-X800 支持 2.4GHz 与 5GHz，但首次配网建议使用 2.4GHz 以提高成功率。",
+          "source_label": "RC-X800 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书配网章说明频段支持与建议。"
+        },
+        {
+          "stable_key": "reset-network",
+          "position": 2,
+          "title": "重置网络配置",
+          "instruction": "长按机身电源键与局部清扫键 3 秒进入配网模式。",
+          "source_label": "RC-X800 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书配网章给出组合键操作。"
+        },
+        {
+          "stable_key": "router-check",
+          "position": 3,
+          "title": "检查路由器设置",
+          "instruction": "关闭路由器 AP 隔离与访客网络限制，Wi-Fi 名称避免使用特殊符号。",
+          "source_label": "RC-X800 合成演示说明书，第 13 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 13,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题列出路由器兼容性要求。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-x800-cleaning-noise",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-X800",
+      "model_name": "RC-X800 激光导航旗舰扫拖机器人（演示型号）",
+      "issue_category_code": "cleaning_noise",
+      "issue_category_name": "清扫噪音异常",
+      "title": "RC-X800 清扫噪音异常排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "check-brushes",
+          "position": 1,
+          "title": "清理刷组",
+          "instruction": "关机清理边刷、滚刷缠绕物，检查滚刷两端端盖是否松动。",
+          "source_label": "RC-X800 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章要求定期清理刷组。"
+        },
+        {
+          "stable_key": "check-lidar-noise",
+          "position": 2,
+          "title": "区分激光雷达声音",
+          "instruction": "激光雷达旋转有轻微规律声属正常；出现摩擦声或咔哒声请停止使用并联系售后。",
+          "source_label": "RC-X800 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题说明雷达正常工作音。",
+          "policy_note": "激光雷达模组不可自行拆解。"
+        },
+        {
+          "stable_key": "check-wheels",
+          "position": 3,
+          "title": "清理万向轮",
+          "instruction": "取出万向轮清理轴孔毛发。",
+          "source_label": "RC-X800 合成演示说明书，第 14 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 14,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章给出万向轮清理方法。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-x800-suction-drop",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-X800",
+      "model_name": "RC-X800 激光导航旗舰扫拖机器人（演示型号）",
+      "issue_category_code": "suction_drop",
+      "issue_category_name": "吸力下降",
+      "title": "RC-X800 吸力下降排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "empty-dustbin",
+          "position": 1,
+          "title": "清空尘盒清理滤网",
+          "instruction": "倒空尘盒并轻拍滤网除尘，滤网建议每两周保养一次。",
+          "source_label": "RC-X800 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书维护章给出滤网保养周期。"
+        },
+        {
+          "stable_key": "check-inlet",
+          "position": 2,
+          "title": "检查吸尘口与风道",
+          "instruction": "清理吸尘口堵塞物，检查尘盒风道入口是否有纸屑堆积。",
+          "source_label": "RC-X800 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题列出风道堵塞原因。"
+        },
+        {
+          "stable_key": "check-mode",
+          "position": 3,
+          "title": "确认吸力档位与地毯增压",
+          "instruction": "在 App 确认吸力档位设置，长毛地毯建议最大档并开启增压。",
+          "source_label": "RC-X800 合成演示说明书，第 15 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书 App 章说明档位建议。"
+        }
+      ]
+    },
+    {
+      "stable_key": "rc-x800-error-e03",
+      "version": 1,
+      "status": "published",
+      "model_code": "RC-X800",
+      "model_name": "RC-X800 激光导航旗舰扫拖机器人（演示型号）",
+      "issue_category_code": "error_code_lidar",
+      "issue_category_name": "激光雷达错误码",
+      "title": "RC-X800 错误码 E03 激光雷达异常排查",
+      "reviewed_at": "2026-07-30T00:00:00+08:00",
+      "reviewed_by": "synthetic-data-pack-20260730",
+      "review_note": "合成演示数据：流程、说明书与页码由同一数据源生成器推导，保证引用一致；内容参照公开常见故障模式编写，不复制任何官方文本。",
+      "steps": [
+        {
+          "stable_key": "clear-lidar-jam",
+          "position": 1,
+          "title": "检查激光罩卡阻",
+          "instruction": "E03 表示激光雷达受阻，检查激光罩边缘是否卡入纸片或毛发并清除。",
+          "source_label": "RC-X800 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书错误码表 E03 指引检查激光罩。"
+        },
+        {
+          "stable_key": "avoid-low-space",
+          "position": 2,
+          "title": "避开低矮卡困空间",
+          "instruction": "机器钻入沙发底被压住激光罩会触发 E03，取出机器并为低矮家具设置禁区。",
+          "source_label": "RC-X800 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书错误码表说明低矮空间触发条件。"
+        },
+        {
+          "stable_key": "restart-verify",
+          "position": 3,
+          "title": "重启验证",
+          "instruction": "重启后在空旷处试运行；E03 复现说明雷达模组故障，请联系售后。",
+          "source_label": "RC-X800 合成演示说明书，第 16 页",
+          "source_url": "synthetic://robotcare-demo/rc-x800/manual",
+          "source_page": 16,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书错误码表要求复现即转人工。",
+          "policy_note": "激光雷达模组不可自行拆解维修。"
         }
       ]
     }

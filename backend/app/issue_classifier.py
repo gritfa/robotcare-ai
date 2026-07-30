@@ -87,6 +87,121 @@ MODEL_RULES: dict[str, tuple[CategoryRule, ...]] = {
             _patterns(r"^(?:NOISE|BRUSH)[-_ ]?(?:01|FAIL)$"),
         ),
     ),
+    # ---- 以下为 D1 合成演示型号（synthetic demo）。规则与 knowledge/ 合成流程同源维护。 ----
+    "RC-S200": (
+        CategoryRule(
+            "return_to_dock_failure",
+            _patterns(r"无法回充", r"回充失败", r"找不到(?:基站|充电座)", r"回不了(?:基站|充电座)"),
+        ),
+        CategoryRule(
+            "wifi_setup_failure",
+            _patterns(r"配网.{0,8}(?:失败|不成功|异常)", r"(?:wifi|wi-fi|无线网).{0,8}(?:连不上|连接不上|失败)", r"无法联网"),
+        ),
+        CategoryRule(
+            "cleaning_noise",
+            _patterns(r"(?:清扫|运行|滚刷|边刷|轮子).{0,8}(?:异响|噪音|声音异常)", r"(?:异响|噪音)(?:很大|异常|变大)"),
+        ),
+        CategoryRule(
+            "suction_drop",
+            _patterns(r"吸力(?:变小|下降|变弱|不足)", r"吸不干净", r"扫不干净"),
+        ),
+        CategoryRule(
+            "mop_water_issue",
+            _patterns(r"拖布不出水", r"拖地.{0,6}(?:没有水|不出水)", r"出水.{0,4}(?:异常|太少)"),
+        ),
+        CategoryRule(
+            "power_on_failure",
+            _patterns(r"无法开机", r"开不了机", r"按.{0,4}(?:没反应|无反应)", r"开机没反应"),
+        ),
+        CategoryRule(
+            "stuck_navigation",
+            _patterns(r"(?:经常|总是|老是).{0,4}(?:被困|卡住)", r"被(?:线|线缆|电线).{0,4}(?:缠住|困住)", r"过不去门槛"),
+        ),
+        CategoryRule(
+            "error_code_drive",
+            _patterns(r"(?:驱动轮|轮子).{0,6}(?:报错|错误|异常提示)"),
+            _patterns(r"^E[-_ ]?01$"),
+        ),
+    ),
+    "RC-M500": (
+        CategoryRule(
+            "return_to_dock_failure",
+            _patterns(r"无法回充", r"回充失败", r"找不到基站", r"回不了基站"),
+        ),
+        CategoryRule(
+            "wifi_setup_failure",
+            _patterns(r"配网.{0,8}(?:失败|不成功|异常)", r"(?:wifi|wi-fi|无线网).{0,8}(?:连不上|连接不上|失败)", r"无法联网"),
+        ),
+        CategoryRule(
+            "base_station_water_tank_issue",
+            _patterns(
+                r"(?:清洗拖布|洗拖布).{0,6}不进水",
+                r"基站.{0,6}不进水",
+                r"清水箱.{0,8}(?:异常|缺水)",
+            ),
+        ),
+        CategoryRule(
+            "dirty_tank_alarm",
+            _patterns(r"污水箱.{0,8}(?:报警|满|异常)"),
+            _patterns(r"^E[-_ ]?08$"),
+        ),
+        CategoryRule(
+            "dust_collection_issue",
+            _patterns(r"不集尘", r"集尘.{0,6}(?:失败|无力|异常)", r"集尘袋.{0,6}(?:不工作|没反应)"),
+        ),
+        CategoryRule(
+            "cleaning_noise",
+            _patterns(r"(?:清扫|运行|滚刷|边刷|轮子).{0,8}(?:异响|噪音|声音异常)", r"(?:异响|噪音)(?:很大|异常|变大)"),
+        ),
+        CategoryRule(
+            "suction_drop",
+            _patterns(r"吸力(?:变小|下降|变弱|不足)", r"吸不干净", r"扫不干净"),
+        ),
+        CategoryRule(
+            "power_on_failure",
+            _patterns(r"无法开机", r"开不了机", r"按.{0,4}(?:没反应|无反应)", r"开机没反应"),
+        ),
+        CategoryRule(
+            "error_code_water",
+            _patterns(r"水路异常"),
+            _patterns(r"^E[-_ ]?07$"),
+        ),
+    ),
+    "RC-X800": (
+        CategoryRule(
+            "return_to_dock_failure",
+            _patterns(r"无法回充", r"回充失败", r"找不到基站", r"回不了基站"),
+        ),
+        CategoryRule(
+            "map_lost",
+            _patterns(r"地图.{0,4}(?:丢失|不见了|没了|消失)", r"重新建图", r"地图.{0,4}(?:错乱|异常)"),
+        ),
+        CategoryRule(
+            "missed_cleaning_area",
+            _patterns(r"漏扫", r"重复(?:清扫|扫|打扫)", r"有的房间不(?:扫|去)"),
+        ),
+        CategoryRule(
+            "collision_damage",
+            _patterns(r"撞(?:家具|坏|上)", r"碰撞.{0,6}(?:厉害|很猛|太猛)", r"避障.{0,4}(?:失灵|不灵|失效)"),
+        ),
+        CategoryRule(
+            "wifi_setup_failure",
+            _patterns(r"配网.{0,8}(?:失败|不成功|异常)", r"(?:wifi|wi-fi|无线网).{0,8}(?:连不上|连接不上|失败)", r"无法联网"),
+        ),
+        CategoryRule(
+            "cleaning_noise",
+            _patterns(r"(?:清扫|运行|滚刷|边刷|轮子).{0,8}(?:异响|噪音|声音异常)", r"(?:异响|噪音)(?:很大|异常|变大)"),
+        ),
+        CategoryRule(
+            "suction_drop",
+            _patterns(r"吸力(?:变小|下降|变弱|不足)", r"吸不干净", r"扫不干净"),
+        ),
+        CategoryRule(
+            "error_code_lidar",
+            _patterns(r"激光雷达.{0,6}(?:报错|异常|受阻)"),
+            _patterns(r"^E[-_ ]?03$"),
+        ),
+    ),
 }
 
 

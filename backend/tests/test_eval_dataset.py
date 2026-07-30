@@ -47,13 +47,21 @@ def test_eval_cases_have_traceable_model_source_and_review_fields():
     assert len(case_ids) == len(set(case_ids))
     assert {case["review_status"] for case in cases} == {"needs_human_review"}
     for case in cases:
-        assert case["case_origin"] == "generated_or_rewritten_20260720"
+        assert case["case_origin"] in {
+            "generated_or_rewritten_20260720",
+            "synthetic_demo_20260730",
+        }
         assert isinstance(case["model_code"], str) and case["model_code"]
         assert isinstance(case["source_ids"], list)
         assert isinstance(case["source_pages"], list)
         assert case["review_status"] in {"existing_reviewed", "needs_human_review"}
         assert isinstance(case["evidence_basis"], str) and case["evidence_basis"]
-        assert "本用例措辞未逐条人工审核" in case["evidence_basis"]
+        # 两代用例的"未经逐条人工审核"声明措辞不同，但都必须显式存在
+        assert (
+            "本用例措辞未逐条人工审核" in case["evidence_basis"]
+            or "待人工抽检" in case["evidence_basis"]
+            or "待生成层上线后执行" in case["evidence_basis"]
+        )
         assert isinstance(case["expected"], dict)
 
 

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +31,41 @@ class EmbeddingProvider(Protocol):
     def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
 
     def embed_query(self, text: str) -> list[float]: ...
+
+
+class HashingNgramEmbeddingProvider:
+    """确定性本地嵌入：字符 2-gram 特征哈希到 256 维并 L2 归一化。
+
+    仅提供词面（n-gram 重合）相似度，没有语义模型；用于合成演示数据入库、
+    离线评测与 CI，绝不冒充 DashScope 语义向量。落库向量与真实语义向量
+    不可混用——切换 Provider 时必须整库重建（release 流程本就整体替换）。
+    """
+
+    model_name = "hashing-ngram-v1"
+
+    @staticmethod
+    def _vector(text: str) -> list[float]:
+        normalized = "".join(text.split()).lower()
+        dims = [0.0] * EMBEDDING_DIMENSION
+        if len(normalized) < 2:
+            normalized = normalized + "□□"
+        for index in range(len(normalized) - 1):
+            gram = normalized[index : index + 2]
+            digest = hashlib.sha256(gram.encode("utf-8")).digest()
+            slot = int.from_bytes(digest[:4], "big") % EMBEDDING_DIMENSION
+            sign = 1.0 if digest[4] % 2 == 0 else -1.0
+            dims[slot] += sign
+        norm = math.sqrt(sum(value * value for value in dims))
+        if norm == 0:
+            dims[0] = 1.0
+            norm = 1.0
+        return [value / norm for value in dims]
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        return [self._vector(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._vector(text)
 
 
 class DashScopeEmbeddingProvider:

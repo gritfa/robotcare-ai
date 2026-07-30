@@ -274,7 +274,9 @@ def load_demo_data(
     reports: list[ServiceReport] = []
     attachment_count = 0
     diagnostics: list[DiagnosticSession] = []
-    flow_items = [flow_by_key[key] for key in sorted(flow_by_key)]
+    # 演示场景只覆盖 ISSUE_DESCRIPTIONS 显式声明的流程；目录里新增的其他流程
+    # （如 D1 合成型号 rc-*）不自动进入演示数据，保证演示规模与断言稳定。
+    flow_items = [flow_by_key[key] for key in sorted(ISSUE_DESCRIPTIONS)]
     for flow_index, flow in enumerate(flow_items):
         model_code = flow.stable_key.split("-", 1)[0].upper()
         for status_index, diagnostic_status in enumerate(scenario_statuses):

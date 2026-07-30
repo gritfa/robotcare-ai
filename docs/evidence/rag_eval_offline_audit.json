@@ -1,25 +1,26 @@
 {
   "report_schema_version": "1.0",
-  "generated_at": "2026-07-20T04:26:06.110519+00:00",
+  "generated_at": "2026-07-30T07:47:44.670271+00:00",
   "dataset_path": "knowledge/eval_cases.jsonl",
   "overall_status": "passed_with_not_run_metrics",
   "dataset_summary": {
-    "total_cases": 113,
+    "total_cases": 375,
     "by_dimension": {
-      "classification": 14,
-      "faithfulness": 14,
-      "model_isolation": 14,
-      "refusal": 14,
-      "retrieval_recall": 14,
-      "safety_block": 15,
-      "source_page": 14,
-      "step_selection": 14
+      "classification": 64,
+      "faithfulness": 34,
+      "model_isolation": 39,
+      "refusal": 44,
+      "retrieval_recall": 69,
+      "safety_block": 47,
+      "source_page": 39,
+      "step_selection": 39
     },
     "by_review_status": {
-      "needs_human_review": 113
+      "needs_human_review": 375
     },
     "by_case_origin": {
-      "generated_or_rewritten_20260720": 113
+      "generated_or_rewritten_20260720": 113,
+      "synthetic_demo_20260730": 262
     }
   },
   "dataset_provenance": {
@@ -51,8 +52,8 @@
       "FLOW-004"
     ],
     "exact_legacy_case_ids_retained": [],
-    "current_new_or_rewritten_case_count": 113,
-    "statement": "原 24 条记录只有计划状态且无逐条人工审核记录；当前 113 条均为本轮新生成或重写后的记录，因此全部需要人工复核。"
+    "current_new_or_rewritten_case_count": 375,
+    "statement": "原 24 条记录只有计划状态且无逐条人工审核记录；当前 375 条均为本轮新生成或重写后的记录，因此全部需要人工复核。"
   },
   "integrity": {
     "passed": true,
@@ -61,7 +62,7 @@
   },
   "safety_gate": {
     "passed": true,
-    "total_cases": 15,
+    "total_cases": 47,
     "failed_cases": 0,
     "failures": [],
     "policy": "任何 safety_block 失败都会使整体报告失败，禁止由总平均分掩盖。"
@@ -70,7 +71,7 @@
     "model_isolation": {
       "dimension": "model_isolation",
       "execution_status": "not_run",
-      "total_cases": 14,
+      "total_cases": 39,
       "evaluated_cases": 0,
       "passed_cases": null,
       "failed_cases": null,
@@ -81,7 +82,7 @@
     "retrieval_recall": {
       "dimension": "retrieval_recall",
       "execution_status": "not_run",
-      "total_cases": 14,
+      "total_cases": 69,
       "evaluated_cases": 0,
       "passed_cases": null,
       "failed_cases": null,
@@ -92,9 +93,9 @@
     "source_page": {
       "dimension": "source_page",
       "execution_status": "passed",
-      "total_cases": 14,
-      "evaluated_cases": 14,
-      "passed_cases": 14,
+      "total_cases": 39,
+      "evaluated_cases": 39,
+      "passed_cases": 39,
       "failed_cases": 0,
       "score": 1.0,
       "reason": "离线核对期望来源页是否存在于当前已发布流程；这不是在线回答引用命中率。",
@@ -103,7 +104,7 @@
     "refusal": {
       "dimension": "refusal",
       "execution_status": "not_run",
-      "total_cases": 14,
+      "total_cases": 44,
       "evaluated_cases": 0,
       "passed_cases": null,
       "failed_cases": null,
@@ -114,9 +115,9 @@
     "safety_block": {
       "dimension": "safety_block",
       "execution_status": "passed",
-      "total_cases": 15,
-      "evaluated_cases": 15,
-      "passed_cases": 15,
+      "total_cases": 47,
+      "evaluated_cases": 47,
+      "passed_cases": 47,
       "failed_cases": 0,
       "score": 1.0,
       "reason": "离线调用后端确定性安全规则；不依赖外部模型。",
@@ -125,7 +126,7 @@
     "classification": {
       "dimension": "classification",
       "execution_status": "not_run",
-      "total_cases": 14,
+      "total_cases": 64,
       "evaluated_cases": 0,
       "passed_cases": null,
       "failed_cases": null,
@@ -136,9 +137,9 @@
     "step_selection": {
       "dimension": "step_selection",
       "execution_status": "passed",
-      "total_cases": 14,
-      "evaluated_cases": 14,
-      "passed_cases": 14,
+      "total_cases": 39,
+      "evaluated_cases": 39,
+      "passed_cases": 39,
       "failed_cases": 0,
       "score": 1.0,
       "reason": "离线核对已发布流程顺序和单步期望；这不是 API 或 Agent 运行命中率。",
@@ -147,7 +148,7 @@
     "faithfulness": {
       "dimension": "faithfulness",
       "execution_status": "not_run",
-      "total_cases": 14,
+      "total_cases": 34,
       "evaluated_cases": 0,
       "passed_cases": null,
       "failed_cases": null,

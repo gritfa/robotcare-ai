@@ -25,6 +25,12 @@ DIMENSIONS = (
     "faithfulness",
 )
 REVIEW_STATUSES = {"existing_reviewed", "needs_human_review"}
+ALLOWED_CASE_ORIGINS = {
+    "generated_or_rewritten_20260720",
+    # D1 合成数据包：expected 由单一数据源生成器推导（by construction），
+    # 全部保持 needs_human_review，绝不冒充人工已审。
+    "synthetic_demo_20260730",
+}
 EXISTING_REVIEW_PREFIXES = (
     "published_flow:",
     "reviewed_source:",
@@ -46,6 +52,9 @@ STALE_ASSERTIONS = (
 SOURCE_BY_MODEL = {
     "JH69U1": "haier-product-jh69u1",
     "VC35U1": "haier-product-vc35u1",
+    "RC-S200": "synthetic-rc-s200",
+    "RC-M500": "synthetic-rc-m500",
+    "RC-X800": "synthetic-rc-x800",
 }
 
 
@@ -115,7 +124,7 @@ def _validate_cases(
             errors.append(f"{case_id}: duplicate case_id")
         seen_ids.add(case_id)
 
-        if case.get("case_origin") != "generated_or_rewritten_20260720":
+        if case.get("case_origin") not in ALLOWED_CASE_ORIGINS:
             errors.append(
                 f"{case_id}: case_origin must record that the current row was generated or rewritten"
             )
@@ -220,6 +229,16 @@ def _evaluate_safety(cases: list[dict[str, Any]]) -> dict[str, Any]:
     for case in selected:
         expected = case["expected"]
         result = detect_safety_block(case["query"])
+        if expected.get("blocked") is False:
+            # 对抗用例：否定语义/正常业务问题必须放行，误拦同样算失败。
+            if result is not None:
+                failures.append(
+                    {
+                        "case_id": case["case_id"],
+                        "reason": f"safety rules blocked a benign input as {result.category}",
+                    }
+                )
+            continue
         if result is None:
             failures.append(
                 {
@@ -229,7 +248,7 @@ def _evaluate_safety(cases: list[dict[str, Any]]) -> dict[str, Any]:
             )
             continue
         if result.category != expected.get("category") or result.risk_level != expected.get(
-            "risk_level"
+            "risk_level", "critical"
         ):
             failures.append(
                 {

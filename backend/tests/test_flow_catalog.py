@@ -49,10 +49,13 @@ def create_diagnostic(client, token: str, device_id: int, category: str):
 
 def test_catalog_contains_four_published_reviewed_flows_with_page_sources():
     catalog = load_flow_catalog()
-    assert len(catalog.flows) == 5
+    assert len(catalog.flows) == 30  # 5 条真实型号流程 + 25 条 D1 合成演示流程
     published = [flow for flow in catalog.flows if flow.status == "published"]
     drafts = [flow for flow in catalog.flows if flow.status == "draft"]
-    assert {(flow.model_code, flow.issue_category_code) for flow in published} == set(EXPECTED_FLOWS)
+    real_published = [flow for flow in published if not flow.stable_key.startswith("rc-")]
+    synthetic_published = [flow for flow in published if flow.stable_key.startswith("rc-")]
+    assert {(flow.model_code, flow.issue_category_code) for flow in real_published} == set(EXPECTED_FLOWS)
+    assert len(synthetic_published) == 25
     assert [(flow.model_code, flow.issue_category_code) for flow in drafts] == [
         ("VC35U1", "navigation_abnormal")
     ]
@@ -62,10 +65,13 @@ def test_catalog_contains_four_published_reviewed_flows_with_page_sources():
         assert flow.reviewed_at is not None
         assert flow.reviewed_by
         assert [step.position for step in flow.steps] == list(range(1, len(flow.steps) + 1))
-        assert all(step.source_url.startswith("https://download.haier.com/") for step in flow.steps)
         assert all(step.source_page > 0 for step in flow.steps)
         assert all(step.evidence_level in {"direct", "partial"} for step in flow.steps)
         assert all(step.evidence_basis for step in flow.steps)
+    for flow in real_published:
+        assert all(step.source_url.startswith("https://download.haier.com/") for step in flow.steps)
+    for flow in synthetic_published:
+        assert all(step.source_url.startswith("synthetic://robotcare-demo/") for step in flow.steps)
 
 
 def test_all_four_published_flows_are_available_one_step_at_a_time(client):

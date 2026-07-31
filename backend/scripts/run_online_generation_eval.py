@@ -1,19 +1,32 @@
-"""faithfulness / 模型层 refusal 在线评测（需要真实 DashScope key，本脚本绝不伪造结果）。
+"""faithfulness 在线评测（需要真实 DashScope key，本脚本绝不伪造结果）。
 
 用法（在持有 ROBOTCARE_DASHSCOPE_API_KEY 的机器上）：
-    python scripts/run_online_generation_eval.py --limit 20
+    python scripts/run_online_generation_eval.py --scope synthetic   # 20 条合成型号用例
+    python scripts/run_online_generation_eval.py --scope all         # 34 条全量（需官方说明书前置）
+    python scripts/run_online_generation_eval.py --scope synthetic --limit 3 --output /tmp/smoke.json  # 冒烟
 
-流程：评测 PG 库入库合成说明书（hashing 向量保证检索确定性）→ 对 faithfulness 用例真实调用
-生成模型 → 校验：回答仅引用检索片段（引用页码 ⊆ 检索页码）、必须引用期望来源、
-回答不触发安全规则；对 refusal 用例校验模型层拒答（检索有命中但内容不支持时输出 REFUSE）。
+评测范围与口径（2026-07-31 起）：
+- 数据集共 34 条 faithfulness 用例 = 20 条合成型号（RC-S200/RC-M500）+ 14 条真实型号（JH69U1/VC35U1）。
+- --scope synthetic 只评 20 条，报告必须显式给出 dataset_faithfulness_total=34 与
+  skipped_outside_scope=14，overall_status 最高为 passed_partial_scope，不得表述为完整评测。
+- --scope all 要求 34 条全部进入评测；官方说明书缺失或 SHA256 不符时逐条列出跳过原因，
+  overall_status=incomplete_coverage 且以非 0 退出，绝不静默过滤、绝不伪造资料。
+- --limit 仅用于冒烟调试：一旦截断选择集，overall_status=partial_limit，不算正式记录。
+- 禁止反复运行挑选最好结果；单次完整运行的失败用例必须保留在报告中。
+
+流程：评测 PG 库入库说明书（hashing 向量保证检索确定性）→ 对选中用例真实调用生成模型 →
+校验：回答仅引用检索片段、必须引用期望来源、回答通过输出侧安全检测
+（detect_unsafe_generated_answer——安全警告不算危险内容）。
 结果写 docs/evidence/generation_online_eval.json，不改动离线审计报告。
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -23,14 +36,20 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from sqlalchemy import select  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
-from app.generation_service import DashScopeGenerationProvider, generate_answer  # noqa: E402
+from app.generation_service import (  # noqa: E402
+    PROMPT_VERSION,
+    DashScopeGenerationProvider,
+    generate_answer,
+)
 from app.knowledge_service import HashingNgramEmbeddingProvider, ingest_pdf  # noqa: E402
 from app.models import RobotModel  # noqa: E402
-from app.safety import detect_safety_block  # noqa: E402
+from app.safety import detect_unsafe_generated_answer  # noqa: E402
 from app.seed import seed_database  # noqa: E402
 from scripts.eval_db import fresh_eval_session_factory  # noqa: E402
 
 SYNTHETIC_MODEL_CODES = ("RC-S200", "RC-M500", "RC-X800")
+REAL_MODEL_CODES = ("JH69U1", "VC35U1")
+FAITHFULNESS_THRESHOLD = 0.90
 
 
 class _RecordingProvider:
@@ -51,16 +70,154 @@ class _RecordingProvider:
         return self.last_raw
 
 
+def load_eval_cases(path: Path | None = None) -> list[dict]:
+    path = path or (PROJECT_ROOT / "knowledge" / "eval_cases.jsonl")
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def load_real_manual_registry(sources_path: Path | None = None) -> dict[str, dict]:
+    """从 sources.json 读取真实型号官方说明书登记（本地路径 / 官方 URL / SHA256）。"""
+    sources_path = sources_path or (PROJECT_ROOT / "knowledge" / "sources.json")
+    registry: dict[str, dict] = {}
+    for source in json.loads(sources_path.read_text(encoding="utf-8"))["sources"]:
+        code = source.get("model_code")
+        if code in REAL_MODEL_CODES and source.get("manual_local_path"):
+            registry[code] = {
+                "local_path": source["manual_local_path"],
+                "source_url": source["manual_url"],
+                "sha256": source["manual_sha256"],
+            }
+    return registry
+
+
+def check_real_model_prerequisites(
+    project_root: Path, registry: dict[str, dict]
+) -> dict[str, dict]:
+    """逐型号核验官方说明书前置条件。缺失/校验不符只如实报告，绝不伪造。"""
+    status: dict[str, dict] = {}
+    for code in REAL_MODEL_CODES:
+        entry = registry.get(code)
+        if entry is None:
+            status[code] = {"ok": False, "reason": f"sources.json 中无 {code} 官方说明书登记"}
+            continue
+        pdf_path = project_root / entry["local_path"]
+        if not pdf_path.is_file():
+            status[code] = {
+                "ok": False,
+                "reason": f"官方说明书不存在：{entry['local_path']}（不得用伪造资料代替）",
+            }
+            continue
+        actual_sha = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+        if actual_sha != entry["sha256"]:
+            status[code] = {
+                "ok": False,
+                "reason": (
+                    f"{entry['local_path']} SHA256 与 sources.json 登记不符，"
+                    "拒绝使用无法溯源的资料"
+                ),
+            }
+            continue
+        status[code] = {
+            "ok": True,
+            "pdf_path": pdf_path,
+            "source_url": entry["source_url"],
+        }
+    return status
+
+
+def select_faithfulness_cases(
+    cases: list[dict], scope: str, prereq: dict[str, dict]
+) -> tuple[list[dict], list[dict]]:
+    """按 scope 选取用例。返回 (selected, skipped_cases)，跳过必须逐条带原因。"""
+    faith = [c for c in cases if c["dimension"] == "faithfulness"]
+    selected: list[dict] = []
+    skipped: list[dict] = []
+    for case in faith:
+        code = case["model_code"]
+        if code in SYNTHETIC_MODEL_CODES:
+            selected.append(case)
+        elif scope == "synthetic":
+            skipped.append(
+                {
+                    "case_id": case["case_id"],
+                    "model_code": code,
+                    "reason": "outside scope：--scope synthetic 只评合成型号，真实型号用例未执行",
+                }
+            )
+        elif prereq.get(code, {}).get("ok"):
+            selected.append(case)
+        else:
+            skipped.append(
+                {
+                    "case_id": case["case_id"],
+                    "model_code": code,
+                    "reason": prereq.get(code, {}).get("reason", "前置条件未知"),
+                }
+            )
+    return selected, skipped
+
+
+def compute_outcome(
+    *,
+    scope: str,
+    dataset_total: int,
+    selected: int,
+    evaluated: int,
+    passed: int,
+    skipped: int,
+    run_errors: int,
+    limit_applied: bool,
+    threshold: float = FAITHFULNESS_THRESHOLD,
+) -> tuple[str, int, float | None]:
+    """计算 (overall_status, exit_code, score)。
+
+    口径（仓库所有者 2026-07-31 拍板）：
+    - synthetic：明确选择 20 条、20 条全部执行、score>=阈值、无运行错误 → 退出码 0，
+      但 overall_status 只能是 passed_partial_scope，绝不冒充完整评测。
+    - all：34/34 全部进入评测且 score>=阈值 → passed_full；缺资料、存在跳过、
+      运行异常或覆盖不足 → 非 0 退出。
+    - --limit 截断 → partial_limit，仅供冒烟，不作为正式通过记录。
+    """
+    score = round(passed / evaluated, 4) if evaluated else None
+    meets_threshold = score is not None and score >= threshold
+    if run_errors:
+        return "run_error", 1, score
+    if limit_applied and evaluated < selected:
+        return "partial_limit", 0 if (evaluated and passed == evaluated) else 1, score
+    if scope == "synthetic":
+        if evaluated == selected and evaluated > 0 and meets_threshold:
+            return "passed_partial_scope", 0, score
+        return "failed_partial_scope", 1, score
+    # scope == "all"
+    if skipped or evaluated < dataset_total:
+        return "incomplete_coverage", 1, score
+    if meets_threshold:
+        return "passed_full", 0, score
+    return "failed_full", 1, score
+
+
+def assert_no_secrets(report_text: str, secrets: list[str | None]) -> None:
+    for secret in secrets:
+        if secret and secret.strip() and secret.strip() in report_text:
+            raise RuntimeError("评测报告中检测到密钥内容，拒绝写盘")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=50)
+    parser.add_argument("--scope", choices=("synthetic", "all"), default="synthetic")
+    parser.add_argument("--limit", type=int, default=None, help="仅冒烟调试用；截断后不算正式记录")
     parser.add_argument(
         "--output", default=str(PROJECT_ROOT / "docs" / "evidence" / "generation_online_eval.json")
     )
     args = parser.parse_args()
 
     settings = get_settings()
-    if not (settings.dashscope_api_key or "").strip():
+    api_key = (settings.dashscope_api_key or "").strip()
+    if not api_key:
         print(json.dumps({"status": "not_run", "reason": "缺少 ROBOTCARE_DASHSCOPE_API_KEY，拒绝伪造结果"}, ensure_ascii=False))
         return 2
 
@@ -70,82 +227,145 @@ def main() -> int:
         )
     )
     embedding = HashingNgramEmbeddingProvider()
-    factory = fresh_eval_session_factory()
 
-    cases = [
-        json.loads(line)
-        for line in (PROJECT_ROOT / "knowledge" / "eval_cases.jsonl").read_text(encoding="utf-8").splitlines()
-        if line.strip()
+    cases = load_eval_cases()
+    dataset_total = sum(1 for c in cases if c["dimension"] == "faithfulness")
+    prereq = (
+        check_real_model_prerequisites(PROJECT_ROOT, load_real_manual_registry())
+        if args.scope == "all"
+        else {}
+    )
+    selected_cases, skipped_cases = select_faithfulness_cases(cases, args.scope, prereq)
+    to_run = selected_cases if args.limit is None else selected_cases[: args.limit]
+    limit_applied = args.limit is not None
+
+    ingest_codes = list(SYNTHETIC_MODEL_CODES) + [
+        code for code in REAL_MODEL_CODES if prereq.get(code, {}).get("ok")
     ]
-    faith_cases = [c for c in cases if c["dimension"] == "faithfulness" and c["model_code"] in SYNTHETIC_MODEL_CODES]
-    results = {"faithfulness": [], "model": provider.model_name}
+    expected_source_url = {
+        code: f"synthetic://robotcare-demo/{code.lower()}/manual" for code in SYNTHETIC_MODEL_CODES
+    }
+    for code in REAL_MODEL_CODES:
+        if prereq.get(code, {}).get("ok"):
+            expected_source_url[code] = prereq[code]["source_url"]
 
+    factory = fresh_eval_session_factory()
+    entries: list[dict] = []
+    run_errors: list[dict] = []
     with factory() as db:
         seed_database(db)
-        model_ids = {}
-        for code in SYNTHETIC_MODEL_CODES:
+        model_ids: dict[str, int] = {}
+        for code in ingest_codes:
             model_ids[code] = db.scalar(select(RobotModel.id).where(RobotModel.code == code))
+            if code in SYNTHETIC_MODEL_CODES:
+                pdf_path = PROJECT_ROOT / "knowledge" / "synthetic" / f"{code}_manual.pdf"
+            else:
+                pdf_path = prereq[code]["pdf_path"]
             ingest_pdf(
                 db,
                 robot_model_id=model_ids[code],
-                pdf_path=PROJECT_ROOT / "knowledge" / "synthetic" / f"{code}_manual.pdf",
-                source_url=f"synthetic://robotcare-demo/{code.lower()}/manual",
+                pdf_path=pdf_path,
+                source_url=expected_source_url[code],
                 provider=embedding,
             )
-        for case in faith_cases[: args.limit]:
-            expected = case["expected"]
+        ingested_urls = set(expected_source_url[code] for code in ingest_codes)
+
+        for case in to_run:
             provider.last_raw = None  # 防止门控拒答（未调模型）误挂上一条的原文
-            outcome = generate_answer(
-                db,
-                user_id=None,
-                robot_model_id=model_ids[case["model_code"]],
-                query=case["query"],
-                embedding_provider=embedding,
-                generation_provider=provider,
-                min_score=0.0,
-                commit=False,
-            )
+            try:
+                outcome = generate_answer(
+                    db,
+                    user_id=None,
+                    robot_model_id=model_ids[case["model_code"]],
+                    query=case["query"],
+                    embedding_provider=embedding,
+                    generation_provider=provider,
+                    min_score=0.0,
+                    commit=False,
+                )
+            except Exception as exc:  # 模型/数据库异常：如实记录并使整次运行非 0 退出
+                db.rollback()
+                run_errors.append({"case_id": case["case_id"], "error": str(exc)[:300]})
+                continue
             db.rollback()
             checks = {
                 "answered": outcome.status == "answered",
                 "citations_within_retrieval": outcome.status != "answered"
-                or all(c.source_url.startswith("synthetic://") for c in outcome.citations),
+                or all(c.source_url in ingested_urls for c in outcome.citations),
                 "cites_expected_source": outcome.status != "answered"
                 or any(
-                    c.source_url.endswith(f"{case['model_code'].lower()}/manual")
+                    c.source_url == expected_source_url[case["model_code"]]
                     for c in outcome.citations
                 ),
                 "answer_passes_safety": outcome.answer is None
-                or detect_safety_block(outcome.answer) is None,
+                or detect_unsafe_generated_answer(outcome.answer) is None,
             }
             entry = {
                 "case_id": case["case_id"],
+                "model_code": case["model_code"],
                 "passed": all(checks.values()),
                 "checks": checks,
                 "refusal_reason": outcome.refusal_reason,
             }
             if outcome.refusal_reason is not None and provider.last_raw is not None:
-                # 拒答归因：合成数据无隐私，摘录原文供人工判断是真风险还是规则误伤
+                # 拒答归因：摘录原文供人工判断是真风险还是规则误伤
                 entry["raw_answer_excerpt"] = provider.last_raw[:300]
                 if outcome.refusal_reason == "unsafe_answer":
-                    block = detect_safety_block(provider.last_raw)
+                    block = detect_unsafe_generated_answer(provider.last_raw)
                     if block is not None:
                         entry["safety_category"] = block.category
                         entry["safety_reason"] = block.reason
-            results["faithfulness"].append(entry)
+            entries.append(entry)
 
-    evaluated = results["faithfulness"]
-    passed = sum(1 for item in evaluated if item["passed"])
-    results["summary"] = {
-        "evaluated": len(evaluated),
+    passed = sum(1 for item in entries if item["passed"])
+    failed = sum(1 for item in entries if not item["passed"])
+    overall_status, exit_code, score = compute_outcome(
+        scope=args.scope,
+        dataset_total=dataset_total,
+        selected=len(selected_cases),
+        evaluated=len(entries),
+        passed=passed,
+        skipped=len(skipped_cases),
+        run_errors=len(run_errors),
+        limit_applied=limit_applied,
+    )
+    report = {
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "model": provider.model_name,
+        "prompt_version": PROMPT_VERSION,
+        "scope": args.scope,
+        "dataset_faithfulness_total": dataset_total,
+        "selected": len(selected_cases),
+        "evaluated": len(entries),
         "passed": passed,
-        "score": round(passed / len(evaluated), 4) if evaluated else None,
+        "failed": failed,
+        "skipped": len(skipped_cases),
+        "skipped_outside_scope": sum(
+            1 for s in skipped_cases if s["reason"].startswith("outside scope")
+        ),
+        "skipped_cases": skipped_cases,
+        "run_errors": run_errors,
+        "score": score,
+        "threshold": FAITHFULNESS_THRESHOLD,
+        "overall_status": overall_status,
+        "limit": args.limit,
+        "faithfulness": entries,
     }
+    report_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    assert_no_secrets(report_text, [settings.dashscope_api_key])
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(results["summary"], ensure_ascii=False))
-    return 0 if evaluated and passed == len(evaluated) else 1
+    output.write_text(report_text, encoding="utf-8")
+    print(
+        json.dumps(
+            {k: report[k] for k in (
+                "scope", "dataset_faithfulness_total", "selected", "evaluated",
+                "passed", "failed", "skipped", "score", "overall_status",
+            )},
+            ensure_ascii=False,
+        )
+    )
+    return exit_code
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ from app.config import get_settings  # noqa: E402
 from app.generation_service import (  # noqa: E402
     PROMPT_VERSION,
     DashScopeGenerationProvider,
+    OpenAICompatGenerationProvider,
     generate_answer,
 )
 from app.knowledge_service import (  # noqa: E402
@@ -292,17 +293,28 @@ def main() -> int:
     args = parser.parse_args()
 
     settings = get_settings()
-    api_key = (settings.dashscope_api_key or "").strip()
-    if not api_key:
-        print(json.dumps({"status": "not_run", "reason": "缺少 ROBOTCARE_DASHSCOPE_API_KEY，拒绝伪造结果"}, ensure_ascii=False))
-        return 2
-
-    provider = _RecordingProvider(
-        DashScopeGenerationProvider(
+    if settings.llm_backend == "openai-compat":
+        api_key = (settings.llm_api_key or "").strip()
+        if not api_key:
+            print(json.dumps({"status": "not_run", "reason": "缺少 ROBOTCARE_LLM_API_KEY，拒绝伪造结果"}, ensure_ascii=False))
+            return 2
+        inner_provider = OpenAICompatGenerationProvider(
+            api_key, settings.generation_model, settings.llm_base_url
+        )
+    else:
+        api_key = (settings.dashscope_api_key or "").strip()
+        if not api_key:
+            print(json.dumps({"status": "not_run", "reason": "缺少 ROBOTCARE_DASHSCOPE_API_KEY，拒绝伪造结果"}, ensure_ascii=False))
+            return 2
+        inner_provider = DashScopeGenerationProvider(
             settings.dashscope_api_key, settings.generation_model, settings.dashscope_base_url
         )
-    )
+
+    provider = _RecordingProvider(inner_provider)
     if args.embedding == "dashscope":
+        if not (settings.dashscope_api_key or "").strip():
+            print(json.dumps({"status": "not_run", "reason": "--embedding dashscope 需要 ROBOTCARE_DASHSCOPE_API_KEY（OpenAI 兼容后端无 embedding 接口），拒绝伪造结果"}, ensure_ascii=False))
+            return 2
         embedding = DashScopeEmbeddingProvider(
             settings.dashscope_api_key, settings.dashscope_base_url
         )
@@ -443,7 +455,7 @@ def main() -> int:
         "faithfulness": entries,
     }
     report_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    assert_no_secrets(report_text, [settings.dashscope_api_key])
+    assert_no_secrets(report_text, [settings.dashscope_api_key, settings.llm_api_key])
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report_text, encoding="utf-8")

@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     report_dir: str = "./data/reports"
     dashscope_api_key: str | None = None
     dashscope_base_url: str | None = None
+    llm_backend: str = "dashscope"  # dashscope | openai-compat
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
     knowledge_min_score: float = Field(default=0.25, ge=0, le=1)
     knowledge_min_score_overrides: str = "{}"
     auto_create_schema: bool = False
@@ -76,6 +79,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
+        if self.llm_backend not in ("dashscope", "openai-compat"):
+            raise ValueError("ROBOTCARE_LLM_BACKEND must be dashscope or openai-compat")
+        if self.llm_backend == "openai-compat" and not (self.llm_base_url or "").strip():
+            raise ValueError(
+                "ROBOTCARE_LLM_BASE_URL is required when ROBOTCARE_LLM_BACKEND=openai-compat"
+            )
         try:
             self.trusted_proxy_networks
         except ValueError as exc:

@@ -86,6 +86,57 @@ class DashScopeGenerationProvider:
             raise RuntimeError("DashScope returned an unexpected generation payload") from exc
 
 
+class OpenAICompatGenerationProvider:
+    """OpenAI 兼容 /chat/completions 适配器（DeepSeek 等）。
+
+    推理型模型的思维链在 reasoning_content 里，最终回答只取 content；
+    content 为空（如 max_tokens 被推理耗尽）按失败抛错，绝不拿空串当回答。
+    """
+
+    def __init__(self, api_key: str | None, model: str, base_url: str) -> None:
+        self.api_key = api_key
+        self.model_name = model
+        self.base_url = base_url.strip().rstrip("/")
+
+    def generate(self, *, system: str, prompt: str) -> str:
+        import httpx
+
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        response = httpx.post(
+            f"{self.base_url}/chat/completions",
+            headers=headers,
+            json={
+                "model": self.model_name,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.1,
+                "max_tokens": 4096,
+            },
+            timeout=180.0,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"OpenAI-compat generation failed: HTTP {response.status_code} "
+                f"{response.text[:200]}"
+            )
+        payload = response.json()
+        try:
+            choice = payload["choices"][0]
+            content = choice["message"]["content"]
+        except (TypeError, KeyError, IndexError) as exc:
+            raise RuntimeError("OpenAI-compat endpoint returned an unexpected payload") from exc
+        if not (content or "").strip():
+            raise RuntimeError(
+                "OpenAI-compat endpoint returned empty content "
+                f"(finish_reason={choice.get('finish_reason')})"
+            )
+        return content
+
+
 @dataclass(frozen=True)
 class AnswerCitation:
     index: int

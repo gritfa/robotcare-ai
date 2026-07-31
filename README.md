@@ -30,7 +30,7 @@
 | faithfulness 在线评测 | `【部分评测：20/34】` | 2026-07-31 真实 DashScope 在线执行 20 条合成型号用例 19/20（score 0.95，范围 synthetic，14 条 JH69U1/VC35U1 未进入评测，不是完整评测）；唯一失败 SYN-FA-006 已归因：输入侧安全规则误伤模型输出的安全警告，已改用输出侧独立检测 `detect_unsafe_generated_answer` 修复（本地自动化验证通过，在线重跑待执行）；脚本已支持 `--scope synthetic/all` 显式覆盖口径（见 `docs/online_eval_scope.md`），34/34 完整在线评测待持有 key 的机器执行 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 单方言：`vector(256)` 字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚全部直接在真实 PostgreSQL 上回归（SQLite 双方言分叉已删除） |
 | PostgreSQL + pgvector 真实运行 | `【已验证：GitHub Actions】` | PostgreSQL 16 + pgvector Job 已验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；本机 Docker、多实例压力与生产数据仍未验证 |
-| 远端 CI | `【已验证：历史提交】/【待验证：新工作流】` | 提交 `1bccb82` 的六个 Job 全绿是双方言时期的证据；单方言重构后工作流改为五个 Job（PG 回归、前端、Chromium E2E、部署契约、知识校验，全部 PG service），改造后的工作流尚未在远端跑过 |
+| 远端 CI | `【已验证】` | 单方言五 Job 工作流（PG16+pgvector 回归、前端、Chromium E2E、部署契约、知识校验）已在远端跑通：提交 `bd77ad5` run 30600605830 五个 Job 全部 success（2026-07-31，https://github.com/gritfa/robotcare-ai/actions/runs/30600605830） |
 | PDF 售后报告 | `【已验证】` | 并发请求返回同一报告；PDF 采用目标锁、临时文件和原子替换，验证 `%PDF-`/`%%EOF`；Edge 下载校验文件存在、非空和文件头 |
 | 管理员后端与审计 | `【已验证】` | 普通列表不返回故障正文、错误码、阻断原因或关联用户/设备 ID；报告、诊断和安全阻断详情按需读取并在返回前写入不含正文的 fail-closed 审计 |
 | 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；本机 Edge 已验证普通用户访问管理员页面被拒绝，管理员内容运营 E2E 仍为【计划】 |

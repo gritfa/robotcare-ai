@@ -33,6 +33,24 @@ from scripts.eval_db import fresh_eval_session_factory  # noqa: E402
 SYNTHETIC_MODEL_CODES = ("RC-S200", "RC-M500", "RC-X800")
 
 
+class _RecordingProvider:
+    """包装生成 Provider，记录最近一次模型原始输出。
+
+    拒答（unsafe_answer/citation_invalid 等）时 AnswerResult.answer 恒为 None 且评测
+    rollback 不落库，若不在此处截留原文，事后将无法定位是哪条安全规则命中、
+    是真风险还是误伤——2026-07-31 SYN-FA-006 即因此无法归因。
+    """
+
+    def __init__(self, inner) -> None:
+        self.inner = inner
+        self.model_name = inner.model_name
+        self.last_raw: str | None = None
+
+    def generate(self, *, system: str, prompt: str) -> str:
+        self.last_raw = self.inner.generate(system=system, prompt=prompt)
+        return self.last_raw
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=50)
@@ -46,8 +64,10 @@ def main() -> int:
         print(json.dumps({"status": "not_run", "reason": "缺少 ROBOTCARE_DASHSCOPE_API_KEY，拒绝伪造结果"}, ensure_ascii=False))
         return 2
 
-    provider = DashScopeGenerationProvider(
-        settings.dashscope_api_key, settings.generation_model, settings.dashscope_base_url
+    provider = _RecordingProvider(
+        DashScopeGenerationProvider(
+            settings.dashscope_api_key, settings.generation_model, settings.dashscope_base_url
+        )
     )
     embedding = HashingNgramEmbeddingProvider()
     factory = fresh_eval_session_factory()
@@ -74,6 +94,7 @@ def main() -> int:
             )
         for case in faith_cases[: args.limit]:
             expected = case["expected"]
+            provider.last_raw = None  # 防止门控拒答（未调模型）误挂上一条的原文
             outcome = generate_answer(
                 db,
                 user_id=None,
@@ -97,14 +118,21 @@ def main() -> int:
                 "answer_passes_safety": outcome.answer is None
                 or detect_safety_block(outcome.answer) is None,
             }
-            results["faithfulness"].append(
-                {
-                    "case_id": case["case_id"],
-                    "passed": all(checks.values()),
-                    "checks": checks,
-                    "refusal_reason": outcome.refusal_reason,
-                }
-            )
+            entry = {
+                "case_id": case["case_id"],
+                "passed": all(checks.values()),
+                "checks": checks,
+                "refusal_reason": outcome.refusal_reason,
+            }
+            if outcome.refusal_reason is not None and provider.last_raw is not None:
+                # 拒答归因：合成数据无隐私，摘录原文供人工判断是真风险还是规则误伤
+                entry["raw_answer_excerpt"] = provider.last_raw[:300]
+                if outcome.refusal_reason == "unsafe_answer":
+                    block = detect_safety_block(provider.last_raw)
+                    if block is not None:
+                        entry["safety_category"] = block.category
+                        entry["safety_reason"] = block.reason
+            results["faithfulness"].append(entry)
 
     evaluated = results["faithfulness"]
     passed = sum(1 for item in evaluated if item["passed"])

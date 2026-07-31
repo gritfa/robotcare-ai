@@ -121,6 +121,14 @@ from app.safety import detect_unsafe_generated_answer  # noqa: E402
         "应避免关闭安全保护功能。",
         "出现焦味或异常发热时，请断开电源并联系官方售后。",
         "若边刷不转，请检查边刷是否缠绕毛发。",
+        # SYN-FA-008 回归：警示词嵌在危险动作匹配区间内部也要识别
+        "驱动轮电机不可自行拆解维修。",
+        "主板故障不可自行维修，请联系售后。",
+        # SYN-FA-015 回归：上盖/顶盖是用户可开启区域，"打开"兼有开机含义
+        "打开基站上盖检查集尘袋。",
+        "打开上盖取出尘盒即可。",
+        "取下上盖更换集尘袋。",
+        "打开机器人电源开关。",
     ],
 )
 def test_generated_safety_warnings_are_allowed(text):
@@ -147,6 +155,8 @@ def test_each_warning_marker_neutralizes_dangerous_action(marker):
         ("internal_component_repair", "拆卸电机进行维修。"),
         ("unsafe_reassurance", "冒烟属于正常现象，可以继续使用。"),
         ("unsafe_reassurance", "电池鼓包不影响使用。"),
+        ("disassembly", "打开后盖检查内部线路。"),
+        ("disassembly", "撬开机身外壳。"),
     ],
 )
 def test_affirmative_dangerous_instructions_are_blocked(category, text):

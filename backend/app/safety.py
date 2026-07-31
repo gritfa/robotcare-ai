@@ -124,8 +124,11 @@ OUTPUT_ACTION_RULES = (
     SafetyRule(
         "disassembly",
         "回答包含拆机或打开设备内部结构的操作指导。",
+        # "上盖/顶盖"是用户可自行开启的区域（取尘盒/换集尘袋），不入拦截目标；
+        # "打开"兼有开机含义（打开机器/电源），只与明确的内部结构词组合才拦。
         re.compile(
-            r"(?:拆开|拆卸|打开|卸下|撬开|拆下)[^，。]{0,6}(?:外壳|机身|主机|机器|后盖|底盖|顶盖|上盖|面板|内部)"
+            r"(?:拆开|拆卸|卸下|撬开|拆下)[^，。]{0,6}(?:外壳|机身|主机|后盖|底盖|面板|内部)"
+            r"|打开[^，。]{0,6}(?:外壳|后盖|底盖|内部)"
             r"|拆机|拆开机身|拆开主机"
         ),
     ),
@@ -189,9 +192,14 @@ def _clause_prefix(sentence: str, position: int) -> str:
     return sentence[start:position]
 
 
-def _is_warned(sentence: str, position: int) -> bool:
-    prefix = _clause_prefix(sentence, position)
-    return any(marker in prefix for marker in _OUTPUT_WARNING_MARKERS)
+def _is_warned(sentence: str, start: int, end: int) -> bool:
+    """警示词可出现在分句内匹配位置之前，也可嵌在匹配范围内部——
+    如"电机不可自行拆解维修"，匹配区间为 电机…维修，"不可"在区间内。"""
+    prefix = _clause_prefix(sentence, start)
+    span = sentence[start:end]
+    return any(
+        marker in prefix or marker in span for marker in _OUTPUT_WARNING_MARKERS
+    )
 
 
 def detect_unsafe_generated_answer(text: str) -> SafetyBlock | None:
@@ -202,7 +210,7 @@ def detect_unsafe_generated_answer(text: str) -> SafetyBlock | None:
             continue
         for rule in OUTPUT_ACTION_RULES:
             for match in rule.pattern.finditer(sentence):
-                if not _is_warned(sentence, match.start()):
+                if not _is_warned(sentence, match.start(), match.end()):
                     return SafetyBlock(
                         category=rule.category,
                         risk_level="critical",
@@ -210,7 +218,7 @@ def detect_unsafe_generated_answer(text: str) -> SafetyBlock | None:
                     )
         if _STATE_KEYWORDS.search(sentence):
             for match in _UNSAFE_CONTINUATION.finditer(sentence):
-                if not _is_warned(sentence, match.start()):
+                if not _is_warned(sentence, match.start(), match.end()):
                     return SafetyBlock(
                         category="unsafe_reassurance",
                         risk_level="critical",

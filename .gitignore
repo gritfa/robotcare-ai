@@ -23,7 +23,9 @@ frontend/*.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
 frontend/dev-server*.log
-knowledge/raw/
+knowledge/raw/*
+!knowledge/raw/JH69U1_manual.pdf
+!knowledge/raw/VC35U1_manual.pdf
 knowledge/external/
 tmp/
 .idea/

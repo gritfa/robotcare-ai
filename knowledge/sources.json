@@ -23,13 +23,13 @@
       "page_count": 20,
       "text_chars": 9539,
       "download_status": "【已验证】",
-      "download_verification": "官方 PDF 直链返回 application/pdf；下载 27364132 字节，SHA256 与本地忽略文件一致。",
+      "download_verification": "官方 PDF 直链返回 application/pdf；下载 27364132 字节，SHA256 与仓库内文件一致。",
       "extraction_status": "【已验证】",
       "extraction_verification": "使用 pypdf 6.8.0 成功读取 20 页并提取 9539 个字符；PDF 第 15-16 页已渲染并完成人工可见性抽检。",
       "vector_ingestion_status": "【已验证】",
       "vector_ingestion_verification": "2026-07-20 使用 text-embedding-v4 生成 256 维向量；入库 1 个文档、31 个分页分片、31 个非空向量，SHA256 与本地说明书一致。",
       "content_ingestion_status": "【已验证】",
-      "content_ingestion_note": "已完成分页提取、500 字切片、80 字重叠、向量化和 SQLite 持久化；原始 PDF 继续保持本地忽略，不提交公开仓库。"
+      "content_ingestion_note": "已完成分页提取、500 字切片、80 字重叠和向量化；仓库所有者确认具备公开再分发授权后，原始 PDF 已纳入 knowledge/raw/。"
     },
     {
       "source_id": "haier-product-vc35u1",
@@ -47,13 +47,13 @@
       "page_count": 20,
       "text_chars": 4667,
       "download_status": "【已验证】",
-      "download_verification": "官方 PDF 直链返回 application/pdf；下载 12920954 字节，SHA256 与本地忽略文件一致。",
+      "download_verification": "官方 PDF 直链返回 application/pdf；下载 12920954 字节，SHA256 与仓库内文件一致。",
       "extraction_status": "【已验证】",
       "extraction_verification": "使用 pypdf 6.8.0 成功读取 20 页并提取 4667 个字符；PDF 第 15 页已渲染并完成人工可见性抽检。",
       "vector_ingestion_status": "【已验证】",
       "vector_ingestion_verification": "2026-07-20 使用 text-embedding-v4 生成 256 维向量；入库 1 个文档、22 个分页分片、22 个非空向量，SHA256 与本地说明书一致。",
       "content_ingestion_status": "【已验证】",
-      "content_ingestion_note": "已完成分页提取、500 字切片、80 字重叠、向量化和 SQLite 持久化；原始 PDF 继续保持本地忽略，不提交公开仓库。"
+      "content_ingestion_note": "已完成分页提取、500 字切片、80 字重叠和向量化；仓库所有者确认具备公开再分发授权后，原始 PDF 已纳入 knowledge/raw/。"
     },
     {
       "source_id": "haier-product-p50u1",

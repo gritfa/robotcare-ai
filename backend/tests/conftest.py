@@ -11,10 +11,34 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
+from app.config import Settings, get_settings
 from app.main import create_app
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolate_local_environment():
+    """测试全程不读仓库 .env，也不继承本机 DashScope 配置。
+
+    否则开发机 .env 里的真实 key 会让"外部模型未配置"类用例被环境污染：
+    CI 无密钥通过、有 key 的开发机失败。
+    """
+
+    original_env_file = Settings.model_config.get("env_file")
+    Settings.model_config["env_file"] = None
+    saved = {
+        name: os.environ.pop(name)
+        for name in ("ROBOTCARE_DASHSCOPE_API_KEY", "ROBOTCARE_DASHSCOPE_BASE_URL")
+        if name in os.environ
+    }
+    # get_settings 带 lru_cache，import 阶段可能已缓存污染实例，必须清掉。
+    get_settings.cache_clear()
+    yield
+    Settings.model_config["env_file"] = original_env_file
+    os.environ.update(saved)
+    get_settings.cache_clear()
 
 # 单方言：所有测试都跑在专用 PostgreSQL 测试容器上（pgvector/pgvector:pg16）。
 TEST_DATABASE_URL = os.getenv(

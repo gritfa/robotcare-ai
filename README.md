@@ -71,13 +71,12 @@ npm.cmd run test:e2e:edge
 知识数据：
 
 ```text
-官方来源入口：4
-版本化流程：5（4 published，1 draft）
-评测用例：113（全部 needs_human_review）
-已验证向量：53（JH69U1 31，VC35U1 22）
-真实检索冒烟：5/5
-离线审计：safety_block 15/15；source_page 14/14；step_selection 14/14
-未运行指标：model_isolation / retrieval_recall / refusal / classification / faithfulness
+官方来源入口：4（另有 3 份合成型号说明书 PDF，明确标注 synthetic）
+版本化流程：30（29 published，1 draft；含 25 条合成型号流程）
+评测用例：375（全部 needs_human_review，待人工复核）
+真实检索冒烟：5/5（`docs/evidence/rag_smoke_20260720.json`）
+离线审计（七指标真实执行，全 1.0）：safety_block 47/47；source_page 39/39；step_selection 39/39；model_isolation 25/25；retrieval_recall 55/55；classification 50/50；refusal(门控层) 30/30
+仅剩 not_run：faithfulness（需真实 DashScope key 在线执行，脚本 `scripts/run_online_generation_eval.py`）
 ```
 
 真实检索冒烟证据：`docs/evidence/rag_smoke_20260720.json`。
@@ -135,7 +134,7 @@ cd backend
 
 API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260730_0009`：`0005` 增加数据库状态约束，`0006` 增加独立 IP 登录桶与可信代理配套，`0007` 增加 API/Embedding 配额表，`0008` 增加生成层留痕表 generation_records，`0009` 增加内容缺口事件表 knowledge_gap_events；`create_all()` 仅保留给显式开启的隔离测试。
 
-本地开发库已备份为 `robotcare.db.pre-0007-20260722.bak` 并升级到 `0007`；4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留，`PRAGMA integrity_check=ok` 且无外键异常。
+（历史记录，SQLite 时期，现已 PG 单方言）本地开发库曾备份为 `robotcare.db.pre-0007-20260722.bak` 并升级到 `0007`；当时的 4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留，`PRAGMA integrity_check=ok` 且无外键异常。
 
 ## 生产知识发布
 
@@ -181,7 +180,7 @@ robotcare-ai/
 - P50U1：https://www.haier.com/xjd/sdjqr/20200831_146586.shtml
 - 海尔服务支持：https://www.haier.com/support/
 
-其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和开发环境向量化（历史向量最初落在 SQLite 开发库，可用 `backend/scripts/migrate_legacy_sqlite.py` 一次性迁入 PG）；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的单方言类型、查询、迁移、HNSW 与型号级 Top-K 已在本地 PostgreSQL 16 + pgvector 测试容器全量回归通过。113 条评测数据和三项离线审计已经存在，但全部用例仍待人工复核，五项在线 RAG/LLM 指标仍为【计划】。
+其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和开发环境向量化（历史向量最初落在 SQLite 开发库，可用 `backend/scripts/migrate_legacy_sqlite.py` 一次性迁入 PG）；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的单方言类型、查询、迁移、HNSW 与型号级 Top-K 已在本地 PostgreSQL 16 + pgvector 测试容器全量回归通过。评测集现为 375 条（全部待人工复核），七项指标已离线真实执行全 1.0（`docs/evidence/rag_eval_offline_audit.md`），仅 faithfulness 需真实 DashScope key 在线执行。
 
 ## 管理员账户与当前管理范围
 

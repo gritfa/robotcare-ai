@@ -166,3 +166,65 @@ def test_report_must_not_contain_secrets():
     assert_no_secrets(safe_report, [secret, None, ""])
     with pytest.raises(RuntimeError):
         assert_no_secrets(json.dumps({"debug": f"key={secret}"}), [secret])
+
+
+# ---------------------------------------------------------------------------
+# 单条用例校验与诊断字段（2026-07-31 复盘：报告必须自带检索页码/分数/片段哈希，
+# 且 forbidden_claims 出现在回答中必须判失败）
+
+from types import SimpleNamespace
+
+from scripts.run_online_generation_eval import build_case_checks, build_case_diagnostics
+
+
+def _outcome(status="answered", answer="按 [1] 操作即可。", pages=(7,)):
+    return SimpleNamespace(
+        status=status,
+        answer=answer if status == "answered" else None,
+        citations=[SimpleNamespace(source_url="u1", page_number=p) for p in pages],
+        refusal_reason=None if status == "answered" else "model_refused",
+    )
+
+
+def _retrieval(pages=(7, 3)):
+    return [
+        SimpleNamespace(page_number=p, score=0.5 - i * 0.1, content=f"第{p}页内容")
+        for i, p in enumerate(pages)
+    ]
+
+
+def test_forbidden_claim_in_answer_fails_the_case():
+    case = {"expected": {"forbidden_claims": ["拆开基站可改善回充"]}}
+    ok = build_case_checks(case, _outcome(answer="基站靠墙放置即可 [1]。"), {"u1"}, "u1")
+    assert ok["no_forbidden_claims"] is True
+    bad = build_case_checks(
+        case, _outcome(answer="拆开基站可改善回充 [1]。"), {"u1"}, "u1"
+    )
+    assert bad["no_forbidden_claims"] is False
+    assert not all(bad.values())
+
+
+def test_refused_case_skips_answer_dependent_checks():
+    checks = build_case_checks({"expected": {}}, _outcome(status="refused"), {"u1"}, "u1")
+    assert checks["answered"] is False
+    assert checks["no_forbidden_claims"] is True  # 未回答谈不上违禁论断
+
+
+def test_diagnostics_record_retrieval_pages_scores_and_expected_hit():
+    case = {
+        "source_pages": [7],
+        "expected": {"supported_claims": ["基站应靠墙平稳放置", "不存在的句子"]},
+    }
+    diag = build_case_diagnostics(case, _outcome(answer="基站应靠墙平稳放置 [1]。"), _retrieval())
+    assert [r["page"] for r in diag["retrieval"]] == [7, 3]
+    assert all({"score", "chunk_sha12", "excerpt"} <= set(r) for r in diag["retrieval"])
+    assert diag["expected_page_retrieved"] is True
+    assert diag["cited_pages"] == [7]
+    assert diag["supported_claims_total"] == 2
+    assert diag["supported_claims_verbatim_hits"] == 1
+
+
+def test_diagnostics_flag_missed_expected_page():
+    case = {"source_pages": [12], "expected": {}}
+    diag = build_case_diagnostics(case, _outcome(status="refused"), _retrieval(pages=(7, 3)))
+    assert diag["expected_page_retrieved"] is False

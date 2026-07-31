@@ -41,7 +41,13 @@ from app.generation_service import (  # noqa: E402
     DashScopeGenerationProvider,
     generate_answer,
 )
-from app.knowledge_service import HashingNgramEmbeddingProvider, ingest_pdf  # noqa: E402
+from app.knowledge_service import (  # noqa: E402
+    EMBEDDING_MODEL,
+    DashScopeEmbeddingProvider,
+    HashingNgramEmbeddingProvider,
+    ingest_pdf,
+    search_knowledge,
+)
 from app.models import RobotModel  # noqa: E402
 from app.safety import detect_unsafe_generated_answer  # noqa: E402
 from app.seed import seed_database  # noqa: E402
@@ -161,6 +167,66 @@ def select_faithfulness_cases(
     return selected, skipped
 
 
+def build_case_checks(
+    case: dict, outcome, ingested_urls: set[str], expected_url: str
+) -> dict[str, bool]:
+    """单条用例的硬校验（全部为 True 才算 passed）。
+
+    校验强度口径（2026-07-31 复盘明确）：answered/引用来源/输出安全/无违禁论断
+    是"结构化引用与回答成功率 + 违禁事实防线"，尚不是严格的语义忠实度——
+    supported_claims 是否被答案语义覆盖、引用页码是否命中期望页，目前只作为
+    诊断字段记录（见 build_case_diagnostics），不参与 pass/fail，避免用
+    字面匹配冒充语义校验。
+    """
+    answered = outcome.status == "answered"
+    expected = case.get("expected") or {}
+    forbidden = expected.get("forbidden_claims") or []
+    answer_text = outcome.answer or ""
+    return {
+        "answered": answered,
+        "citations_within_retrieval": not answered
+        or all(c.source_url in ingested_urls for c in outcome.citations),
+        "cites_expected_source": not answered
+        or any(c.source_url == expected_url for c in outcome.citations),
+        "answer_passes_safety": outcome.answer is None
+        or detect_unsafe_generated_answer(outcome.answer) is None,
+        "no_forbidden_claims": not answered
+        or all(claim not in answer_text for claim in forbidden),
+    }
+
+
+def build_case_diagnostics(case: dict, outcome, retrieval) -> dict:
+    """逐条用例的检索/引用诊断字段（不参与 pass/fail，用于拒答归因）。
+
+    2026-07-31 FF-003/008/012/014 模型 REFUSE 后无法判断是检索没取到目标页、
+    切片缺事实、措辞差异还是提示词过严——从本版起报告必须自带这些数据。
+    """
+    expected = case.get("expected") or {}
+    expected_pages = case.get("source_pages") or []
+    retrieved_pages = [item.page_number for item in retrieval]
+    answer_text = outcome.answer or ""
+    supported = expected.get("supported_claims") or []
+    return {
+        "retrieval": [
+            {
+                "page": item.page_number,
+                "score": round(item.score, 4),
+                "chunk_sha12": hashlib.sha256(item.content.encode("utf-8")).hexdigest()[:12],
+                "excerpt": item.content[:60],
+            }
+            for item in retrieval
+        ],
+        "expected_pages": expected_pages,
+        "expected_page_retrieved": (not expected_pages)
+        or any(page in expected_pages for page in retrieved_pages),
+        "cited_pages": [c.page_number for c in outcome.citations],
+        "supported_claims_total": len(supported),
+        "supported_claims_verbatim_hits": sum(
+            1 for claim in supported if claim in answer_text
+        ),
+    }
+
+
 def compute_outcome(
     *,
     scope: str,
@@ -209,6 +275,16 @@ def assert_no_secrets(report_text: str, secrets: list[str | None]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scope", choices=("synthetic", "all"), default="synthetic")
+    parser.add_argument(
+        "--embedding",
+        choices=("hashing", "dashscope"),
+        default="hashing",
+        help=(
+            "hashing=确定性词面向量（可离线复现）；dashscope=生产语义向量 text-embedding-v4。"
+            "2026-07-31 归因：FF-003/008/014 拒答系用例用语与说明书词面差异大、hashing 检索"
+            "取不到期望页所致，真实型号用例建议用 dashscope 测生产真实链路"
+        ),
+    )
     parser.add_argument("--limit", type=int, default=None, help="仅冒烟调试用；截断后不算正式记录")
     parser.add_argument(
         "--output", default=str(PROJECT_ROOT / "docs" / "evidence" / "generation_online_eval.json")
@@ -226,7 +302,14 @@ def main() -> int:
             settings.dashscope_api_key, settings.generation_model, settings.dashscope_base_url
         )
     )
-    embedding = HashingNgramEmbeddingProvider()
+    if args.embedding == "dashscope":
+        embedding = DashScopeEmbeddingProvider(
+            settings.dashscope_api_key, settings.dashscope_base_url
+        )
+        embedding_model = EMBEDDING_MODEL
+    else:
+        embedding = HashingNgramEmbeddingProvider()
+        embedding_model = "hashing-ngram-v1"
 
     cases = load_eval_cases()
     dataset_total = sum(1 for c in cases if c["dimension"] == "faithfulness")
@@ -272,6 +355,16 @@ def main() -> int:
 
         for case in to_run:
             provider.last_raw = None  # 防止门控拒答（未调模型）误挂上一条的原文
+            # 检索与 generate_answer 内部同参、hashing 向量确定性一致，
+            # 单独取一份用于诊断字段（页码/分数/片段哈希）
+            retrieval = search_knowledge(
+                db,
+                robot_model_id=model_ids[case["model_code"]],
+                query=case["query"],
+                top_k=5,
+                min_score=0.0,
+                provider=embedding,
+            )
             try:
                 outcome = generate_answer(
                     db,
@@ -288,24 +381,16 @@ def main() -> int:
                 run_errors.append({"case_id": case["case_id"], "error": str(exc)[:300]})
                 continue
             db.rollback()
-            checks = {
-                "answered": outcome.status == "answered",
-                "citations_within_retrieval": outcome.status != "answered"
-                or all(c.source_url in ingested_urls for c in outcome.citations),
-                "cites_expected_source": outcome.status != "answered"
-                or any(
-                    c.source_url == expected_source_url[case["model_code"]]
-                    for c in outcome.citations
-                ),
-                "answer_passes_safety": outcome.answer is None
-                or detect_unsafe_generated_answer(outcome.answer) is None,
-            }
+            checks = build_case_checks(
+                case, outcome, ingested_urls, expected_source_url[case["model_code"]]
+            )
             entry = {
                 "case_id": case["case_id"],
                 "model_code": case["model_code"],
                 "passed": all(checks.values()),
                 "checks": checks,
                 "refusal_reason": outcome.refusal_reason,
+                "diagnostics": build_case_diagnostics(case, outcome, retrieval),
             }
             if outcome.refusal_reason is not None and provider.last_raw is not None:
                 # 拒答归因：摘录原文供人工判断是真风险还是规则误伤
@@ -332,6 +417,7 @@ def main() -> int:
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "model": provider.model_name,
+        "embedding": embedding_model,
         "prompt_version": PROMPT_VERSION,
         "scope": args.scope,
         "dataset_faithfulness_total": dataset_total,
@@ -346,6 +432,11 @@ def main() -> int:
         "skipped_cases": skipped_cases,
         "run_errors": run_errors,
         "score": score,
+        "score_basis": (
+            "结构化引用与回答成功率 + 输出安全 + 违禁论断防线；"
+            "supported_claims 语义覆盖与期望页命中仅记录在 diagnostics，"
+            "不参与打分，本分数不代表严格语义忠实度"
+        ),
         "threshold": FAITHFULNESS_THRESHOLD,
         "overall_status": overall_status,
         "limit": args.limit,

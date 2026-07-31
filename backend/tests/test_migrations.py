@@ -276,8 +276,8 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(
         assert session.scalar(select(RobotModel).where(RobotModel.code == "JH69U1")) is not None
         assert session.scalar(select(RobotModel).where(RobotModel.code == "VC35U1")) is not None
         flows = session.scalars(select(DiagnosticFlow)).all()
-        assert len(flows) == 36  # 5 条真实型号流程 + 31 条 D1 合成演示流程
-        assert sum(flow.status == "published" for flow in flows) == 35
+        assert len(flows) == 46  # 15 条真实型号流程（14 published + 1 draft）+ 31 条 D1 合成演示流程
+        assert sum(flow.status == "published" for flow in flows) == 45
         assert sum(flow.status == "draft" for flow in flows) == 1
         assert len(session.scalars(select(DiagnosticStep)).all()) > 0
 

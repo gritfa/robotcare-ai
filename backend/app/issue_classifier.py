@@ -67,6 +67,33 @@ MODEL_RULES: dict[str, tuple[CategoryRule, ...]] = {
             ),
             _patterns(r"^(?:TANK|MOP|WASH)[-_ ]?(?:01|FAIL)$"),
         ),
+        CategoryRule(
+            "power_on_failure",
+            _patterns(r"无法开机", r"开不了机", r"按开机键.{0,6}没(?:有)?反应", r"开机没反应"),
+        ),
+        CategoryRule(
+            "cleaning_noise",
+            _patterns(
+                r"(?:清扫|扫地|运行|主刷|边刷|轮子).{0,8}(?:异响|噪音|声音异常)",
+                r"(?:异响|噪音).{0,8}(?:清扫|扫地|运行|主刷|边刷|轮子)",
+            ),
+        ),
+        CategoryRule(
+            "suction_drop",
+            _patterns(r"吸力(?:变小|下降|变弱|不足)", r"吸不干净", r"扫不干净", r"扫地能力下降", r"掉灰"),
+        ),
+        CategoryRule(
+            "device_offline",
+            # 刻意不含"配网/联网"词：配网失败类症状不应跨界成为候选
+            _patterns(r"(?:设备|主机).{0,6}离线", r"离线状态", r"无法连接\s*APP", r"APP.{0,8}(?:连不上|无法连接)"),
+        ),
+        CategoryRule(
+            "schedule_not_run",
+            _patterns(
+                r"预约清洁.{0,8}(?:不工作|不启动|失败|没执行)",
+                r"定时(?:清扫|清洁).{0,8}(?:不执行|不工作|不启动|没反应)",
+            ),
+        ),
     ),
     "VC35U1": (
         CategoryRule(
@@ -85,6 +112,29 @@ MODEL_RULES: dict[str, tuple[CategoryRule, ...]] = {
                 r"(?:异响|噪音).{0,8}(?:清扫|运行|滚刷|边刷|轮子)",
             ),
             _patterns(r"^(?:NOISE|BRUSH)[-_ ]?(?:01|FAIL)$"),
+        ),
+        CategoryRule(
+            "power_on_failure",
+            _patterns(r"无法开机", r"开不了机", r"按开机键.{0,6}没(?:有)?反应", r"开机没反应"),
+        ),
+        CategoryRule(
+            "return_to_dock_failure",
+            _patterns(r"无法回充", r"回充失败", r"找不到(?:基站|充电座)", r"不能返回充电", r"无法返回充电"),
+        ),
+        CategoryRule(
+            "suction_drop",
+            _patterns(r"吸力(?:变小|下降|变弱|不足)", r"吸不干净", r"扫不干净", r"清扫能力下降"),
+        ),
+        CategoryRule(
+            "schedule_not_run",
+            _patterns(
+                r"定时(?:清扫|清洁).{0,8}(?:不执行|不工作|不启动|没反应)",
+                r"预约清洁.{0,8}(?:不工作|不启动|失败|没执行)",
+            ),
+        ),
+        CategoryRule(
+            "battery_runtime_decline",
+            _patterns(r"续航(?:变短|下降|变差)", r"电池不耐用", r"用一会.{0,4}就没电", r"电量掉得(?:快|很快)"),
         ),
     ),
     # ---- 以下为 D1 合成演示型号（synthetic demo）。规则与 knowledge/ 合成流程同源维护。 ----

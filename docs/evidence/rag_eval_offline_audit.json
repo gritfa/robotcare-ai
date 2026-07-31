@@ -1,6 +1,6 @@
 {
   "report_schema_version": "1.0",
-  "generated_at": "2026-07-31T02:27:51.102220+00:00",
+  "generated_at": "2026-07-31T04:03:54.236928+00:00",
   "dataset_path": "knowledge/eval_cases.jsonl",
   "overall_status": "passed_with_not_run_metrics",
   "dataset_summary": {

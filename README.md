@@ -22,7 +22,7 @@
 | 反馈幂等与并发 | `【已验证】` | 请求携带当前 `step_id`；重复、旧步骤和两请求并发只允许一条执行记录，冲突返回 409 |
 | 图片上传安全 | `【已验证】` | Pillow 真实解码及既有限制不变；PostgreSQL 会话行锁（`SELECT ... FOR UPDATE`）保证并发上传最多 5 张，失败不遗留数据库记录或孤立文件 |
 | 官方说明书证据 | `【已验证】` | JH69U1、VC35U1 官方 PDF 已下载、校验 SHA256、按页解析并完成指定页面目视检查；仓库所有者确认具备公开再分发授权后，两份原始 PDF 已纳入 `knowledge/raw/` |
-| 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；4 条逐步骤说明书复核流程已发布，1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
+| 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；14 条真实型号逐步骤说明书复核流程已发布（JH69U1 7 条 / VC35U1 7 条，2026-07-31 新增 10 条全部逐字对照官方说明书页），1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
 | 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；迁移链单方言化后在空 PostgreSQL 库完成 `upgrade head → downgrade base → upgrade head` 往返，head `20260730_0009`，metadata 零漂移 |
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
 | RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 411 条（113 条原有 + 298 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 45/45`、`step_selection 45/45`、`model_isolation 31/31`、`retrieval_recall 61/61`、`classification 62/62`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
@@ -72,7 +72,7 @@ npm.cmd run test:e2e:edge
 
 ```text
 官方来源入口：4（另有 3 份合成型号说明书 PDF，明确标注 synthetic）
-版本化流程：36（35 published，1 draft；含 31 条合成型号流程）
+版本化流程：46（45 published，1 draft；14 条真实型号 + 31 条合成型号流程）
 评测用例：411（全部 needs_human_review，待人工复核）
 真实检索冒烟：5/5（`docs/evidence/rag_smoke_20260720.json`）
 离线审计（七指标真实执行，全 1.0）：safety_block 47/47；source_page 45/45；step_selection 45/45；model_isolation 31/31；retrieval_recall 61/61；classification 62/62；refusal(门控层) 30/30

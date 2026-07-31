@@ -123,7 +123,7 @@ def test_admin_reads_operational_overview_without_sensitive_payloads(client: Tes
     assert overview.json() == {
         "user_count": 2,
         "active_model_count": 5,  # 2 真实型号 + 3 D1 合成演示型号
-        "published_flow_count": 35,  # 4 条真实 + 31 条 D1 合成演示流程
+        "published_flow_count": 45,  # 14 条真实 + 31 条 D1 合成演示流程
         "knowledge_document_count": 0,
         "knowledge_chunk_count": 0,
         "safety_block_count": 1,

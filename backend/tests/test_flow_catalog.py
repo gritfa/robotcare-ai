@@ -17,8 +17,18 @@ from conftest import auth, register
 EXPECTED_FLOWS = {
     ("JH69U1", "return_to_dock_failure"): "jh69u1-return-to-dock",
     ("JH69U1", "base_station_water_tank_issue"): "jh69u1-mop-washing",
+    ("JH69U1", "power_on_failure"): "jh69u1-power-on",
+    ("JH69U1", "cleaning_noise"): "jh69u1-cleaning-noise",
+    ("JH69U1", "suction_drop"): "jh69u1-suction-drop",
+    ("JH69U1", "device_offline"): "jh69u1-device-offline",
+    ("JH69U1", "schedule_not_run"): "jh69u1-schedule-not-run",
     ("VC35U1", "wifi_setup_failure"): "vc35u1-wifi-setup",
     ("VC35U1", "cleaning_noise"): "vc35u1-cleaning-noise",
+    ("VC35U1", "power_on_failure"): "vc35u1-power-on",
+    ("VC35U1", "return_to_dock_failure"): "vc35u1-return-to-dock",
+    ("VC35U1", "suction_drop"): "vc35u1-suction-drop",
+    ("VC35U1", "schedule_not_run"): "vc35u1-schedule-not-run",
+    ("VC35U1", "battery_runtime_decline"): "vc35u1-battery-care",
 }
 
 
@@ -49,7 +59,7 @@ def create_diagnostic(client, token: str, device_id: int, category: str):
 
 def test_catalog_contains_four_published_reviewed_flows_with_page_sources():
     catalog = load_flow_catalog()
-    assert len(catalog.flows) == 36  # 5 条真实型号流程 + 31 条 D1 合成演示流程
+    assert len(catalog.flows) == 46  # 15 条真实型号流程（14 published + 1 draft）+ 31 条 D1 合成演示流程
     published = [flow for flow in catalog.flows if flow.status == "published"]
     drafts = [flow for flow in catalog.flows if flow.status == "draft"]
     real_published = [flow for flow in published if not flow.stable_key.startswith("rc-")]
@@ -75,13 +85,19 @@ def test_catalog_contains_four_published_reviewed_flows_with_page_sources():
 
 
 def test_all_four_published_flows_are_available_one_step_at_a_time(client):
-    token = register(client, "four-flows@example.com")["access_token"]
+    # 每个型号单独注册用户：14 条流程超过单用户 10 次/分钟的诊断创建限流
+    model_codes = {model_code for model_code, _ in EXPECTED_FLOWS}
+    tokens = {
+        model_code: register(client, f"flows-{model_code.lower()}@example.com")["access_token"]
+        for model_code in model_codes
+    }
     devices = {
-        model_code: create_device(client, token, model_code)
-        for model_code in {model_code for model_code, _ in EXPECTED_FLOWS}
+        model_code: create_device(client, tokens[model_code], model_code)
+        for model_code in model_codes
     }
 
     for (model_code, category), stable_key in EXPECTED_FLOWS.items():
+        token = tokens[model_code]
         response = create_diagnostic(client, token, devices[model_code], category)
         assert response.status_code == 201, response.text
         diagnostic = response.json()
@@ -117,10 +133,20 @@ def test_diagnostic_options_expose_only_published_flows_for_selected_model(clien
     assert {item["issue_category_code"] for item in jh.json()} == {
         "return_to_dock_failure",
         "base_station_water_tank_issue",
+        "power_on_failure",
+        "cleaning_noise",
+        "suction_drop",
+        "device_offline",
+        "schedule_not_run",
     }
     assert {item["issue_category_code"] for item in vc.json()} == {
         "wifi_setup_failure",
         "cleaning_noise",
+        "power_on_failure",
+        "return_to_dock_failure",
+        "suction_drop",
+        "schedule_not_run",
+        "battery_runtime_decline",
     }
     assert "navigation_abnormal" not in {
         item["issue_category_code"] for item in vc.json()

@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0",
-  "updated_at": "2026-07-30",
+  "updated_at": "2026-07-31",
   "flows": [
     {
       "stable_key": "jh69u1-return-to-dock",
@@ -1884,6 +1884,424 @@
           "source_page": 18,
           "evidence_level": "direct",
           "evidence_basis": "说明书产品规格章说明支持地图备份恢复。"
+        }
+      ]
+    },
+    {
+      "stable_key": "jh69u1-power-on",
+      "version": 1,
+      "status": "published",
+      "model_code": "JH69U1",
+      "model_name": "JH69U1 全能扫拖机器人",
+      "issue_category_code": "power_on_failure",
+      "issue_category_name": "无法开机",
+      "title": "JH69U1 无法开机排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 7、15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "charge-before-use",
+          "position": 1,
+          "title": "先将主机放回基站充电",
+          "instruction": "电池电量不足时可能无法开机，请将主机放置于基站充电，充满电后再使用。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：无法开机——电池电量不足，请充满电后再使用；第 7 页提示电量不足时可能无法开机，请将主机放置于基站充电。",
+          "policy_note": "若出现冒烟、焦味或异常发热，平台高风险规则会直接停止排查并转官方售后。"
+        },
+        {
+          "stable_key": "long-press-power",
+          "position": 2,
+          "title": "长按开机键 3 秒开机",
+          "instruction": "初次使用时长按开机键 3 秒开机；开机后请将主机手动靠上基站，使充电极片对准充电弹片。",
+          "source_label": "海尔 JH69U1 官方说明书，第 7 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 7,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书开机与充电章节：初次使用时长按键 3 秒开机，将主机手动靠上基站，充电极片对准充电弹片。"
+        }
+      ]
+    },
+    {
+      "stable_key": "jh69u1-cleaning-noise",
+      "version": 1,
+      "status": "published",
+      "model_code": "JH69U1",
+      "model_name": "JH69U1 全能扫拖机器人",
+      "issue_category_code": "cleaning_noise",
+      "issue_category_name": "清扫异响",
+      "title": "JH69U1 扫地异响排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "power-off-clean-wrapped",
+          "position": 1,
+          "title": "关机后清理主刷、边刷与左右轮",
+          "instruction": "扫地时有异响多因主刷、边刷或左/右轮缠绕异物，请关机后清理缠绕物。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：扫地时有异响——主刷、边刷或左/右轮可能缠绕异物，请关机后清理。",
+          "policy_note": "禁止拆卸电机或打开机身内部结构；此类操作由官方售后处理。"
+        }
+      ]
+    },
+    {
+      "stable_key": "jh69u1-suction-drop",
+      "version": 1,
+      "status": "published",
+      "model_code": "JH69U1",
+      "model_name": "JH69U1 全能扫拖机器人",
+      "issue_category_code": "suction_drop",
+      "issue_category_name": "吸力下降",
+      "title": "JH69U1 扫地能力下降排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "empty-dustbin",
+          "position": 1,
+          "title": "清理尘盒",
+          "instruction": "尘盒已满会导致扫地能力下降或出现掉灰，请清理尘盒。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：扫地能力下降或出现掉灰——尘盒已满，请清理尘盒。"
+        },
+        {
+          "stable_key": "clean-filter",
+          "position": 2,
+          "title": "清理滤网",
+          "instruction": "滤网被堵塞会影响吸力，请清理滤网。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：滤网已被堵塞，请清理滤网。"
+        },
+        {
+          "stable_key": "clean-main-brush",
+          "position": 3,
+          "title": "清理主刷",
+          "instruction": "主刷被异物缠绕会影响清扫效果，请清理主刷。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：主刷被异物缠绕，请清理主刷。"
+        }
+      ]
+    },
+    {
+      "stable_key": "jh69u1-device-offline",
+      "version": 1,
+      "status": "published",
+      "model_code": "JH69U1",
+      "model_name": "JH69U1 全能扫拖机器人",
+      "issue_category_code": "device_offline",
+      "issue_category_name": "设备离线",
+      "title": "JH69U1 设备离线与无法连接 APP 排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "check-wifi-signal",
+          "position": 1,
+          "title": "确认主机处于良好 Wi-Fi 覆盖区",
+          "instruction": "Wi-Fi 信号不好会导致无法连接 APP，请确保主机处于良好 Wi-Fi 信号覆盖区内。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：无法连接 APP——Wi-Fi 信号不好，请确保主机处于良好 Wi-Fi 信号覆盖区内。"
+        },
+        {
+          "stable_key": "reset-wifi-latest-app",
+          "position": 2,
+          "title": "重置 Wi-Fi 并使用最新 APP 重连",
+          "instruction": "Wi-Fi 连接异常时，请重置 Wi-Fi 并下载最新 APP 尝试再次连接，并确保设备配网成功。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：Wi-Fi 连接异常，重置 Wi-Fi 并下载最新 APP 尝试再次连接；请确保设备配网成功。"
+        },
+        {
+          "stable_key": "keep-in-coverage",
+          "position": 3,
+          "title": "确保基站与主机始终在覆盖范围内",
+          "instruction": "主机总是处于离线状态时，请确保基站和主机在 Wi-Fi 覆盖范围内且信号良好，按说明书指示重置 Wi-Fi 再进行配对。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：请确保基站和主机在 Wi-Fi 覆盖范围内并且信号良好，按照说明书指示重置 Wi-Fi 再进行配对。"
+        }
+      ]
+    },
+    {
+      "stable_key": "jh69u1-schedule-not-run",
+      "version": 1,
+      "status": "published",
+      "model_code": "JH69U1",
+      "model_name": "JH69U1 全能扫拖机器人",
+      "issue_category_code": "schedule_not_run",
+      "issue_category_name": "定时清扫不执行",
+      "title": "JH69U1 预约清洁不工作排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 10、15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "confirm-online",
+          "position": 1,
+          "title": "确认设备已联网",
+          "instruction": "设备未联网则无法同步时间，预约清洁将不会启动，请先确认设备已联网。",
+          "source_label": "海尔 JH69U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：预约清洁不工作——若设备未联网则无法同步时间，预约清洁将不会启动。"
+        },
+        {
+          "stable_key": "check-dnd-mode",
+          "position": 2,
+          "title": "检查勿扰时间段设置",
+          "instruction": "在勿扰时间段内，主机不会响应预约清洁，请确认主机未处于勿扰模式。",
+          "source_label": "海尔 JH69U1 官方说明书，第 10 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020241029385536323887.pdf?appdesc=JH69U1说明书",
+          "source_page": 10,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书勿扰模式章节：在勿扰时间段内，主机不会响应断点续扫、预约清洁。"
+        }
+      ]
+    },
+    {
+      "stable_key": "vc35u1-power-on",
+      "version": 1,
+      "status": "published",
+      "model_code": "VC35U1",
+      "model_name": "VC35U1 扫拖机器人",
+      "issue_category_code": "power_on_failure",
+      "issue_category_name": "无法开机",
+      "title": "VC35U1 无法开机与无法充电排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 8、15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "check-switch-battery",
+          "position": 1,
+          "title": "检查电源开关与电量",
+          "instruction": "请检查电源开关是否打开；电池电量不足时请先充电再使用。打开机器物理开关后按键灯闪烁，开机完成后有语音提示。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：无法开机——检查电源开关是否打开，或电池电量不足，请先充电再使用；第 8 页：打开机器物理开关后，按键灯闪烁，开机完成后将有语音提示。"
+        },
+        {
+          "stable_key": "check-temperature",
+          "position": 2,
+          "title": "确认环境温度在 0℃-40℃",
+          "instruction": "环境温度过低或过高会导致无法开机，请在 0℃-40℃ 范围内使用。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：环境温度过低或过高，请在 0℃-40℃ 范围内使用。"
+        },
+        {
+          "stable_key": "check-charging",
+          "position": 3,
+          "title": "无法充电时检查充电座与电极",
+          "instruction": "充电座未通电时请确保电源连接成功；充电电极接触不良时请清理充电座电极和主机电极。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：无法充电——充电座未通电，请确保电源连接成功；充电电极接触不良，请清理充电座电极和主机电极。",
+          "policy_note": "只清洁外露电极；禁止短接充电触点，该行为由平台安全规则拦截。"
+        }
+      ]
+    },
+    {
+      "stable_key": "vc35u1-return-to-dock",
+      "version": 1,
+      "status": "published",
+      "model_code": "VC35U1",
+      "model_name": "VC35U1 扫拖机器人",
+      "issue_category_code": "return_to_dock_failure",
+      "issue_category_name": "无法回充",
+      "title": "VC35U1 无法返回充电排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 8、15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "clear-dock-space",
+          "position": 1,
+          "title": "保证充电座周围空间",
+          "instruction": "请确保充电座周围有足够多的空间，并尝试移去充电座周围的障碍物。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：主机无法返回充电——请确保充电座周围有足够多的空间；第 8 页：请尝试移去充电座周围的障碍物。"
+        },
+        {
+          "stable_key": "clean-dock-marker",
+          "position": 2,
+          "title": "清洁充电座表面识别区",
+          "instruction": "请确保充电座表面识别区没有灰尘和脏物遮挡。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：请确保充电座表面识别区没有灰尘和脏物遮挡。"
+        },
+        {
+          "stable_key": "manual-return",
+          "position": 3,
+          "title": "手动将主机放回充电座",
+          "instruction": "仍无法回充时，可将主机抱回充电座进行充电，并确保充电电极接触良好、充电指示灯亮起。",
+          "source_label": "海尔 VC35U1 官方说明书，第 8 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 8,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书使用说明：如果主机无法返回充电座……或将主机抱回充电座进行充电；请确保充电电极接触良好，并检查充电指示灯是否亮起。"
+        }
+      ]
+    },
+    {
+      "stable_key": "vc35u1-suction-drop",
+      "version": 1,
+      "status": "published",
+      "model_code": "VC35U1",
+      "model_name": "VC35U1 扫拖机器人",
+      "issue_category_code": "suction_drop",
+      "issue_category_name": "吸力下降",
+      "title": "VC35U1 清扫能力下降排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 11、15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "clean-dustbin-filter",
+          "position": 1,
+          "title": "检查并清理尘盒和滤网",
+          "instruction": "清扫能力下降时，请检查清理尘盒和滤网。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：清扫能力下降——请检查清理尘盒和滤网。"
+        },
+        {
+          "stable_key": "clean-roller-brush",
+          "position": 2,
+          "title": "取出滚刷清理缠绕物",
+          "instruction": "翻转机身，向内按压滚刷罩上的卡扣取出滚刷，使用工具清理滚刷上的缠绕物，清洁完后装回滚刷并扣好滚刷罩。",
+          "source_label": "海尔 VC35U1 官方说明书，第 11 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书产品维护：滚刷清理——向内按压滚刷罩卡扣取出滚刷，使用工具清理缠绕物，装回滚刷扣好滚刷罩。"
+        },
+        {
+          "stable_key": "clean-side-brush",
+          "position": 3,
+          "title": "清理边刷及边刷轴承",
+          "instruction": "将边刷向上提拉拔出，清理边刷和边刷轴承上的缠绕物，再对准边刷轴承用力按下装回。",
+          "source_label": "海尔 VC35U1 官方说明书，第 11 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书产品维护：边刷清理——提拉拔出边刷，清理边刷和边刷轴承上的缠绕物，对准轴承按下装回。"
+        }
+      ]
+    },
+    {
+      "stable_key": "vc35u1-schedule-not-run",
+      "version": 1,
+      "status": "published",
+      "model_code": "VC35U1",
+      "model_name": "VC35U1 扫拖机器人",
+      "issue_category_code": "schedule_not_run",
+      "issue_category_name": "定时清扫不执行",
+      "title": "VC35U1 定时清扫不工作排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 15 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "charge-first",
+          "position": 1,
+          "title": "先给主机充电",
+          "instruction": "电量不足时无法触发定时清扫，请先充电。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：定时清扫不工作——电量不足时无法触发定时清扫。"
+        },
+        {
+          "stable_key": "confirm-online",
+          "position": 2,
+          "title": "确认主机已联网",
+          "instruction": "请确认主机已联网；主机若未联网则无法同步定时清扫任务。",
+          "source_label": "海尔 VC35U1 官方说明书，第 15 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 15,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书常见问题：请确认主机已联网，主机若未联网则无法同步定时清扫任务。"
+        }
+      ]
+    },
+    {
+      "stable_key": "vc35u1-battery-care",
+      "version": 1,
+      "status": "published",
+      "model_code": "VC35U1",
+      "model_name": "VC35U1 扫拖机器人",
+      "issue_category_code": "battery_runtime_decline",
+      "issue_category_name": "续航变短",
+      "title": "VC35U1 电池保养与续航排查",
+      "reviewed_at": "2026-07-31T00:00:00+08:00",
+      "reviewed_by": "manual-evidence-review-20260731",
+      "review_note": "官方说明书第 11 页逐字复核；仅收录说明书原文操作。",
+      "steps": [
+        {
+          "stable_key": "keep-charging",
+          "position": 1,
+          "title": "非工作时保持主机在充电座上",
+          "instruction": "为保持电池最佳性能，非工作时请保持主机在充电座上处于充电状态；该电池无记忆效应，无需担心反复充放电。",
+          "source_label": "海尔 VC35U1 官方说明书，第 11 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书产品维护：电池——主机内置高性能锂离子电池组，无记忆效应；为保持最佳性能，非工作时也请保持主机在充电座上处于充电状态。",
+          "policy_note": "禁止自行更换内部电池；电池鼓包、破损或漏液由平台高风险规则直接转官方售后。"
+        },
+        {
+          "stable_key": "long-term-storage",
+          "position": 2,
+          "title": "长期不用时按规范存放",
+          "instruction": "若长期不使用，请切断充电座电源、关机存放，建议每个月充电一次，以免电池因过放受损。",
+          "source_label": "海尔 VC35U1 官方说明书，第 11 页",
+          "source_url": "https://download.haier.com/cn/xjd/sdjqr/W020200902576527552250.pdf?appdesc=VC35U1说明书",
+          "source_page": 11,
+          "evidence_level": "direct",
+          "evidence_basis": "说明书产品维护：若长期不使用，请切断充电座电源，关机存放。建议每个月充电一次，以免电池因过放受损。"
         }
       ]
     }

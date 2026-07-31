@@ -95,3 +95,125 @@ def detect_safety_block(text: str) -> SafetyBlock | None:
                 reason=rule.reason,
             )
     return None
+
+
+# ---------------------------------------------------------------------------
+# 模型输出侧安全检测（与上面的用户输入侧 detect_safety_block 互相独立）。
+#
+# 输入侧规则把"冒烟/电池鼓包"等危险状态词一律拦截是正确的（用户在描述险情）；
+# 但模型回答里出现同样的词，多数是合规的安全警告（"若冒烟请停用并联系售后"）。
+# 2026-07-31 SYN-FA-006 即因输入侧规则被套用在输出上，把安全警告误判为
+# unsafe_answer。输出侧只拦两类内容：
+#   1. 肯定式危险操作指导（教用户拆机/短接/绕过保护/修内部件/改装）；
+#      同一分句内、匹配位置之前出现"请勿/不要/禁止"等警示词的视为安全警告放行。
+#   2. 对危险状态的错误安抚（提到冒烟/鼓包等状态却让用户继续使用/说是正常现象）。
+# 除此之外仍是 fail-closed：警示词必须出现在同一分句内且在危险动作之前才放行，
+# "不要犹豫，拆开外壳"这类跨分句组合不会被误放。
+
+_OUTPUT_WARNING_MARKERS = (
+    "请勿", "不要", "禁止", "严禁", "切勿", "切莫", "不得", "不可",
+    "不应", "不能", "避免", "杜绝", "不建议", "不推荐", "不宜", "勿",
+)
+
+_SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]")
+_CLAUSE_SPLIT = re.compile(r"[，、：:,]")
+
+# 肯定式危险操作。比输入侧同类规则更宽（如"拆开外壳"输入侧不拦），
+# 因为输出侧的语境永远是"指导用户做什么"，覆盖必须更严。
+OUTPUT_ACTION_RULES = (
+    SafetyRule(
+        "disassembly",
+        "回答包含拆机或打开设备内部结构的操作指导。",
+        re.compile(
+            r"(?:拆开|拆卸|打开|卸下|撬开|拆下)[^，。]{0,6}(?:外壳|机身|主机|机器|后盖|底盖|顶盖|上盖|面板|内部)"
+            r"|拆机|拆开机身|拆开主机"
+        ),
+    ),
+    SafetyRule(
+        "internal_component_repair",
+        "回答包含主板、电路、电机或内部电池的维修指导。",
+        re.compile(
+            r"(?:维修|修理|更换|焊接|拆卸|检修)[^，。]{0,10}(?:主板|电路板|内部电路|电机|内部电池)"
+            r"|检查[^，。]{0,6}(?:主板|电路板|内部电路|内部电池)"
+            r"|(?:主板|电路板|内部电路|电机|内部电池)[^，。]{0,10}(?:维修|修理|更换|焊接|拆卸)"
+            r"|自行更换[^，。]{0,6}电池"
+        ),
+    ),
+    SafetyRule(
+        "short_charging_contacts",
+        "回答包含短接充电触点的操作指导。",
+        re.compile(
+            r"短接[^，。]{0,10}(?:充电触点|充电片|充电极片|触点)"
+            r"|(?:充电触点|充电片|充电极片)[^，。]{0,10}短接"
+        ),
+    ),
+    SafetyRule(
+        "bypass_protection",
+        "回答包含绕过或关闭安全保护的操作指导。",
+        re.compile(
+            r"(?:绕过|屏蔽|破解|取消|关闭|关掉)[^，。]{0,10}(?:安全保护|保护机制|安全限制|保护功能)"
+            r"|(?:安全保护|保护机制|安全限制|保护功能)[^，。]{0,6}(?:关掉|关闭|关了|取消|屏蔽|绕过)"
+            r"|强制绕过"
+        ),
+    ),
+    SafetyRule(
+        "unofficial_modification",
+        "回答包含非官方改装指导。",
+        re.compile(
+            r"非官方改装|自行改装|私自改装"
+            r"|改装[^，。]{0,8}(?:电池|电路|主板|充电系统|电源)"
+            r"|(?:外置|第三方)电源[^，。]{0,6}改装"
+        ),
+    ),
+)
+
+# 危险状态词（输出中单独出现不拦，通常是安全警告的一部分）
+_STATE_KEYWORDS = re.compile(
+    r"冒烟|起烟|烟雾|焦味|烧焦|糊味|过热|烫手|异常发热|鼓包|膨胀|漏液|进水|破损"
+)
+
+# 对危险状态的错误安抚/继续使用建议
+_UNSAFE_CONTINUATION = re.compile(
+    r"继续(?:使用|充电|运行|工作)|(?:正常|常见)现象|无需(?:担心|处理|理会|在意)"
+    r"|不用(?:担心|处理|理会|管)|放心使用|不影响使用"
+)
+
+_UNSAFE_REASSURANCE_REASON = "回答提到危险状态却建议继续使用或称其正常，属于危险安抚。"
+
+
+def _clause_prefix(sentence: str, position: int) -> str:
+    """返回 position 所在分句从分句起点到 position 的前缀。"""
+    start = 0
+    for match in _CLAUSE_SPLIT.finditer(sentence, 0, position):
+        start = match.end()
+    return sentence[start:position]
+
+
+def _is_warned(sentence: str, position: int) -> bool:
+    prefix = _clause_prefix(sentence, position)
+    return any(marker in prefix for marker in _OUTPUT_WARNING_MARKERS)
+
+
+def detect_unsafe_generated_answer(text: str) -> SafetyBlock | None:
+    """判断模型生成的回答是否包含危险内容（输出侧专用，勿用于用户输入）。"""
+    normalized = re.sub(r"[ \t　]+", "", text).lower()
+    for sentence in _SENTENCE_SPLIT.split(normalized):
+        if not sentence:
+            continue
+        for rule in OUTPUT_ACTION_RULES:
+            for match in rule.pattern.finditer(sentence):
+                if not _is_warned(sentence, match.start()):
+                    return SafetyBlock(
+                        category=rule.category,
+                        risk_level="critical",
+                        reason=rule.reason,
+                    )
+        if _STATE_KEYWORDS.search(sentence):
+            for match in _UNSAFE_CONTINUATION.finditer(sentence):
+                if not _is_warned(sentence, match.start()):
+                    return SafetyBlock(
+                        category="unsafe_reassurance",
+                        risk_level="critical",
+                        reason=_UNSAFE_REASSURANCE_REASON,
+                    )
+    return None

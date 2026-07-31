@@ -5,7 +5,9 @@
 2. 检索无命中或全部低于阈值 → refuse(knowledge_gap)，不调用模型；
 3. 模型输出必须逐条引用检索片段（[n] 语法），引用缺失/越界 → refuse(citation_invalid)；
 4. 模型明确输出 REFUSE 标记 → refuse(model_refused)；
-5. 回答本身命中安全规则（如教用户拆机）→ refuse(unsafe_answer)。
+5. 回答包含危险操作指导（如教用户拆机）→ refuse(unsafe_answer)；
+   使用输出侧专用 detect_unsafe_generated_answer——安全警告（"若冒烟请停用"）
+   不算危险内容，输入侧规则不得原样套在输出上（SYN-FA-006 误伤教训）。
 每次调用（含拒答）都持久化 GenerationRecord：prompt 版本、模型名、
 片段 SHA、回答全文、引用清单、拒答原因、耗时——可追溯可复算。
 """
@@ -24,7 +26,7 @@ from sqlalchemy.orm import Session
 from .knowledge_service import EmbeddingProvider, SearchResult, search_knowledge
 from .models import GenerationRecord
 from .observability import current_trace_id, emit_json_log
-from .safety import detect_safety_block
+from .safety import detect_unsafe_generated_answer
 
 PROMPT_VERSION = "answer-v1"
 REFUSE_TOKEN = "REFUSE"
@@ -238,7 +240,7 @@ def generate_answer(
     if not cited_indexes or not set(cited_indexes).issubset(valid_indexes):
         return refuse("citation_invalid", answer=raw_answer)
 
-    if detect_safety_block(raw_answer) is not None:
+    if detect_unsafe_generated_answer(raw_answer) is not None:
         return refuse("unsafe_answer", answer=raw_answer)
 
     citations = [

@@ -96,3 +96,68 @@ def test_api_blocks_before_creating_diagnostic_and_records_minimal_event(client)
         assert event.category == "smoke"
         assert event.description_sha256 != description
         assert len(event.description_sha256) == 64
+
+
+# ---------------------------------------------------------------------------
+# 输出侧检测 detect_unsafe_generated_answer（模型回答专用，与输入侧独立）
+# 背景：2026-07-31 SYN-FA-006——输入侧规则套用在模型输出上，把
+# "若电源线破损、发热或冒烟，须立即停用并联系售后"的安全警告误判为 unsafe_answer。
+
+from app.safety import detect_unsafe_generated_answer  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "如果设备冒烟，请立即停止使用并联系售后。",
+        "若电源线破损、发热或冒烟，须立即停用并联系售后。",
+        "请勿拆机。",
+        "不要短接充电触点。",
+        "禁止绕过安全保护。",
+        "电池鼓包时应停止充电并联系售后。",
+        "请勿拆机，不要短接触点。",
+        "切勿自行更换内部电池。",
+        "不得拆卸电机进行维修。",
+        "应避免关闭安全保护功能。",
+        "出现焦味或异常发热时，请断开电源并联系官方售后。",
+        "若边刷不转，请检查边刷是否缠绕毛发。",
+    ],
+)
+def test_generated_safety_warnings_are_allowed(text):
+    assert detect_unsafe_generated_answer(text) is None
+
+
+@pytest.mark.parametrize(
+    "marker", ["请勿", "不要", "禁止", "切勿", "不得", "避免", "严禁"]
+)
+def test_each_warning_marker_neutralizes_dangerous_action(marker):
+    assert detect_unsafe_generated_answer(f"{marker}拆机。") is None
+    assert detect_unsafe_generated_answer(f"{marker}短接充电触点。") is None
+
+
+@pytest.mark.parametrize(
+    ("category", "text"),
+    [
+        ("disassembly", "拆开外壳检查主板。"),
+        ("disassembly", "建议拆机检查风机内部。"),
+        ("disassembly", "不要犹豫，拆开外壳检查内部。"),  # 警示词不跨分句放行
+        ("short_charging_contacts", "可以短接充电触点测试。"),
+        ("bypass_protection", "关闭安全保护后继续运行。"),
+        ("internal_component_repair", "自行更换内部电池。"),
+        ("internal_component_repair", "拆卸电机进行维修。"),
+        ("unsafe_reassurance", "冒烟属于正常现象，可以继续使用。"),
+        ("unsafe_reassurance", "电池鼓包不影响使用。"),
+    ],
+)
+def test_affirmative_dangerous_instructions_are_blocked(category, text):
+    result = detect_unsafe_generated_answer(text)
+    assert result is not None
+    assert result.category == category
+    assert result.risk_level == "critical"
+
+
+def test_input_side_detection_is_not_weakened():
+    """输入侧对危险状态词保持一律拦截（用户描述险情必须走人工售后）。"""
+    assert detect_safety_block("如果设备冒烟，请立即停止使用并联系售后。") is not None
+    assert detect_safety_block("机器人充电时突然冒烟") is not None
+    assert detect_safety_block("我想拆机检查里面的零件") is not None

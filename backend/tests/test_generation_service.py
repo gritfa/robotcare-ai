@@ -152,6 +152,26 @@ def test_unsafe_answer_is_blocked_even_with_citations(client):
         assert result.answer is None
 
 
+def test_safety_warning_answer_is_not_refused(client):
+    """SYN-FA-006 回归：模型输出的安全警告（提到冒烟/请勿拆机）是合规回答，
+    不得被输出侧安全检测误判为 unsafe_answer。"""
+    model_id = _prepare_model_with_knowledge(client)
+    answer = "请先长按电源键 10 秒重启 [1]；若电源线破损、发热或冒烟，请勿拆机，须立即停用并联系官方售后 [1]。"
+    with client.app.state.session_factory() as db:
+        result = generate_answer(
+            db,
+            user_id=None,
+            robot_model_id=model_id,
+            query="无法开机，按开机键没反应",
+            embedding_provider=HashingNgramEmbeddingProvider(),
+            generation_provider=ScriptedGenerationProvider([answer]),
+            min_score=0.0,
+        )
+        assert result.status == "answered"
+        assert result.refusal_reason is None
+        assert "冒烟" in result.answer
+
+
 def test_answer_api_end_to_end_with_safety_and_auth(client, monkeypatch):
     from app.config import Settings
 

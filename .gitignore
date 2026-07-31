@@ -31,3 +31,4 @@ tmp/
 Thumbs.db
 .DS_Store
 *.egg-info/
+backups/

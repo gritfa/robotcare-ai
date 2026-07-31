@@ -1,0 +1,230 @@
+{
+  "faithfulness": [
+    {
+      "case_id": "SYN-FA-001",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-002",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-003",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-004",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-005",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-006",
+      "passed": false,
+      "checks": {
+        "answered": false,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": "unsafe_answer"
+    },
+    {
+      "case_id": "SYN-FA-007",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-008",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-009",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-010",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-011",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-012",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-013",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-014",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-015",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-016",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-017",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-018",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-019",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    },
+    {
+      "case_id": "SYN-FA-020",
+      "passed": true,
+      "checks": {
+        "answered": true,
+        "citations_within_retrieval": true,
+        "cites_expected_source": true,
+        "answer_passes_safety": true
+      },
+      "refusal_reason": null
+    }
+  ],
+  "model": "qwen-plus",
+  "summary": {
+    "evaluated": 20,
+    "passed": 19,
+    "score": 0.95
+  }
+}

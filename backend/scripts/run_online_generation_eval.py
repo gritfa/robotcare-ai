@@ -405,8 +405,9 @@ def main() -> int:
                 "diagnostics": build_case_diagnostics(case, outcome, retrieval),
             }
             if outcome.refusal_reason is not None and provider.last_raw is not None:
-                # 拒答归因：摘录原文供人工判断是真风险还是规则误伤
-                entry["raw_answer_excerpt"] = provider.last_raw[:300]
+                # 拒答归因：保留原文供人工判断是真风险还是规则误伤。
+                # 300 字曾致 SYN-FA-014 触发点被截掉无法归因，改为全文留痕
+                entry["raw_answer_excerpt"] = provider.last_raw
                 if outcome.refusal_reason == "unsafe_answer":
                     block = detect_unsafe_generated_answer(provider.last_raw)
                     if block is not None:

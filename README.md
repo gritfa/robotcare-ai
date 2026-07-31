@@ -27,7 +27,7 @@
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
 | RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 411 条（113 条原有 + 298 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 45/45`、`step_selection 45/45`、`model_isolation 31/31`、`retrieval_recall 61/61`、`classification 62/62`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
 | LLM 生成层（强制引用/拒答/留痕） | `【已验证：本地 mock】` | `POST /knowledge/answer`：安全前置阻断→检索→生成；检索空/低于阈值不调模型直接拒答，引用缺失/越界拒答，回答命中安全规则拦截留痕；generation_records 全量留痕（prompt 版本/模型/片段 SHA/引用/耗时）；6 项 pytest 用 mock Provider 验证，真实 DashScope 生成调用未在本机执行 |
-| faithfulness 在线评测 | `【待验证】` | 唯一剩余 `not_run` 指标；`scripts/run_online_generation_eval.py` 已交付，需在持有 DashScope key 的机器执行，无 key 时脚本明确拒绝伪造结果 |
+| faithfulness 在线评测 | `【部分评测：20/34】` | 2026-07-31 真实 DashScope 在线执行 20 条合成型号用例 19/20（score 0.95，范围 synthetic，14 条 JH69U1/VC35U1 未进入评测，不是完整评测）；唯一失败 SYN-FA-006 已归因：输入侧安全规则误伤模型输出的安全警告，已改用输出侧独立检测 `detect_unsafe_generated_answer` 修复（本地自动化验证通过，在线重跑待执行）；脚本已支持 `--scope synthetic/all` 显式覆盖口径（见 `docs/online_eval_scope.md`），34/34 完整在线评测待持有 key 的机器执行 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 单方言：`vector(256)` 字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚全部直接在真实 PostgreSQL 上回归（SQLite 双方言分叉已删除） |
 | PostgreSQL + pgvector 真实运行 | `【已验证：GitHub Actions】` | PostgreSQL 16 + pgvector Job 已验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；本机 Docker、多实例压力与生产数据仍未验证 |
 | 远端 CI | `【已验证：历史提交】/【待验证：新工作流】` | 提交 `1bccb82` 的六个 Job 全绿是双方言时期的证据；单方言重构后工作流改为五个 Job（PG 回归、前端、Chromium E2E、部署契约、知识校验，全部 PG service），改造后的工作流尚未在远端跑过 |
@@ -76,7 +76,7 @@ npm.cmd run test:e2e:edge
 评测用例：411（全部 needs_human_review，待人工复核）
 真实检索冒烟：5/5（`docs/evidence/rag_smoke_20260720.json`）
 离线审计（七指标真实执行，全 1.0）：safety_block 47/47；source_page 45/45；step_selection 45/45；model_isolation 31/31；retrieval_recall 61/61；classification 62/62；refusal(门控层) 30/30
-仅剩 not_run：faithfulness（需真实 DashScope key 在线执行，脚本 `scripts/run_online_generation_eval.py`）
+faithfulness：部分评测 20/34（synthetic 范围在线 19/20=0.95；SYN-FA-006 为检测误伤已修复待重跑；`--scope all` 34/34 完整评测待执行，口径见 `docs/online_eval_scope.md`）
 ```
 
 真实检索冒烟证据：`docs/evidence/rag_smoke_20260720.json`。

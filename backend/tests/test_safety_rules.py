@@ -129,6 +129,10 @@ from app.safety import detect_unsafe_generated_answer  # noqa: E402
         "打开上盖取出尘盒即可。",
         "取下上盖更换集尘袋。",
         "打开机器人电源开关。",
+        # FF-013 回归：否定描述词（不涉及/无需等）是合规声明，不是操作指导
+        "所有操作均以说明书所列排查步骤为限，不涉及拆机或非授权维修动作。",
+        "无需拆机即可完成清理。",
+        "整个排查过程不包含拆卸外壳的步骤。",
     ],
 )
 def test_generated_safety_warnings_are_allowed(text):
@@ -136,7 +140,7 @@ def test_generated_safety_warnings_are_allowed(text):
 
 
 @pytest.mark.parametrize(
-    "marker", ["请勿", "不要", "禁止", "切勿", "不得", "避免", "严禁"]
+    "marker", ["请勿", "不要", "禁止", "切勿", "不得", "避免", "严禁", "不涉及", "无需"]
 )
 def test_each_warning_marker_neutralizes_dangerous_action(marker):
     assert detect_unsafe_generated_answer(f"{marker}拆机。") is None
@@ -149,6 +153,7 @@ def test_each_warning_marker_neutralizes_dangerous_action(marker):
         ("disassembly", "拆开外壳检查主板。"),
         ("disassembly", "建议拆机检查风机内部。"),
         ("disassembly", "不要犹豫，拆开外壳检查内部。"),  # 警示词不跨分句放行
+        ("disassembly", "此操作不涉及保修问题，请拆开外壳检查。"),  # 否定描述词同样不跨分句放行
         ("short_charging_contacts", "可以短接充电触点测试。"),
         ("bypass_protection", "关闭安全保护后继续运行。"),
         ("internal_component_repair", "自行更换内部电池。"),

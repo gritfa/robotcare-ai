@@ -1,26 +1,26 @@
 {
   "report_schema_version": "1.0",
-  "generated_at": "2026-07-30T08:54:49.174767+00:00",
+  "generated_at": "2026-07-31T02:27:51.102220+00:00",
   "dataset_path": "knowledge/eval_cases.jsonl",
   "overall_status": "passed_with_not_run_metrics",
   "dataset_summary": {
-    "total_cases": 375,
+    "total_cases": 411,
     "by_dimension": {
-      "classification": 64,
+      "classification": 76,
       "faithfulness": 34,
-      "model_isolation": 39,
+      "model_isolation": 45,
       "refusal": 44,
-      "retrieval_recall": 69,
+      "retrieval_recall": 75,
       "safety_block": 47,
-      "source_page": 39,
-      "step_selection": 39
+      "source_page": 45,
+      "step_selection": 45
     },
     "by_review_status": {
-      "needs_human_review": 375
+      "needs_human_review": 411
     },
     "by_case_origin": {
       "generated_or_rewritten_20260720": 113,
-      "synthetic_demo_20260730": 262
+      "synthetic_demo_20260730": 298
     }
   },
   "dataset_provenance": {
@@ -52,8 +52,8 @@
       "FLOW-004"
     ],
     "exact_legacy_case_ids_retained": [],
-    "current_new_or_rewritten_case_count": 375,
-    "statement": "原 24 条记录只有计划状态且无逐条人工审核记录；当前 375 条均为本轮新生成或重写后的记录，因此全部需要人工复核。"
+    "current_new_or_rewritten_case_count": 411,
+    "statement": "原 24 条记录只有计划状态且无逐条人工审核记录；当前 411 条均为本轮新生成或重写后的记录，因此全部需要人工复核。"
   },
   "integrity": {
     "passed": true,
@@ -71,9 +71,9 @@
     "model_isolation": {
       "dimension": "model_isolation",
       "execution_status": "passed",
-      "total_cases": 25,
-      "evaluated_cases": 25,
-      "passed_cases": 25,
+      "total_cases": 31,
+      "evaluated_cases": 31,
+      "passed_cases": 31,
       "failed_cases": 0,
       "score": 1.0,
       "reason": "评测 PG 库 + 合成说明书 + 确定性 hashing 词面向量真实执行；结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过（跳过 14 条真实型号用例）",
@@ -82,9 +82,9 @@
     "retrieval_recall": {
       "dimension": "retrieval_recall",
       "execution_status": "passed",
-      "total_cases": 55,
-      "evaluated_cases": 55,
-      "passed_cases": 55,
+      "total_cases": 61,
+      "evaluated_cases": 61,
+      "passed_cases": 61,
       "failed_cases": 0,
       "score": 1.0,
       "reason": "评测 PG 库 + 合成说明书 + 确定性 hashing 词面向量真实执行；结论不外推到 DashScope 语义向量。真实型号用例因官方 PDF 不入库而跳过（跳过 14 条真实型号用例）",
@@ -93,9 +93,9 @@
     "source_page": {
       "dimension": "source_page",
       "execution_status": "passed",
-      "total_cases": 39,
-      "evaluated_cases": 39,
-      "passed_cases": 39,
+      "total_cases": 45,
+      "evaluated_cases": 45,
+      "passed_cases": 45,
       "failed_cases": 0,
       "score": 1.0,
       "reason": "离线核对期望来源页是否存在于当前已发布流程；这不是在线回答引用命中率。",
@@ -126,9 +126,9 @@
     "classification": {
       "dimension": "classification",
       "execution_status": "passed",
-      "total_cases": 50,
-      "evaluated_cases": 50,
-      "passed_cases": 50,
+      "total_cases": 62,
+      "evaluated_cases": 62,
+      "passed_cases": 62,
       "failed_cases": 0,
       "score": 1.0,
       "reason": "确定性关键词分类离线执行（跳过 14 条真实型号用例）",
@@ -137,9 +137,9 @@
     "step_selection": {
       "dimension": "step_selection",
       "execution_status": "passed",
-      "total_cases": 39,
-      "evaluated_cases": 39,
-      "passed_cases": 39,
+      "total_cases": 45,
+      "evaluated_cases": 45,
+      "passed_cases": 45,
       "failed_cases": 0,
       "score": 1.0,
       "reason": "离线核对已发布流程顺序和单步期望；这不是 API 或 Agent 运行命中率。",

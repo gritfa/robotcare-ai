@@ -25,7 +25,7 @@
 | 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；4 条逐步骤说明书复核流程已发布，1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
 | 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；迁移链单方言化后在空 PostgreSQL 库完成 `upgrade head → downgrade base → upgrade head` 往返，head `20260730_0009`，metadata 零漂移 |
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
-| RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 375 条（113 条原有 + 262 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 39/39`、`step_selection 39/39`、`model_isolation 25/25`、`retrieval_recall 55/55`、`classification 50/50`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
+| RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 411 条（113 条原有 + 298 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 45/45`、`step_selection 45/45`、`model_isolation 31/31`、`retrieval_recall 61/61`、`classification 62/62`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
 | LLM 生成层（强制引用/拒答/留痕） | `【已验证：本地 mock】` | `POST /knowledge/answer`：安全前置阻断→检索→生成；检索空/低于阈值不调模型直接拒答，引用缺失/越界拒答，回答命中安全规则拦截留痕；generation_records 全量留痕（prompt 版本/模型/片段 SHA/引用/耗时）；6 项 pytest 用 mock Provider 验证，真实 DashScope 生成调用未在本机执行 |
 | faithfulness 在线评测 | `【待验证】` | 唯一剩余 `not_run` 指标；`scripts/run_online_generation_eval.py` 已交付，需在持有 DashScope key 的机器执行，无 key 时脚本明确拒绝伪造结果 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 单方言：`vector(256)` 字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚全部直接在真实 PostgreSQL 上回归（SQLite 双方言分叉已删除） |
@@ -72,10 +72,10 @@ npm.cmd run test:e2e:edge
 
 ```text
 官方来源入口：4（另有 3 份合成型号说明书 PDF，明确标注 synthetic）
-版本化流程：30（29 published，1 draft；含 25 条合成型号流程）
-评测用例：375（全部 needs_human_review，待人工复核）
+版本化流程：36（35 published，1 draft；含 31 条合成型号流程）
+评测用例：411（全部 needs_human_review，待人工复核）
 真实检索冒烟：5/5（`docs/evidence/rag_smoke_20260720.json`）
-离线审计（七指标真实执行，全 1.0）：safety_block 47/47；source_page 39/39；step_selection 39/39；model_isolation 25/25；retrieval_recall 55/55；classification 50/50；refusal(门控层) 30/30
+离线审计（七指标真实执行，全 1.0）：safety_block 47/47；source_page 45/45；step_selection 45/45；model_isolation 31/31；retrieval_recall 61/61；classification 62/62；refusal(门控层) 30/30
 仅剩 not_run：faithfulness（需真实 DashScope key 在线执行，脚本 `scripts/run_online_generation_eval.py`）
 ```
 
@@ -180,7 +180,7 @@ robotcare-ai/
 - P50U1：https://www.haier.com/xjd/sdjqr/20200831_146586.shtml
 - 海尔服务支持：https://www.haier.com/support/
 
-其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和开发环境向量化（历史向量最初落在 SQLite 开发库，可用 `backend/scripts/migrate_legacy_sqlite.py` 一次性迁入 PG）；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的单方言类型、查询、迁移、HNSW 与型号级 Top-K 已在本地 PostgreSQL 16 + pgvector 测试容器全量回归通过。评测集现为 375 条（全部待人工复核），七项指标已离线真实执行全 1.0（`docs/evidence/rag_eval_offline_audit.md`），仅 faithfulness 需真实 DashScope key 在线执行。
+其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和开发环境向量化（历史向量最初落在 SQLite 开发库，可用 `backend/scripts/migrate_legacy_sqlite.py` 一次性迁入 PG）；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的单方言类型、查询、迁移、HNSW 与型号级 Top-K 已在本地 PostgreSQL 16 + pgvector 测试容器全量回归通过。评测集现为 411 条（全部待人工复核），七项指标已离线真实执行全 1.0（`docs/evidence/rag_eval_offline_audit.md`），仅 faithfulness 需真实 DashScope key 在线执行。
 
 ## 管理员账户与当前管理范围
 

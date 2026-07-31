@@ -49,13 +49,13 @@ def create_diagnostic(client, token: str, device_id: int, category: str):
 
 def test_catalog_contains_four_published_reviewed_flows_with_page_sources():
     catalog = load_flow_catalog()
-    assert len(catalog.flows) == 30  # 5 条真实型号流程 + 25 条 D1 合成演示流程
+    assert len(catalog.flows) == 36  # 5 条真实型号流程 + 31 条 D1 合成演示流程
     published = [flow for flow in catalog.flows if flow.status == "published"]
     drafts = [flow for flow in catalog.flows if flow.status == "draft"]
     real_published = [flow for flow in published if not flow.stable_key.startswith("rc-")]
     synthetic_published = [flow for flow in published if flow.stable_key.startswith("rc-")]
     assert {(flow.model_code, flow.issue_category_code) for flow in real_published} == set(EXPECTED_FLOWS)
-    assert len(synthetic_published) == 25
+    assert len(synthetic_published) == 31
     assert [(flow.model_code, flow.issue_category_code) for flow in drafts] == [
         ("VC35U1", "navigation_abnormal")
     ]

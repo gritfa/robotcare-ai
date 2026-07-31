@@ -90,7 +90,7 @@ def test_flow_source_pages_match_rendered_manuals():
                 f"{flow['stable_key']} 第 {step['source_page']} 页未包含流程标题"
             )
             checked += 1
-    assert checked >= 75  # 25 条流程 × ≥3 步
+    assert checked >= 93  # 31 条流程 × ≥3 步
 
 
 def test_ingest_and_model_isolated_retrieval_smoke(client):

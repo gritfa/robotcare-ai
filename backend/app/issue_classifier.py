@@ -122,6 +122,17 @@ MODEL_RULES: dict[str, tuple[CategoryRule, ...]] = {
             _patterns(r"(?:驱动轮|轮子).{0,6}(?:报错|错误|异常提示)"),
             _patterns(r"^E[-_ ]?01$"),
         ),
+        CategoryRule(
+            "battery_runtime_decline",
+            _patterns(r"续航(?:变短|缩短|下降|明显变差)", r"电池不耐用", r"(?:一会|很快)就没电"),
+        ),
+        CategoryRule(
+            "schedule_not_run",
+            _patterns(
+                r"定时(?:清扫|打扫|任务).{0,6}(?:没有执行|不执行|没执行|不启动|没启动)",
+                r"预约(?:清扫|打扫).{0,4}不(?:启动|执行)",
+            ),
+        ),
     ),
     "RC-M500": (
         CategoryRule(
@@ -166,6 +177,17 @@ MODEL_RULES: dict[str, tuple[CategoryRule, ...]] = {
             _patterns(r"水路异常"),
             _patterns(r"^E[-_ ]?07$"),
         ),
+        CategoryRule(
+            "device_offline",
+            _patterns(r"设备离线", r"离线.{0,6}连不上", r"固件升级失败", r"(?:app|App|APP).{0,6}显示离线"),
+        ),
+        CategoryRule(
+            "drying_odor",
+            _patterns(
+                r"烘干.{0,6}(?:异味|臭味|有味)",
+                r"(?:拖布|基站).{0,6}(?:异味|臭味|发臭|有臭味|发霉)",
+            ),
+        ),
     ),
     "RC-X800": (
         CategoryRule(
@@ -200,6 +222,22 @@ MODEL_RULES: dict[str, tuple[CategoryRule, ...]] = {
             "error_code_lidar",
             _patterns(r"激光雷达.{0,6}(?:报错|异常|受阻)"),
             _patterns(r"^E[-_ ]?03$"),
+        ),
+        CategoryRule(
+            "no_go_zone_issue",
+            _patterns(
+                r"禁区.{0,8}(?:不生效|还是闯|无效|不起作用)",
+                r"虚拟墙.{0,6}(?:不生效|失效|无效)",
+                r"设了禁区还是",
+            ),
+        ),
+        CategoryRule(
+            "multi_floor_map",
+            _patterns(
+                r"(?:换|切换)楼层.{0,8}地图",
+                r"楼层.{0,4}地图.{0,6}(?:不对|错误|识别错)",
+                r"地图.{0,4}识别错",
+            ),
         ),
     ),
 }

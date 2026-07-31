@@ -51,6 +51,8 @@ FLOW_QUERIES: dict[str, str] = {
     "rc-s200-power-on-failure": "无法开机，按开机键没反应",
     "rc-s200-stuck-obstacle": "机器人总是被困，被电线缠住",
     "rc-s200-error-e01": "驱动轮报错了，显示 E01",
+    "rc-s200-runtime-decline": "续航变短了，一次扫不完就没电",
+    "rc-s200-schedule-not-run": "定时清扫没有执行",
     "rc-m500-return-to-dock": "无法回充，回不了基站",
     "rc-m500-wifi-setup": "配网失败连不上网络",
     "rc-m500-mop-wash-no-water": "清洗拖布不进水",
@@ -60,6 +62,8 @@ FLOW_QUERIES: dict[str, str] = {
     "rc-m500-suction-drop": "吸力下降吸不干净",
     "rc-m500-power-on-failure": "开不了机没有反应",
     "rc-m500-error-e07": "报错 E07 水路异常",
+    "rc-m500-offline-firmware": "App 显示设备离线，固件升级失败",
+    "rc-m500-drying-odor": "拖布烘干后有异味",
     "rc-x800-return-to-dock": "回充失败找不到基站",
     "rc-x800-map-lost": "地图丢失了需要重新建图",
     "rc-x800-missed-area": "有的房间漏扫",
@@ -68,6 +72,8 @@ FLOW_QUERIES: dict[str, str] = {
     "rc-x800-cleaning-noise": "清扫声音异常很吵",
     "rc-x800-suction-drop": "吸力不足扫不干净",
     "rc-x800-error-e03": "激光雷达报错 E03",
+    "rc-x800-no-go-zone": "设了禁区还是闯进去",
+    "rc-x800-multi-floor-map": "换楼层后地图不对",
 }
 
 # 每型号每类目的两个分类问法（与 issue_classifier MODEL_RULES 同源对齐）
@@ -88,6 +94,12 @@ CATEGORY_QUERIES: dict[str, tuple[str, str]] = {
     "missed_cleaning_area": ("有的房间漏扫", "总是重复清扫"),
     "collision_damage": ("撞家具很重", "避障失灵了"),
     "error_code_lidar": ("激光雷达报错", "激光雷达受阻"),
+    "battery_runtime_decline": ("续航变短了", "电池不耐用一会就没电"),
+    "schedule_not_run": ("定时清扫没有执行", "预约打扫不启动"),
+    "device_offline": ("设备离线连不上", "固件升级失败"),
+    "drying_odor": ("拖布烘干后有异味", "基站里有臭味"),
+    "no_go_zone_issue": ("设了禁区还是闯进去", "虚拟墙不生效"),
+    "multi_floor_map": ("换楼层后地图不对", "二楼地图识别错误"),
 }
 
 REFUSAL_QUERIES = [

@@ -83,6 +83,44 @@ JUDGE_PROMPT_TEMPLATE = """## 说明书检索片段
 """
 
 
+_TRANSIENT_MARKERS = (
+    "HTTP 429", "HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504",
+    "timed out", "timeout", "service_unavailable", "Service is too busy",
+)
+
+
+def _is_transient(exc: Exception) -> bool:
+    text = str(exc)
+    return any(marker in text for marker in _TRANSIENT_MARKERS)
+
+
+class TransientRetryProvider:
+    """瞬时错误（限流/过忙/超时）指数退避重试；其余异常原样抛出。
+
+    冒烟实测 DeepSeek 偶发 503 Service is too busy，若不重试全量 34 条会
+    大量流失为 run_errors。重试上限后仍失败则如实进 run_errors，不吞错。
+    """
+
+    def __init__(self, inner, attempts: int = 3, base_delay: float = 5.0, sleep=None) -> None:
+        import time
+
+        self.inner = inner
+        self.model_name = inner.model_name
+        self.attempts = attempts
+        self.base_delay = base_delay
+        self._sleep = sleep or time.sleep
+
+    def generate(self, *, system: str, prompt: str) -> str:
+        for attempt in range(1, self.attempts + 1):
+            try:
+                return self.inner.generate(system=system, prompt=prompt)
+            except Exception as exc:
+                if attempt >= self.attempts or not _is_transient(exc):
+                    raise
+                self._sleep(self.base_delay * attempt)
+        raise RuntimeError("unreachable")
+
+
 def build_judge_prompt(answer: str, retrieval) -> str:
     parts = [
         f"[{idx}]（说明书第 {item.page_number} 页）{item.content}"
@@ -182,10 +220,12 @@ def main() -> int:
         print(json.dumps({"status": "not_run", "reason": "需同时提供 ROBOTCARE_DASHSCOPE_API_KEY（生成+向量）与 ROBOTCARE_JUDGE_API_KEY（裁判），拒绝伪造结果"}, ensure_ascii=False))
         return 2
 
-    generation_provider = DashScopeGenerationProvider(
-        gen_key, settings.generation_model, settings.dashscope_base_url
+    generation_provider = TransientRetryProvider(
+        DashScopeGenerationProvider(gen_key, settings.generation_model, settings.dashscope_base_url)
     )
-    judge_provider = OpenAICompatGenerationProvider(judge_key, args.judge_model, args.judge_base_url)
+    judge_provider = TransientRetryProvider(
+        OpenAICompatGenerationProvider(judge_key, args.judge_model, args.judge_base_url)
+    )
     if generation_provider.model_name == judge_provider.model_name and not args.allow_same_model:
         print(json.dumps({"status": "not_run", "reason": f"裁判模型与生成模型相同（{args.judge_model}），自己判自己无公信力；确需如此加 --allow-same-model"}, ensure_ascii=False))
         return 2

@@ -11,6 +11,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from scripts.run_llm_judge_faithfulness import (  # noqa: E402
     SEMANTIC_FAITHFULNESS_THRESHOLD,
+    TransientRetryProvider,
     build_judge_prompt,
     compute_outcome,
     judge_case,
@@ -93,6 +94,44 @@ def test_compute_outcome_paths():
     assert compute_outcome(judged=30, faithful=30, run_errors=1, limit_applied=False)[0] == "completed_with_errors"
     assert compute_outcome(judged=2, faithful=2, run_errors=0, limit_applied=True) == ("partial_limit", 0, 1.0)
     assert SEMANTIC_FAITHFULNESS_THRESHOLD == 0.90
+
+
+class _FlakyProvider:
+    model_name = "flaky-model"
+
+    def __init__(self, failures: list[Exception], result: str = "ok") -> None:
+        self.failures = list(failures)
+        self.result = result
+        self.calls = 0
+
+    def generate(self, *, system: str, prompt: str) -> str:
+        self.calls += 1
+        if self.failures:
+            raise self.failures.pop(0)
+        return self.result
+
+
+def test_retry_recovers_from_transient_503():
+    sleeps: list[float] = []
+    inner = _FlakyProvider([RuntimeError("HTTP 503 Service is too busy"), RuntimeError("HTTP 429 rate limit")])
+    provider = TransientRetryProvider(inner, attempts=3, base_delay=2.0, sleep=sleeps.append)
+    assert provider.generate(system="s", prompt="p") == "ok"
+    assert inner.calls == 3
+    assert sleeps == [2.0, 4.0]  # 指数退避
+
+
+def test_retry_gives_up_after_attempts_and_skips_non_transient():
+    inner = _FlakyProvider([RuntimeError("HTTP 503 busy")] * 3)
+    provider = TransientRetryProvider(inner, attempts=3, base_delay=0.0, sleep=lambda _s: None)
+    with pytest.raises(RuntimeError):
+        provider.generate(system="s", prompt="p")
+    assert inner.calls == 3
+    # 非瞬时错误（如 401 鉴权失败）不得重试
+    inner2 = _FlakyProvider([RuntimeError("HTTP 401 invalid key")])
+    provider2 = TransientRetryProvider(inner2, attempts=3, base_delay=0.0, sleep=lambda _s: None)
+    with pytest.raises(RuntimeError):
+        provider2.generate(system="s", prompt="p")
+    assert inner2.calls == 1
 
 
 def test_prompt_contains_pages_and_answer():

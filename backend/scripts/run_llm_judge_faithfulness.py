@@ -209,6 +209,12 @@ def main() -> int:
     )
     parser.add_argument("--allow-same-model", action="store_true")
     parser.add_argument(
+        "--judge-max-tokens",
+        type=int,
+        default=16384,
+        help="裁判为推理型模型时思维链计入 max_tokens，4096 实测 8/34 条被耗尽",
+    )
+    parser.add_argument(
         "--output", default=str(PROJECT_ROOT / "docs" / "evidence" / "llm_judge_faithfulness.json")
     )
     args = parser.parse_args()
@@ -224,7 +230,9 @@ def main() -> int:
         DashScopeGenerationProvider(gen_key, settings.generation_model, settings.dashscope_base_url)
     )
     judge_provider = TransientRetryProvider(
-        OpenAICompatGenerationProvider(judge_key, args.judge_model, args.judge_base_url)
+        OpenAICompatGenerationProvider(
+            judge_key, args.judge_model, args.judge_base_url, max_tokens=args.judge_max_tokens
+        )
     )
     if generation_provider.model_name == judge_provider.model_name and not args.allow_same_model:
         print(json.dumps({"status": "not_run", "reason": f"裁判模型与生成模型相同（{args.judge_model}），自己判自己无公信力；确需如此加 --allow-same-model"}, ensure_ascii=False))

@@ -93,10 +93,15 @@ class OpenAICompatGenerationProvider:
     content 为空（如 max_tokens 被推理耗尽）按失败抛错，绝不拿空串当回答。
     """
 
-    def __init__(self, api_key: str | None, model: str, base_url: str) -> None:
+    def __init__(
+        self, api_key: str | None, model: str, base_url: str, max_tokens: int = 4096
+    ) -> None:
         self.api_key = api_key
         self.model_name = model
         self.base_url = base_url.strip().rstrip("/")
+        # 推理型模型思维链计入 max_tokens，4096 会被长任务耗尽致 content 为空
+        # （2026-08-04 LLM 裁判评测 8/34 条 finish_reason=length 实锤），按调用方需要放大
+        self.max_tokens = max_tokens
 
     def generate(self, *, system: str, prompt: str) -> str:
         import httpx
@@ -114,7 +119,7 @@ class OpenAICompatGenerationProvider:
                     {"role": "user", "content": prompt},
                 ],
                 "temperature": 0.1,
-                "max_tokens": 4096,
+                "max_tokens": self.max_tokens,
             },
             timeout=180.0,
         )

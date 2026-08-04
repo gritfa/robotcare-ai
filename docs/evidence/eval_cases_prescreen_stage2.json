@@ -1,12 +1,12 @@
 {
-  "timestamp": "2026-08-04T07:59:54+00:00",
+  "timestamp": "2026-08-04T08:53:35+00:00",
   "stage": "2-semantic",
   "judge_model": "deepseek-v4-flash",
   "stage_note": "LLM 核对标注与说明书页原文的一致性；suspicious 批需人工逐条审，high_confidence 批建议人工抽查 10%。本初筛不替代人工终审",
   "total_cases": 411,
   "judged": 411,
-  "high_confidence": 398,
-  "suspicious": 13,
+  "high_confidence": 403,
+  "suspicious": 8,
   "run_errors": [],
   "limit": null,
   "by_dimension": {
@@ -16,11 +16,11 @@
     },
     "retrieval_recall": {
       "total": 75,
-      "suspicious": 3
+      "suspicious": 1
     },
     "source_page": {
       "total": 45,
-      "suspicious": 1
+      "suspicious": 0
     },
     "refusal": {
       "total": 44,
@@ -32,11 +32,11 @@
     },
     "classification": {
       "total": 76,
-      "suspicious": 6
+      "suspicious": 5
     },
     "step_selection": {
       "total": 45,
-      "suspicious": 3
+      "suspicious": 2
     },
     "faithfulness": {
       "total": 34,
@@ -44,27 +44,6 @@
     }
   },
   "suspicious_cases": [
-    {
-      "case_id": "RR-011",
-      "dimension": "retrieval_recall",
-      "model_code": "VC35U1",
-      "verdict": "suspicious",
-      "reason": "第15页直接相关，但第16页为安全信息，与滚刷/边刷/驱动轮/万向轮异物导致异响的问题无直接关联，不应列为相关页。"
-    },
-    {
-      "case_id": "RR-013",
-      "dimension": "retrieval_recall",
-      "model_code": "VC35U1",
-      "verdict": "suspicious",
-      "reason": "第15页确实包含清洁底盘和防撞条解决异响的内容，但第16页为安全信息，与异响清洁无关，因此页码16不应标注为相关。"
-    },
-    {
-      "case_id": "SP-002",
-      "dimension": "source_page",
-      "model_code": "JH69U1",
-      "verdict": "suspicious",
-      "reason": "第14页原文未提及“充电弹片”，只涉及防跌落传感器、回充灯等维护，与query主题不符。"
-    },
     {
       "case_id": "CL-013",
       "dimension": "classification",
@@ -78,13 +57,6 @@
       "model_code": "VC35U1",
       "verdict": "suspicious",
       "reason": "引用的第9页为使用前注意事项、第13页为传感器维护说明，均未涉及导航偏离/碰撞故障的排查或归类依据。"
-    },
-    {
-      "case_id": "ST-002",
-      "dimension": "step_selection",
-      "model_code": "JH69U1",
-      "verdict": "suspicious",
-      "reason": "引用页原文涉及集尘袋/清洗槽/传感器清洁，未提及基站摆放检查或清洁基站触点，expected的流程步骤缺少原文依据。"
     },
     {
       "case_id": "ST-013",
@@ -106,13 +78,6 @@
       "model_code": "RC-M500",
       "verdict": "suspicious",
       "reason": "用户问题“基站不进水”表述含糊，难以直接推断为“基站水箱问题”，且无原文可核对，归类依据不足。"
-    },
-    {
-      "case_id": "SYN-CL-040",
-      "dimension": "classification",
-      "model_code": "RC-M500",
-      "verdict": "suspicious",
-      "reason": "固件升级失败并非设备离线问题，归类为device_offline与query描述不吻合。"
     },
     {
       "case_id": "SYN-RR-049",
@@ -309,8 +274,8 @@
       "case_id": "RR-011",
       "dimension": "retrieval_recall",
       "model_code": "VC35U1",
-      "verdict": "suspicious",
-      "reason": "第15页直接相关，但第16页为安全信息，与滚刷/边刷/驱动轮/万向轮异物导致异响的问题无直接关联，不应列为相关页。"
+      "verdict": "high_confidence",
+      "reason": "第15页明确包含清扫异响的解决办法，直接提及清理滚刷、边刷、驱动轮、万向轮上的异物，与query完全对应。"
     },
     {
       "case_id": "RR-012",
@@ -323,8 +288,8 @@
       "case_id": "RR-013",
       "dimension": "retrieval_recall",
       "model_code": "VC35U1",
-      "verdict": "suspicious",
-      "reason": "第15页确实包含清洁底盘和防撞条解决异响的内容，但第16页为安全信息，与异响清洁无关，因此页码16不应标注为相关。"
+      "verdict": "high_confidence",
+      "reason": "第15页原文在“清扫时有异响”的解决办法中明确提到清洁主机底盘和防撞条，与query直接相关，页码指向正确。"
     },
     {
       "case_id": "RR-014",
@@ -344,8 +309,8 @@
       "case_id": "SP-002",
       "dimension": "source_page",
       "model_code": "JH69U1",
-      "verdict": "suspicious",
-      "reason": "第14页原文未提及“充电弹片”，只涉及防跌落传感器、回充灯等维护，与query主题不符。"
+      "verdict": "high_confidence",
+      "reason": "第14页明确提到用柔软干布清洁前回充灯和后回充灯，页码与query直接相关。"
     },
     {
       "case_id": "SP-003",
@@ -736,8 +701,8 @@
       "case_id": "ST-002",
       "dimension": "step_selection",
       "model_code": "JH69U1",
-      "verdict": "suspicious",
-      "reason": "引用页原文涉及集尘袋/清洗槽/传感器清洁，未提及基站摆放检查或清洁基站触点，expected的流程步骤缺少原文依据。"
+      "verdict": "high_confidence",
+      "reason": "引用页含基站摆放、充电弹片清洁等内容，与query及expected步骤相关，无矛盾。"
     },
     {
       "case_id": "ST-003",
@@ -2003,8 +1968,8 @@
       "case_id": "SYN-CL-040",
       "dimension": "classification",
       "model_code": "RC-M500",
-      "verdict": "suspicious",
-      "reason": "固件升级失败并非设备离线问题，归类为device_offline与query描述不吻合。"
+      "verdict": "high_confidence",
+      "reason": "query 核心故障为设备离线，归类 device_offline 语义吻合，无页原文不构成可疑。"
     },
     {
       "case_id": "SYN-CL-041",

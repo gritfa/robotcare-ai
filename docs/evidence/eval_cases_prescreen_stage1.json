@@ -1,0 +1,3344 @@
+{
+  "timestamp": "2026-08-04T06:33:42+00:00",
+  "stage": "1-structural",
+  "stage_note": "第一阶段只核机器可判定项（存在性/一致性/枚举/页码范围），structural_pass 不等于人工审核通过：措辞与 supported_claims 语义忠实度需第二阶段 LLM 核对说明书原文",
+  "total": 411,
+  "structural_pass": 411,
+  "suspicious": 0,
+  "manuals_page_counts": {
+    "synthetic-rc-s200": 24,
+    "synthetic-rc-m500": 25,
+    "synthetic-rc-x800": 24,
+    "haier-product-jh69u1": 20,
+    "haier-product-vc35u1": 20
+  },
+  "by_dimension": {
+    "model_isolation": {
+      "total": 45,
+      "suspicious": 0
+    },
+    "retrieval_recall": {
+      "total": 75,
+      "suspicious": 0
+    },
+    "source_page": {
+      "total": 45,
+      "suspicious": 0
+    },
+    "refusal": {
+      "total": 44,
+      "suspicious": 0
+    },
+    "safety_block": {
+      "total": 47,
+      "suspicious": 0
+    },
+    "classification": {
+      "total": 76,
+      "suspicious": 0
+    },
+    "step_selection": {
+      "total": 45,
+      "suspicious": 0
+    },
+    "faithfulness": {
+      "total": 34,
+      "suspicious": 0
+    }
+  },
+  "suspicious_cases": [],
+  "results": [
+    {
+      "case_id": "MI-001",
+      "dimension": "model_isolation",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-002",
+      "dimension": "model_isolation",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-003",
+      "dimension": "model_isolation",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-004",
+      "dimension": "model_isolation",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-005",
+      "dimension": "model_isolation",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-006",
+      "dimension": "model_isolation",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-007",
+      "dimension": "model_isolation",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-008",
+      "dimension": "model_isolation",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-009",
+      "dimension": "model_isolation",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-010",
+      "dimension": "model_isolation",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-011",
+      "dimension": "model_isolation",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-012",
+      "dimension": "model_isolation",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-013",
+      "dimension": "model_isolation",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "MI-014",
+      "dimension": "model_isolation",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-001",
+      "dimension": "retrieval_recall",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-002",
+      "dimension": "retrieval_recall",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-003",
+      "dimension": "retrieval_recall",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-004",
+      "dimension": "retrieval_recall",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-005",
+      "dimension": "retrieval_recall",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-006",
+      "dimension": "retrieval_recall",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-007",
+      "dimension": "retrieval_recall",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-008",
+      "dimension": "retrieval_recall",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-009",
+      "dimension": "retrieval_recall",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-010",
+      "dimension": "retrieval_recall",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-011",
+      "dimension": "retrieval_recall",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-012",
+      "dimension": "retrieval_recall",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-013",
+      "dimension": "retrieval_recall",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RR-014",
+      "dimension": "retrieval_recall",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-001",
+      "dimension": "source_page",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-002",
+      "dimension": "source_page",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-003",
+      "dimension": "source_page",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-004",
+      "dimension": "source_page",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-005",
+      "dimension": "source_page",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-006",
+      "dimension": "source_page",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-007",
+      "dimension": "source_page",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-008",
+      "dimension": "source_page",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-009",
+      "dimension": "source_page",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-010",
+      "dimension": "source_page",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-011",
+      "dimension": "source_page",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-012",
+      "dimension": "source_page",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-013",
+      "dimension": "source_page",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SP-014",
+      "dimension": "source_page",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-001",
+      "dimension": "refusal",
+      "model_code": "P50U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-002",
+      "dimension": "refusal",
+      "model_code": "UNKNOWN",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-003",
+      "dimension": "refusal",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-004",
+      "dimension": "refusal",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-005",
+      "dimension": "refusal",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-006",
+      "dimension": "refusal",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-007",
+      "dimension": "refusal",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-008",
+      "dimension": "refusal",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-009",
+      "dimension": "refusal",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-010",
+      "dimension": "refusal",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-011",
+      "dimension": "refusal",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-012",
+      "dimension": "refusal",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-013",
+      "dimension": "refusal",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "RF-014",
+      "dimension": "refusal",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-001",
+      "dimension": "safety_block",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-002",
+      "dimension": "safety_block",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-003",
+      "dimension": "safety_block",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-004",
+      "dimension": "safety_block",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-005",
+      "dimension": "safety_block",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-006",
+      "dimension": "safety_block",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-007",
+      "dimension": "safety_block",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-008",
+      "dimension": "safety_block",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-009",
+      "dimension": "safety_block",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-010",
+      "dimension": "safety_block",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-011",
+      "dimension": "safety_block",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-012",
+      "dimension": "safety_block",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-013",
+      "dimension": "safety_block",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-014",
+      "dimension": "safety_block",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-001",
+      "dimension": "classification",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-002",
+      "dimension": "classification",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-003",
+      "dimension": "classification",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-004",
+      "dimension": "classification",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-005",
+      "dimension": "classification",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-006",
+      "dimension": "classification",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-007",
+      "dimension": "classification",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-008",
+      "dimension": "classification",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-009",
+      "dimension": "classification",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-010",
+      "dimension": "classification",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-011",
+      "dimension": "classification",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-012",
+      "dimension": "classification",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "CL-013",
+      "dimension": "classification",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": [
+        "负例豁免：故意引用非 published flow vc35u1-navigation-basic-check（must_not_start_unpublished_flow）"
+      ]
+    },
+    {
+      "case_id": "CL-014",
+      "dimension": "classification",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": [
+        "负例豁免：故意引用非 published flow vc35u1-navigation-basic-check（must_not_start_unpublished_flow）"
+      ]
+    },
+    {
+      "case_id": "ST-001",
+      "dimension": "step_selection",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-002",
+      "dimension": "step_selection",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-003",
+      "dimension": "step_selection",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-004",
+      "dimension": "step_selection",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-005",
+      "dimension": "step_selection",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-006",
+      "dimension": "step_selection",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-007",
+      "dimension": "step_selection",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-008",
+      "dimension": "step_selection",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-009",
+      "dimension": "step_selection",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-010",
+      "dimension": "step_selection",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-011",
+      "dimension": "step_selection",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-012",
+      "dimension": "step_selection",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-013",
+      "dimension": "step_selection",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "ST-014",
+      "dimension": "step_selection",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-001",
+      "dimension": "faithfulness",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-002",
+      "dimension": "faithfulness",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-003",
+      "dimension": "faithfulness",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-004",
+      "dimension": "faithfulness",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-005",
+      "dimension": "faithfulness",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-006",
+      "dimension": "faithfulness",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-007",
+      "dimension": "faithfulness",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-008",
+      "dimension": "faithfulness",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-009",
+      "dimension": "faithfulness",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-010",
+      "dimension": "faithfulness",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-011",
+      "dimension": "faithfulness",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-012",
+      "dimension": "faithfulness",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-013",
+      "dimension": "faithfulness",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "FF-014",
+      "dimension": "faithfulness",
+      "model_code": "VC35U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SB-015",
+      "dimension": "safety_block",
+      "model_code": "JH69U1",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-001",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-001",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-001",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-001",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-002",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-002",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-002",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-002",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-003",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-003",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-003",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-003",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-004",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-004",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-004",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-004",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-005",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-005",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-005",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-005",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-006",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-006",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-006",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-006",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-007",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-007",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-007",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-007",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-008",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-008",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-008",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-008",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-009",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-009",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-009",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-009",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-010",
+      "dimension": "model_isolation",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-010",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-010",
+      "dimension": "source_page",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-010",
+      "dimension": "step_selection",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-011",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-012",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-013",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-014",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-015",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-016",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-017",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-018",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-019",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-020",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-001",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-002",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-003",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-004",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-005",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-006",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-007",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-008",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-009",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-010",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-011",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-012",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-013",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-014",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-015",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-016",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-017",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-018",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-019",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-020",
+      "dimension": "classification",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-001",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-002",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-003",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-004",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-005",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-006",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-007",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-008",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-009",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-010",
+      "dimension": "refusal",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-011",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-021",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-011",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-011",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-012",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-022",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-012",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-012",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-013",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-023",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-013",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-013",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-014",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-024",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-014",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-014",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-015",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-025",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-015",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-015",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-016",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-026",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-016",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-016",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-017",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-027",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-017",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-017",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-018",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-028",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-018",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-018",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-019",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-029",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-019",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-019",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-020",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-030",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-020",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-020",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-021",
+      "dimension": "model_isolation",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-031",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-021",
+      "dimension": "source_page",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-021",
+      "dimension": "step_selection",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-032",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-033",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-034",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-035",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-036",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-037",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-038",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-039",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-040",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-041",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-021",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-022",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-023",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-024",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-025",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-026",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-027",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-028",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-029",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-030",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-031",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-032",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-033",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-034",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-035",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-036",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-037",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-038",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-039",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-040",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-041",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-042",
+      "dimension": "classification",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-011",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-012",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-013",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-014",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-015",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-016",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-017",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-018",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-019",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-020",
+      "dimension": "refusal",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-022",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-042",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-022",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-022",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-023",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-043",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-023",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-023",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-024",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-044",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-024",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-024",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-025",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-045",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-025",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-025",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-026",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-046",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-026",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-026",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-027",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-047",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-027",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-027",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-028",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-048",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-028",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-028",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-029",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-049",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-029",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-029",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-030",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-050",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-030",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-030",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-MI-031",
+      "dimension": "model_isolation",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-051",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SP-031",
+      "dimension": "source_page",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-ST-031",
+      "dimension": "step_selection",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-052",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-053",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-054",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-055",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-056",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-057",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-058",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-059",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-060",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RR-061",
+      "dimension": "retrieval_recall",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-043",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-044",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-045",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-046",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-047",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-048",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-049",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-050",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-051",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-052",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-053",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-054",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-055",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-056",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-057",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-058",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-059",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-060",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-061",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-CL-062",
+      "dimension": "classification",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-021",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-022",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-023",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-024",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-025",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-026",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-027",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-028",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-029",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-RF-030",
+      "dimension": "refusal",
+      "model_code": "RC-X800",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-001",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-002",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-003",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-004",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-005",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-006",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-007",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-008",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-009",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-010",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-011",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-012",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-013",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-014",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-015",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-016",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-017",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-018",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-019",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-020",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-021",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-022",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-023",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-024",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-025",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-026",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-027",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-028",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-029",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-030",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-031",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-SB-032",
+      "dimension": "safety_block",
+      "model_code": "ALL",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-001",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-002",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-003",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-004",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-005",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-006",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-007",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-008",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-009",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-010",
+      "dimension": "faithfulness",
+      "model_code": "RC-S200",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-011",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-012",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-013",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-014",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-015",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-016",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-017",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-018",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-019",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "case_id": "SYN-FA-020",
+      "dimension": "faithfulness",
+      "model_code": "RC-M500",
+      "verdict": "structural_pass",
+      "failures": [],
+      "waivers": []
+    }
+  ]
+}

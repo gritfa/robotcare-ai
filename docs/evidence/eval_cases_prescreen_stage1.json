@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-04T06:33:42+00:00",
+  "timestamp": "2026-08-04T08:25:34+00:00",
   "stage": "1-structural",
   "stage_note": "第一阶段只核机器可判定项（存在性/一致性/枚举/页码范围），structural_pass 不等于人工审核通过：措辞与 supported_claims 语义忠实度需第二阶段 LLM 核对说明书原文",
   "total": 411,

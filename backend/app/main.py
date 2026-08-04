@@ -8,7 +8,11 @@ from fastapi.responses import JSONResponse
 from .routers import router
 from .config import get_settings
 from .database import Base, build_session_factory
-from .generation_service import DashScopeGenerationProvider, GenerationProvider
+from .generation_service import (
+    GenerationProvider,
+    build_generation_provider,
+    generation_backend_configured,
+)
 from .knowledge_service import DashScopeEmbeddingProvider, EmbeddingProvider
 from .migration_guard import ensure_database_at_head
 from .observability import install_observability, readiness_status, request_trace_id
@@ -49,13 +53,9 @@ def create_app(
     application.state.knowledge_search_cache = KnowledgeSearchCache(
         settings.knowledge_search_cache_ttl_seconds
     )
-    application.state.generation_provider = generation_provider or DashScopeGenerationProvider(
-        settings.dashscope_api_key,
-        settings.generation_model,
-        settings.dashscope_base_url,
-    )
+    application.state.generation_provider = generation_provider or build_generation_provider(settings)
     application.state.generation_configured = bool(
-        generation_provider is not None or (settings.dashscope_api_key or "").strip()
+        generation_provider is not None or generation_backend_configured(settings)
     )
     application.state.environment = settings.environment.strip().lower()
     application.state.embedding_configured = bool(

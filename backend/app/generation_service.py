@@ -151,6 +151,27 @@ class OpenAICompatGenerationProvider:
         return content
 
 
+def build_generation_provider(settings) -> "GenerationProvider":
+    """按 ROBOTCARE_LLM_BACKEND 装配生成后端。
+
+    config 校验保证 openai-compat 必有 base_url；此前 main.py 写死 DashScope，
+    llm_backend 配置形同虚设（2026-08-04 老板发现的接入缺口）。
+    """
+    if settings.llm_backend == "openai-compat":
+        return OpenAICompatGenerationProvider(
+            settings.llm_api_key, settings.generation_model, settings.llm_base_url
+        )
+    return DashScopeGenerationProvider(
+        settings.dashscope_api_key, settings.generation_model, settings.dashscope_base_url
+    )
+
+
+def generation_backend_configured(settings) -> bool:
+    if settings.llm_backend == "openai-compat":
+        return bool((settings.llm_api_key or "").strip())
+    return bool((settings.dashscope_api_key or "").strip())
+
+
 @dataclass(frozen=True)
 class AnswerCitation:
     index: int

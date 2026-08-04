@@ -250,3 +250,37 @@ def test_answer_api_rate_limited(client, monkeypatch):
     limited = [s for s in statuses if s == 429]
     assert statuses.index(429) >= 1  # 前几次成功后才触发限流
     assert limited
+
+
+def test_build_generation_provider_honors_llm_backend():
+    from app.generation_service import (
+        DashScopeGenerationProvider,
+        OpenAICompatGenerationProvider,
+        build_generation_provider,
+        generation_backend_configured,
+    )
+
+    class _S:
+        llm_backend = "openai-compat"
+        llm_api_key = "k"
+        llm_base_url = "https://api.deepseek.com/v1"
+        generation_model = "deepseek-v4-flash"
+        dashscope_api_key = None
+        dashscope_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    provider = build_generation_provider(_S())
+    assert isinstance(provider, OpenAICompatGenerationProvider)
+    assert provider.model_name == "deepseek-v4-flash"
+    assert generation_backend_configured(_S()) is True
+
+    class _S2(_S):
+        llm_backend = "dashscope"
+        dashscope_api_key = "dk"
+
+    assert isinstance(build_generation_provider(_S2()), DashScopeGenerationProvider)
+    assert generation_backend_configured(_S2()) is True
+
+    class _S3(_S):
+        llm_api_key = None
+
+    assert generation_backend_configured(_S3()) is False

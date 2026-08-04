@@ -11,7 +11,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_ROOT.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.generation_service import generate_answer
+from app.generation_service import PROMPT_VERSION, generate_answer
 from app.knowledge_service import HashingNgramEmbeddingProvider, ingest_pdf
 from app.models import GenerationRecord, RobotModel
 from conftest import auth, register
@@ -67,7 +67,7 @@ def test_answer_with_valid_citations_is_persisted(client):
         assert "[1]" in provider.prompts[0] and "说明书第" in provider.prompts[0]
         record = db.get(GenerationRecord, result.record_id)
         assert record.status == "answered"
-        assert record.prompt_version == "answer-v1"
+        assert record.prompt_version == PROMPT_VERSION
         assert record.provider_model == "scripted-test-model"
         assert record.snippet_count > 0 and len(record.citations_json) == 2
         assert record.snippets_sha256 and record.latency_ms >= 0

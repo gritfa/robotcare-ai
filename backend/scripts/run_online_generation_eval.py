@@ -356,28 +356,36 @@ def main() -> int:
                 pdf_path = PROJECT_ROOT / "knowledge" / "synthetic" / f"{code}_manual.pdf"
             else:
                 pdf_path = prereq[code]["pdf_path"]
-            ingest_pdf(
-                db,
-                robot_model_id=model_ids[code],
-                pdf_path=pdf_path,
-                source_url=expected_source_url[code],
-                provider=embedding,
-            )
+            try:
+                ingest_pdf(
+                    db,
+                    robot_model_id=model_ids[code],
+                    pdf_path=pdf_path,
+                    source_url=expected_source_url[code],
+                    provider=embedding,
+                )
+            except Exception as exc:  # embedding/DB 异常：留痕弃评，绝不裸崩丢报告
+                db.rollback()
+                run_errors.append(
+                    {"case_id": f"__ingest__:{code}", "error": str(exc)[:300]}
+                )
+                to_run = []
+                break
         ingested_urls = set(expected_source_url[code] for code in ingest_codes)
 
         for case in to_run:
             provider.last_raw = None  # 防止门控拒答（未调模型）误挂上一条的原文
-            # 检索与 generate_answer 内部同参、hashing 向量确定性一致，
-            # 单独取一份用于诊断字段（页码/分数/片段哈希）
-            retrieval = search_knowledge(
-                db,
-                robot_model_id=model_ids[case["model_code"]],
-                query=case["query"],
-                top_k=5,
-                min_score=0.0,
-                provider=embedding,
-            )
             try:
+                # 检索与 generate_answer 内部同参、hashing 向量确定性一致，
+                # 单独取一份用于诊断字段（页码/分数/片段哈希）
+                retrieval = search_knowledge(
+                    db,
+                    robot_model_id=model_ids[case["model_code"]],
+                    query=case["query"],
+                    top_k=5,
+                    min_score=0.0,
+                    provider=embedding,
+                )
                 outcome = generate_answer(
                     db,
                     user_id=None,

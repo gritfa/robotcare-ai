@@ -456,3 +456,47 @@ class KnowledgeGapEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )
+
+
+class Conversation(Base):
+    """智能客服多轮会话：一个用户对一个型号的连续问答上下文。"""
+
+    __tablename__ = "conversations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    robot_model_id: Mapped[int] = mapped_column(ForeignKey("robot_models.id"), index=True)
+    title: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, index=True
+    )
+
+    messages: Mapped[list["ConversationMessage"]] = relationship(
+        back_populates="conversation", order_by="ConversationMessage.id"
+    )
+
+
+class ConversationMessage(Base):
+    """会话消息：assistant 消息带引用与拒答原因，可回溯到 GenerationRecord。"""
+
+    __tablename__ = "conversation_messages"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('user', 'assistant')",
+            name="ck_conversation_messages_role",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text)
+    citations_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list)
+    refusal_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    generation_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey("generation_records.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")

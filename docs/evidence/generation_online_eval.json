@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-08-04T06:19:12+00:00",
+  "timestamp": "2026-08-04T09:11:26+00:00",
   "model": "qwen-plus",
   "embedding": "text-embedding-v4",
-  "prompt_version": "answer-v2",
+  "prompt_version": "answer-v3",
   "scope": "all",
   "dataset_faithfulness_total": 34,
   "selected": 34,
@@ -183,10 +183,6 @@
         ],
         "expected_page_retrieved": false,
         "cited_pages": [
-          7,
-          11,
-          10,
-          11,
           7
         ],
         "supported_claims_total": 2,
@@ -244,6 +240,7 @@
         "expected_page_retrieved": false,
         "cited_pages": [
           12,
+          8,
           16
         ],
         "supported_claims_total": 2,
@@ -357,6 +354,8 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
+          14,
+          11,
           16
         ],
         "supported_claims_total": 2,
@@ -526,7 +525,6 @@
         "expected_page_retrieved": true,
         "cited_pages": [
           4,
-          8,
           8
         ],
         "supported_claims_total": 2,
@@ -695,11 +693,10 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
-          15,
-          13
+          15
         ],
         "supported_claims_total": 2,
-        "supported_claims_verbatim_hits": 1
+        "supported_claims_verbatim_hits": 2
       }
     },
     {
@@ -754,9 +751,7 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
-          7,
-          16,
-          7
+          16
         ],
         "supported_claims_total": 3,
         "supported_claims_verbatim_hits": 0
@@ -982,11 +977,7 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
-          11,
-          6,
-          18,
-          4,
-          2
+          11
         ],
         "supported_claims_total": 0,
         "supported_claims_verbatim_hits": 0
@@ -1266,8 +1257,7 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
-          16,
-          19
+          16
         ],
         "supported_claims_total": 0,
         "supported_claims_verbatim_hits": 0
@@ -1435,11 +1425,7 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
-          24,
-          9,
-          16,
-          17,
-          10
+          9
         ],
         "supported_claims_total": 0,
         "supported_claims_verbatim_hits": 0
@@ -1552,11 +1538,7 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
-          11,
-          7,
-          19,
-          6,
-          3
+          11
         ],
         "supported_claims_total": 0,
         "supported_claims_verbatim_hits": 0
@@ -1836,11 +1818,7 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
-          16,
-          22,
-          24,
-          10,
-          21
+          16
         ],
         "supported_claims_total": 0,
         "supported_claims_verbatim_hits": 0
@@ -1953,9 +1931,7 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
-          18,
-          5,
-          10
+          18
         ],
         "supported_claims_total": 0,
         "supported_claims_verbatim_hits": 0

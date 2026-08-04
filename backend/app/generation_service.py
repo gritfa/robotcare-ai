@@ -266,6 +266,29 @@ def _persist(
     return record
 
 
+MAX_HISTORY_MESSAGES = 6
+MAX_HISTORY_CHARS = 500
+
+
+def _history_block(history: list[dict]) -> str:
+    role_names = {"user": "用户", "assistant": "助手"}
+    lines = [
+        f"{role_names.get(m['role'], m['role'])}：{m['content'][:MAX_HISTORY_CHARS]}"
+        for m in history[-MAX_HISTORY_MESSAGES:]
+    ]
+    return "\n".join(lines)
+
+
+def _retrieval_query(query: str, history: list[dict] | None) -> str:
+    """追问往往缺主语（'那第二步怎么做'），拼上最近一条用户问题补语境做检索。"""
+    if not history:
+        return query
+    last_user = next((m["content"] for m in reversed(history) if m["role"] == "user"), None)
+    if not last_user:
+        return query
+    return f"{last_user[:200]} {query}"[:500]
+
+
 def generate_answer(
     db: Session,
     *,
@@ -277,13 +300,14 @@ def generate_answer(
     top_k: int = MAX_SNIPPETS,
     min_score: float = 0.25,
     commit: bool = True,
+    history: list[dict] | None = None,
 ) -> AnswerResult:
     started_at = perf_counter()
     top_k = max(1, min(top_k, MAX_SNIPPETS))
     results = search_knowledge(
         db,
         robot_model_id=robot_model_id,
-        query=query,
+        query=_retrieval_query(query, history),
         top_k=top_k,
         min_score=min_score,
         provider=embedding_provider,
@@ -312,8 +336,13 @@ def generate_answer(
     if not results:
         return refuse("knowledge_gap", snippet_count=0)
 
+    history_section = (
+        f"此前对话（仅供理解语境，回答依据只能来自资料片段）：\n{_history_block(history)}\n\n"
+        if history
+        else ""
+    )
     prompt = (
-        f"用户型号问题：{query}\n\n可用资料片段：\n{_snippet_block(results)}\n\n"
+        f"{history_section}用户型号问题：{query}\n\n可用资料片段：\n{_snippet_block(results)}\n\n"
         "请依据上述片段回答；片段不足以回答时只输出 REFUSE。"
     )
     raw_answer = generation_provider.generate(system=SYSTEM_PROMPT, prompt=prompt).strip()

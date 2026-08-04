@@ -324,3 +324,45 @@ class KnowledgeAnswerResponse(BaseModel):
     citations: list[AnswerCitationRead]
     refusal_reason: str | None
     record_id: int
+
+
+class ConversationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    robot_model_id: int = Field(gt=0)
+
+
+class ConversationRead(BaseModel):
+    id: int
+    robot_model_id: int
+    robot_model_code: str
+    title: str
+    updated_at: datetime
+
+
+class ConversationMessageRead(BaseModel):
+    id: int
+    role: str
+    content: str
+    citations: list[AnswerCitationRead]
+    refusal_reason: str | None
+    created_at: datetime
+
+
+class ConversationDetailRead(BaseModel):
+    id: int
+    robot_model_id: int
+    robot_model_code: str
+    title: str
+    messages: list[ConversationMessageRead]
+
+
+class ChatMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class ChatMessageResponse(BaseModel):
+    user_message: ConversationMessageRead
+    assistant_message: ConversationMessageRead

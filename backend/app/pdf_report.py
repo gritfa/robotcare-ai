@@ -14,7 +14,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.pdfmetrics import getRegisteredFontNames, registerFont
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.ttfonts import TTFError, TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .models import ServiceReport
@@ -35,7 +35,13 @@ def register_pdf_font() -> str:
     ]
     for candidate in candidates:
         if candidate and candidate.is_file():
-            registerFont(TTFont(PDF_FONT_NAME, str(candidate), subfontIndex=0))
+            try:
+                registerFont(TTFont(PDF_FONT_NAME, str(candidate), subfontIndex=0))
+            except TTFError:
+                # Some Linux Noto CJK packages expose CFF-flavoured TTC files,
+                # which ReportLab's TrueType parser cannot load. Keep PDF
+                # generation available through the built-in Chinese CID font.
+                continue
             return PDF_FONT_NAME
 
     fallback = "STSong-Light"

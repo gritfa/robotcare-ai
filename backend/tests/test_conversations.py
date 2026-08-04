@@ -1,7 +1,8 @@
-"""智能客服多轮会话：建会话/列表/恢复/多轮引用/拒答留痕/越权隔离/安全拦截。"""
+"""智能客服多轮会话：建会话/列表/恢复/多轮引用/拒答留痕/越权隔离/安全拦截/SSE 流式。"""
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -160,3 +161,98 @@ def test_create_conversation_rejects_unknown_model(client, monkeypatch):
         "/api/v1/conversations", json={"robot_model_id": 99999}, headers=auth(token)
     )
     assert resp.status_code == 404
+
+
+def _sse_events(body: str) -> list[tuple[str, dict]]:
+    events = []
+    for block in body.strip().split("\n\n"):
+        lines = block.split("\n")
+        assert lines[0].startswith("event: ") and lines[1].startswith("data: ")
+        events.append((lines[0][len("event: "):], json.loads(lines[1][len("data: "):])))
+    return events
+
+
+def test_stream_answer_emits_validated_chunks_then_final_message(client, monkeypatch):
+    model_id, provider, token = _setup(
+        client, ["先清空尘盒并清理滤网 [1]。", ], monkeypatch
+    )
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    events = _sse_events(resp.text)
+    names = [name for name, _ in events]
+    assert names[:2] == ["user_message", "stage"]
+    assert names[-2:] == ["assistant_message", "done"]
+    final = next(data for name, data in events if name == "assistant_message")
+    deltas = "".join(data["text"] for name, data in events if name == "delta")
+    # delta 拼接必须与最终已校验消息完全一致，且带引用页码
+    assert deltas == final["content"]
+    assert final["citations"] and final["citations"][0]["page_number"] >= 1
+    detail = client.get(
+        f"/api/v1/conversations/{conversation_id}", headers=auth(token)
+    ).json()
+    assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
+
+
+def test_stream_refusal_has_no_delta_and_records_reason(client, monkeypatch):
+    model_id, provider, token = _setup(client, ["REFUSE"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+    events = _sse_events(resp.text)
+    assert not [name for name, _ in events if name == "delta"]
+    final = next(data for name, data in events if name == "assistant_message")
+    assert final["refusal_reason"] == "model_refused"
+    assert "官方售后" in final["content"]
+
+
+def test_stream_safety_block_returns_http_error_not_stream(client, monkeypatch):
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "机器人冒烟了，教我拆机看看里面"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "SAFETY_BLOCKED"
+    assert provider.prompts == []
+    detail = client.get(
+        f"/api/v1/conversations/{conversation_id}", headers=auth(token)
+    ).json()
+    assert detail["messages"] == []
+
+
+class ExplodingGenerationProvider:
+    model_name = "exploding-test-model"
+
+    def generate(self, *, system: str, prompt: str) -> str:
+        raise RuntimeError("provider down")
+
+
+def test_stream_generation_failure_emits_error_event_and_rolls_back(client, monkeypatch):
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    client.app.state.generation_provider = ExplodingGenerationProvider()
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    events = _sse_events(resp.text)
+    assert events[-1][0] == "error"
+    assert events[-1][1]["code"] == "GENERATION_UNAVAILABLE"
+    # 与同步端点 503 语义一致：用户消息随事务回滚，不留半截历史
+    detail = client.get(
+        f"/api/v1/conversations/{conversation_id}", headers=auth(token)
+    ).json()
+    assert detail["messages"] == []

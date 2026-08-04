@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
-import type { AdminAuditLog, AdminContentGap, AdminDiagnosticDetail, AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
+import type { AdminAuditLog, AdminContentGap, AdminDiagnosticDetail, AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, ChatMessagePair, Conversation, ConversationDetail, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
   KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
 
@@ -335,6 +335,13 @@ export const diagnosticApi = {
   createReport: async (id: EntityId) => payload<ServiceReport>((await http.post(`/diagnostics/${id}/report`)).data),
   createPdfReport: async (id: EntityId) => payload<ReportPdf>((await http.post(`/diagnostics/${id}/report/pdf`)).data),
   downloadPdfReport: async (id: EntityId) => (await http.get<Blob>(`/diagnostics/${id}/report/pdf`, { responseType: 'blob' })).data,
+}
+
+export const conversationApi = {
+  create: async (robotModelId: EntityId) => payload<Conversation>((await http.post('/conversations', { robot_model_id: Number(robotModelId) })).data),
+  list: async () => listPayload<Conversation>((await http.get('/conversations')).data),
+  get: async (id: EntityId) => payload<ConversationDetail>((await http.get(`/conversations/${id}`)).data),
+  sendMessage: async (id: EntityId, content: string) => payload<ChatMessagePair>((await http.post(`/conversations/${id}/messages`, { content })).data),
 }
 
 export const knowledgeApi = {

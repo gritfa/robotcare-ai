@@ -5,9 +5,12 @@ generate_answer 的强制引用与四类拒答），在此之上叠加会话持�
 拒答也落 assistant 消息（用户可见的解释文案），保证会话历史完整可回放。
 """
 
+import json
 import logging
+from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -38,6 +41,7 @@ from ..security import get_current_user
 router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 
 MAX_CONTEXT_MESSAGES = 6
+STREAM_CHUNK_CHARS = 48
 REFUSAL_TEXTS = {
     "knowledge_gap": "抱歉，当前资料中没有找到能回答这个问题的内容，建议联系官方售后获取帮助。",
     "model_refused": "抱歉，现有资料不足以回答这个问题，建议联系官方售后获取帮助。",
@@ -132,17 +136,15 @@ def get_conversation(
     )
 
 
-@router.post("/{conversation_id}/messages", response_model=ChatMessageResponse)
-def post_message(
-    conversation_id: int,
-    payload: ChatMessageRequest,
+def _prepare_turn(
+    db: Session,
     request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> ChatMessageResponse:
-    conversation = _owned_conversation(db, conversation_id, user)
-
-    safety_block = detect_safety_block(payload.content)
+    conversation: Conversation,
+    content: str,
+    user: User,
+) -> tuple[ConversationMessage, list[dict], float]:
+    """安全前置阻断 + 限流 + 阈值 + 多轮上下文 + 落用户消息（flush 未 commit）。"""
+    safety_block = detect_safety_block(content)
     if safety_block is not None:
         emit_json_log(
             logging.WARNING,
@@ -183,18 +185,30 @@ def post_message(
         for m in conversation.messages[-MAX_CONTEXT_MESSAGES:]
     ]
     user_message = ConversationMessage(
-        conversation_id=conversation.id, role="user", content=payload.content
+        conversation_id=conversation.id, role="user", content=content
     )
     db.add(user_message)
     if not conversation.title:
-        conversation.title = payload.content[:60]
+        conversation.title = content[:60]
+    db.flush()
+    return user_message, history, min_score
 
+
+def _generate_turn_answer(
+    db: Session,
+    request: Request,
+    conversation: Conversation,
+    content: str,
+    history: list[dict],
+    min_score: float,
+    user: User,
+):
     try:
-        result = generate_answer(
+        return generate_answer(
             db,
             user_id=user.id,
             robot_model_id=conversation.robot_model_id,
-            query=payload.content,
+            query=content,
             embedding_provider=request.app.state.embedding_provider,
             generation_provider=request.app.state.generation_provider,
             history=history,
@@ -210,10 +224,12 @@ def post_message(
             conversation_id=conversation.id,
             error_type=type(exc).__name__,
         )
-        raise HTTPException(status_code=503, detail="Generation service unavailable") from exc
+        raise
 
+
+def _assistant_message_for(conversation: Conversation, result) -> ConversationMessage:
     if result.status == "answered":
-        assistant_message = ConversationMessage(
+        return ConversationMessage(
             conversation_id=conversation.id,
             role="assistant",
             content=result.answer,
@@ -229,20 +245,106 @@ def post_message(
             ],
             generation_record_id=result.record_id,
         )
-    else:
-        assistant_message = ConversationMessage(
-            conversation_id=conversation.id,
-            role="assistant",
-            content=REFUSAL_TEXTS.get(result.refusal_reason, REFUSAL_TEXTS["model_refused"]),
-            refusal_reason=result.refusal_reason,
-            generation_record_id=result.record_id,
-        )
+    return ConversationMessage(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=REFUSAL_TEXTS.get(result.refusal_reason, REFUSAL_TEXTS["model_refused"]),
+        refusal_reason=result.refusal_reason,
+        generation_record_id=result.record_id,
+    )
+
+
+def _commit_turn(
+    db: Session,
+    conversation: Conversation,
+    user_message: ConversationMessage,
+    result,
+) -> ConversationMessage:
+    assistant_message = _assistant_message_for(conversation, result)
     db.add(assistant_message)
     conversation.updated_at = user_message.created_at
     db.commit()
     db.refresh(user_message)
     db.refresh(assistant_message)
+    return assistant_message
+
+
+@router.post("/{conversation_id}/messages", response_model=ChatMessageResponse)
+def post_message(
+    conversation_id: int,
+    payload: ChatMessageRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ChatMessageResponse:
+    conversation = _owned_conversation(db, conversation_id, user)
+    user_message, history, min_score = _prepare_turn(
+        db, request, conversation, payload.content, user
+    )
+    try:
+        result = _generate_turn_answer(
+            db, request, conversation, payload.content, history, min_score, user
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Generation service unavailable") from exc
+    assistant_message = _commit_turn(db, conversation, user_message, result)
     return ChatMessageResponse(
         user_message=_message_read(user_message),
         assistant_message=_message_read(assistant_message),
+    )
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@router.post("/{conversation_id}/messages/stream")
+def post_message_stream(
+    conversation_id: int,
+    payload: ChatMessageRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """SSE 流式变体：先走完整安全/引用/输出侧校验，再把已验证的回答分片下发。
+
+    进入流之前的错误（越权 404、安全拦截 422、限流 429）仍走普通 HTTP 状态码；
+    进入流之后的生成失败以 error 事件下发。答案只有在通过全部校验后才开始
+    分片，不存在"未校验内容先出现在用户屏幕"的窗口。
+    """
+    conversation = _owned_conversation(db, conversation_id, user)
+    user_message, history, min_score = _prepare_turn(
+        db, request, conversation, payload.content, user
+    )
+
+    def event_stream() -> Iterator[str]:
+        yield _sse("user_message", _message_read(user_message).model_dump(mode="json"))
+        yield _sse("stage", {"stage": "generating"})
+        try:
+            result = _generate_turn_answer(
+                db, request, conversation, payload.content, history, min_score, user
+            )
+        except RuntimeError:
+            # 用户消息随事务一并回滚，与同步端点 503 的语义保持一致
+            yield _sse(
+                "error",
+                {"code": "GENERATION_UNAVAILABLE", "message": "生成服务暂不可用，请稍后重试"},
+            )
+            return
+        assistant_message = _commit_turn(db, conversation, user_message, result)
+        if result.status == "answered":
+            for start in range(0, len(assistant_message.content), STREAM_CHUNK_CHARS):
+                yield _sse(
+                    "delta",
+                    {"text": assistant_message.content[start : start + STREAM_CHUNK_CHARS]},
+                )
+        yield _sse(
+            "assistant_message", _message_read(assistant_message).model_dump(mode="json")
+        )
+        yield _sse("done", {})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )

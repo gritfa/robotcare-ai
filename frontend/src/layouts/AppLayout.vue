@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores'
-import { House, Box, Reading, FirstAidKit, Clock, Setting, SwitchButton } from '@element-plus/icons-vue'
+import { House, Box, Reading, ChatDotRound, FirstAidKit, Clock, Setting, SwitchButton } from '@element-plus/icons-vue'
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore()
 const menus = [
   { path: '/', label: '工作台', icon: House }, { path: '/devices', label: '我的设备', icon: Box },
-  { path: '/guides', label: '使用指导', icon: Reading }, { path: '/diagnostics/new', label: '开始诊断', icon: FirstAidKit },
+  { path: '/guides', label: '使用指导', icon: Reading }, { path: '/chat', label: '智能客服', icon: ChatDotRound },
+  { path: '/diagnostics/new', label: '开始诊断', icon: FirstAidKit },
   { path: '/history', label: '诊断历史', icon: Clock },
 ]
 async function logout() { try { await auth.logout() } finally { await router.push('/login') } }

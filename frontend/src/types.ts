@@ -180,3 +180,33 @@ export interface KnowledgeAnswer {
   refusal_reason: 'knowledge_gap' | 'model_refused' | 'citation_invalid' | 'unsafe_answer' | null
   record_id: number
 }
+
+export interface Conversation {
+  id: number
+  robot_model_id: number
+  robot_model_code: string
+  title: string
+  updated_at: string
+}
+
+export interface ChatMessage {
+  id: EntityId
+  role: 'user' | 'assistant'
+  content: string
+  citations: AnswerCitation[]
+  refusal_reason: KnowledgeAnswer['refusal_reason']
+  created_at: string
+}
+
+export interface ConversationDetail {
+  id: number
+  robot_model_id: number
+  robot_model_code: string
+  title: string
+  messages: ChatMessage[]
+}
+
+export interface ChatMessagePair {
+  user_message: ChatMessage
+  assistant_message: ChatMessage
+}

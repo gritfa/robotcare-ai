@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -109,6 +110,52 @@ def test_answer_that_is_only_a_trailing_refuse_marker_still_refuses(client):
             min_score=0.0,
         )
         assert result.status == "refused" and result.refusal_reason == "model_refused"
+
+
+@pytest.mark.parametrize(
+    "raw_answer",
+    [
+        # 2026-08-05 生产栈实测原文：模型给标记附了中文括号说明，旧模式漏剥
+        "更换滤网需自费 [1]。\n\nREFUSE（注：资料未提供滤网单价）",
+        "先清空尘盒并清理滤网 [1]。REFUSE(no relevant info)",
+        "先清空尘盒并清理滤网 [1]。\nREFUSE：资料未提及电机故障",
+    ],
+)
+def test_trailing_refuse_marker_with_explanation_is_stripped(client, raw_answer):
+    # 标记是内部协议，无论模型给它附了什么说明，都不能出现在用户可见文本里
+    model_id = _prepare_model_with_knowledge(client)
+    with client.app.state.session_factory() as db:
+        result = generate_answer(
+            db,
+            user_id=None,
+            robot_model_id=model_id,
+            query="吸力变小了怎么办",
+            embedding_provider=HashingNgramEmbeddingProvider(),
+            generation_provider=ScriptedGenerationProvider([raw_answer]),
+            min_score=0.0,
+        )
+        assert result.status == "answered"
+        assert "REFUSE" not in result.answer
+        assert result.answer.endswith("[1]。")
+        record = db.get(GenerationRecord, result.record_id)
+        assert "REFUSE" not in record.answer
+
+
+def test_answer_body_mentioning_refused_word_is_not_truncated(client):
+    # 防过度剥离：正文里出现 REFUSED 之类的词不构成控制标记
+    model_id = _prepare_model_with_knowledge(client)
+    body = "先清空尘盒并清理滤网 [1]。若显示 REFUSED 字样请联系官方售后。"
+    with client.app.state.session_factory() as db:
+        result = generate_answer(
+            db,
+            user_id=None,
+            robot_model_id=model_id,
+            query="吸力变小了怎么办",
+            embedding_provider=HashingNgramEmbeddingProvider(),
+            generation_provider=ScriptedGenerationProvider([body]),
+            min_score=0.0,
+        )
+        assert result.answer == body
 
 
 def test_knowledge_gap_refuses_without_calling_model(client):

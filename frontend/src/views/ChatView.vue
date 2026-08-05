@@ -6,6 +6,7 @@ import { apiError, conversationApi, deviceApi, modelApi, parseApiError, userFaci
 import { ChatStreamAborted, streamChatMessage } from '../chatStream'
 import { refusalPresentation } from '../answerDisplay'
 import { resolveComposerKey } from '../composerKeys'
+import { OFFICIAL_SUPPORT_NAME, OFFICIAL_SUPPORT_URL, supportHandoffHint } from '../supportChannels'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
 import type { AnswerCitation, ChatMessage, Conversation, Device, FeedbackReason, MessageActionCode, QuickAction, RobotModel } from '../types'
 
@@ -285,8 +286,18 @@ async function runQuickAction(action: QuickAction) {
       await markResolved(true)
       return
     case 'contact_support':
-      // 官方售后入口在指南页，未来接入工单系统时只需换这一处
-      await router.push({ name: 'guides' })
+      // 指南页里没有任何联系方式，跳过去等于把用户送进死胡同。
+      // 直接给官方入口，并把客服一定会问的型号一并摆出来。
+      try {
+        await ElMessageBox.confirm(
+          supportHandoffHint(activeModelCode.value),
+          `转接${OFFICIAL_SUPPORT_NAME}`,
+          { confirmButtonText: '前往官方入口', cancelButtonText: '留在这里', type: 'info' },
+        )
+        window.open(OFFICIAL_SUPPORT_URL, '_blank', 'noopener,noreferrer')
+      } catch {
+        // 用户选择留在当前会话，不做任何事
+      }
       return
     default:
       ElMessage.info('该操作暂不可用')
@@ -535,15 +546,48 @@ async function scrollToBottom() {
                 <div class="bubble user-bubble">{{ message.content }}</div>
               </div>
               <div v-else class="bubble-row">
-                <el-alert
-                  v-if="message.refusal_reason"
-                  class="refusal-alert"
-                  :title="refusalPresentation(message.refusal_reason).title"
-                  :description="message.content"
-                  :type="refusalPresentation(message.refusal_reason).type"
-                  :closable="false"
-                  show-icon
-                />
+                <!-- 拒答不是终点：后端已按「拒答优先给别的出口」排好 quick_actions，
+                     这里必须渲染出来。此前只画一个 alert，用户在最需要人接手的时刻
+                     屏幕上一个可点的东西都没有。 -->
+                <div v-if="message.refusal_reason" class="refusal-block">
+                  <el-alert
+                    class="refusal-alert"
+                    :title="refusalPresentation(message.refusal_reason).title"
+                    :description="message.content"
+                    :type="refusalPresentation(message.refusal_reason).type"
+                    :closable="false"
+                    show-icon
+                  />
+                  <div v-if="message.quick_actions?.length" class="bubble-action">
+                    <el-button
+                      v-for="action in message.quick_actions"
+                      :key="action.code"
+                      type="primary"
+                      plain
+                      size="small"
+                      @click="runQuickAction(action)"
+                    >{{ action.label }}</el-button>
+                  </div>
+                  <div class="bubble-feedback">
+                    <el-dropdown trigger="click" @command="(reason: FeedbackReason) => sendFeedback(message, false, reason)">
+                      <el-button text size="small" :type="feedbackGiven[String(message.id)] === false ? 'danger' : ''">反馈问题</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item v-for="item in FEEDBACK_REASONS" :key="item.value" :command="item.value">
+                            {{ item.label }}
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                    <!-- 安全拦截不给重试：该改的是问法，重发只会再撞一次同样的拦截 -->
+                    <el-button
+                      v-if="message.refusal_reason !== 'unsafe_answer'"
+                      text size="small" :icon="Refresh" :disabled="streaming"
+                      @click="regenerate(message)"
+                    >重新回答</el-button>
+                    <el-button text size="small" :icon="FirstAidKit" :disabled="streaming" @click="escalateToDiagnostic">转分步诊断</el-button>
+                  </div>
+                </div>
                 <div v-else class="bubble assistant-bubble">
                   <p>{{ message.content }}</p>
                   <div v-if="message.citations.length" class="bubble-citations">

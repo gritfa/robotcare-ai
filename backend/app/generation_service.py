@@ -76,8 +76,13 @@ _CITATION_PATTERN = re.compile(r"\[(\d{1,2})\]")
 # 模型偶尔在完整回答末尾附加 REFUSE 控制标记（v3 在线评测 FF-001 实锤：
 # 回答正文完整，结尾多一个 " REFUSE" 被原样发给用户）。标记属于内部协议，
 # 只在开头出现时才代表整体拒答；结尾残留必须剥掉，不能泄露到用户可见文本。
+#
+# 2026-08-05 生产栈实测：模型不止输出光秃秃的 REFUSE，还会附带说明，例如
+# "REFUSE（注：资料未提供滤网单价）"。旧模式只匹配 REFUSE + 标点，这类变体
+# 整条泄露给用户。REFUSE 是控制标记，正文里不会有以它开头的句子，
+# 因此末尾"以 REFUSE 开头的最后一段"整体剥掉。
 _TRAILING_REFUSE_PATTERN = re.compile(
-    rf"\s*(?:{REFUSE_TOKEN}\s*)+[。．.，,；;：:、'\"“”\s]*$"
+    rf"\s*{REFUSE_TOKEN}\b[^\n]*(?:\n(?!\s*\n)[^\n]*)*\s*$"
 )
 _PUNCTUATION_ONLY = " \t\n。．.，,；;：:、'\"“”"
 

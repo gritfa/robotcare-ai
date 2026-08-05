@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { WarningFilled } from '@element-plus/icons-vue'
 import type { ApiErrorInfo } from '../api'
+import { OFFICIAL_SUPPORT_URL } from '../supportChannels'
 
 defineProps<{ error: ApiErrorInfo }>()
 </script>
@@ -20,7 +21,7 @@ defineProps<{ error: ApiErrorInfo }>()
       <p v-if="error.riskLevel || error.category" class="meta">
         风险等级：{{ error.riskLevel || '高风险' }}<span v-if="error.category"> · {{ error.category }}</span>
       </p>
-      <a href="https://www.haier.com/contact/" target="_blank" rel="noopener noreferrer">前往海尔官方联系入口</a>
+      <a :href="OFFICIAL_SUPPORT_URL" target="_blank" rel="noopener noreferrer">前往海尔官方联系入口</a>
     </div>
   </section>
 </template>

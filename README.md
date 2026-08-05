@@ -13,7 +13,7 @@
 | FastAPI 后端 | `【已验证】` | 单方言重构后全部测试直接跑在 PostgreSQL 16 + pgvector 测试容器上：`278 passed, 0 skipped (47.11s，2026-08-05 本机)`；原独立 PG 集成测试并入常规回归，不再有 skip |
 | Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康、会话流式及认证恢复共 `45 passed`；`vue-tsc + vite build` 通过，element-plus 已改为按需引入，入口包 `224.97 kB (gzip 83.78 kB)`，其余按页面/组件懒加载（改造前单主包 1.11 MB） |
 | 智能客服会话层 | `【已验证：本地】` | 多轮会话（conversations/conversation_messages，迁移 `20260804_0010`）、SSE 流式回答（先校验引用后分片下发）、会话一键转分步诊断（`20260804_0011` 记录来源会话）、售后报告附带会话摘要；后端 pytest + 前端单测覆盖，真实浏览器长会话压力未测 |
-| Microsoft Edge E2E | `【已验证：本机关键链路】` | 本机真实 Edge 完成闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流，共 `8 passed (44.9s)`（该证据基于当时的隔离 SQLite 库）；现 E2E 脚本已改为使用隔离 PostgreSQL 测试库（`ROBOTCARE_E2E_DATABASE_URL`），改造后的 E2E 尚未在本机重新跑过，仍不代表 Docker/HTTPS |
+| 浏览器 E2E | `【已验证：本机关键链路，PostgreSQL 隔离库】` | 2026-08-05 本机 Chromium 在改造后的隔离 PostgreSQL 测试库（`ROBOTCARE_E2E_DATABASE_URL`）上重跑闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流，共 `8 passed (23.4s)`，远端 CI 的 Chromium E2E job 同版本 success；早前 Edge `8 passed (44.9s)` 的证据基于当时的隔离 SQLite 库，**Microsoft Edge 在 PG 库上尚未重跑**；两者都不代表 Docker/HTTPS |
 | 分类与流程一致性 | `【已验证】` | 型号级确定性关键词/错误码候选；明显冲突拒绝创建，模糊场景要求用户确认；用户选择、系统候选和最终类别写入会话与报告 |
 | 知识安全与业务健康 | `【已验证：本地】` | 高风险检索在 Embedding 前阻断；普通用户不能覆盖阈值；`/knowledge/health` 区分正常、知识降级和外部模型不可用；`?probe=true` 深度探测对 embedding、检索链路、生成模型各发一次真实请求（走 embedding 限流），任一失败即把状态降级为 `external_model_unavailable`，避免"配置存在"冒充"服务可用"；版本化发布清单支持 SHA256 校验、幂等与事务回滚 |
 | 认证生命周期 | `【已验证】` | 登录不存在用户时使用固定 Argon2 dummy hash；email、email/IP、独立 IP 三桶原子限流、可信代理 CIDR、清理 CLI，以及刷新轮换/重放撤销、退出失效和用户状态均有测试 |
@@ -28,7 +28,7 @@
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
 | RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 411 条（113 条原有 + 298 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 45/45`、`step_selection 45/45`、`model_isolation 31/31`、`retrieval_recall 61/61`、`classification 62/62`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
 | LLM 生成层（强制引用/拒答/留痕） | `【已验证：本地 mock】` | `POST /knowledge/answer`：安全前置阻断→检索→生成；检索空/低于阈值不调模型直接拒答，引用缺失/越界拒答，回答命中安全规则拦截留痕；generation_records 全量留痕（prompt 版本/模型/片段 SHA/引用/耗时）；6 项 pytest 用 mock Provider 验证，真实 DashScope 生成调用未在本机执行 |
-| faithfulness 在线评测 | `【已验证：全量 34/34，含未达阈值项】` | 2026-08-04 prompt `answer-v3` 全量在线执行（`--scope all`）：主评测 34/34 通过、score `1.0`（结构化引用+输出安全+违禁论断防线，`docs/evidence/generation_online_eval.json`）；独立第三方裁判（deepseek-v4-flash）逐论断核对的语义忠实度 `0.8824`（30/34 faithful，8 条 unsupported 论断，v2 为 0.7941），脚本阈值 0.9 **未达标**，`overall_status=below_threshold`（`docs/evidence/llm_judge_faithfulness.json`），prompt v4 继续追 |
+| faithfulness 在线评测 | `【已验证：全量 34/34，已达发布阈值】` | 2026-08-05 prompt `answer-v5` 全量在线执行（`--scope all`）：主评测 34/34 通过、score `1.0`（结构化引用+输出安全+违禁论断防线，`docs/evidence/generation_online_eval.json`）；独立第三方裁判（deepseek-v4-flash）逐论断核对的语义忠实度 `0.9118`（judged 34/34、31 条 faithful、6 条 unsupported 论断、`run_errors` 为空），达到脚本阈值 0.9，`overall_status=passed_full`（`docs/evidence/llm_judge_faithfulness.json`）。迭代轨迹 v1 `0.6765` → v2 `0.7941` → v3 `0.8824` → v4 `0.8529` → v5 `0.9118`，每轮报告均留档（`*_v4.json`、`*_v5_run2_full.json`）。v5 首轮因 2 条网络故障只判到 32/34（`completed_with_errors`，score `0.9062`），按"分母不全不算达标"只补跑裁判段，首轮报告原样保留在 `docs/evidence/llm_judge_faithfulness_v5_run1_network_errors.json`。剩余 3 条不忠实（FF-002/003/004）均为提问自带说明书没有的预设概念，非模型编造知识 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 单方言：`vector(256)` 字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚全部直接在真实 PostgreSQL 上回归（SQLite 双方言分叉已删除） |
 | PostgreSQL + pgvector 真实运行 | `【已验证：GitHub Actions】` | PostgreSQL 16 + pgvector Job 已验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；本机 Docker、多实例压力与生产数据仍未验证 |
 | 远端 CI | `【已验证】` | 单方言五 Job 工作流（PG16+pgvector 回归、前端、Chromium E2E、部署契约、知识校验）已在远端跑通：提交 `bd77ad5` run 30600605830 五个 Job 全部 success（2026-07-31，https://github.com/gritfa/robotcare-ai/actions/runs/30600605830） |
@@ -70,12 +70,14 @@ docker compose build backend        # 依赖变更：118.7s
 docker compose build backend        # 7.6s，依赖层命中缓存
 ```
 
-本机 Microsoft Edge 关键链路：
+本机浏览器关键链路（2026-08-05，隔离 PostgreSQL 测试库）：
 
-```powershell
+```bash
 cd frontend
-npm.cmd run test:e2e:edge
-# 8 passed (44.9s)，命令正常退出并释放测试端口
+# 本机跑时要避开生产 Compose 栈占用的端口
+ROBOTCARE_E2E_BACKEND_PORT=8021 ROBOTCARE_E2E_FRONTEND_PORT=5199 npm run test:e2e
+# 8 passed (23.4s)，命令正常退出并释放测试端口
+# Microsoft Edge 版本（npm run test:e2e:edge）最近一次证据仍是 SQLite 时期的 8 passed (44.9s)，PG 库上未重跑
 ```
 
 知识数据：
@@ -86,7 +88,7 @@ npm.cmd run test:e2e:edge
 评测用例：411（全部 needs_human_review，待人工复核）
 真实检索冒烟：5/5（`docs/evidence/rag_smoke_20260720.json`）
 离线审计（七指标真实执行，全 1.0）：safety_block 47/47；source_page 45/45；step_selection 45/45；model_isolation 31/31；retrieval_recall 61/61；classification 62/62；refusal(门控层) 30/30
-faithfulness：全量 34/34（prompt answer-v3，主评 score 1.0；独立裁判语义忠实度 0.8824，未达 0.9 阈值，口径见 `docs/online_eval_scope.md`）
+faithfulness：全量 34/34（prompt answer-v5，主评 score 1.0 passed_full；独立裁判语义忠实度 0.9118，judged 34/34、达到 0.9 阈值 passed_full，口径见 `docs/online_eval_scope.md`）
 ```
 
 真实检索冒烟证据：`docs/evidence/rag_smoke_20260720.json`。
@@ -190,7 +192,7 @@ robotcare-ai/
 - P50U1：https://www.haier.com/xjd/sdjqr/20200831_146586.shtml
 - 海尔服务支持：https://www.haier.com/support/
 
-其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和开发环境向量化（历史向量最初落在 SQLite 开发库，可用 `backend/scripts/migrate_legacy_sqlite.py` 一次性迁入 PG）；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的单方言类型、查询、迁移、HNSW 与型号级 Top-K 已在本地 PostgreSQL 16 + pgvector 测试容器全量回归通过。评测集现为 411 条（全部待人工复核），七项指标已离线真实执行全 1.0（`docs/evidence/rag_eval_offline_audit.md`），仅 faithfulness 需真实 DashScope key 在线执行。
+其中 JH69U1、VC35U1 的说明书正文已完成本地抓取、解析和开发环境向量化（历史向量最初落在 SQLite 开发库，可用 `backend/scripts/migrate_legacy_sqlite.py` 一次性迁入 PG）；P50U1 与支持总入口仍只证明资料入口已登记。PostgreSQL + pgvector 的单方言类型、查询、迁移、HNSW 与型号级 Top-K 已在本地 PostgreSQL 16 + pgvector 测试容器全量回归通过。评测集现为 411 条（全部待人工复核），七项指标已离线真实执行全 1.0（`docs/evidence/rag_eval_offline_audit.md`）；faithfulness 已用真实 DashScope key 在线跑完全量 34 条（prompt `answer-v5`，主评 1.0），独立裁判的语义忠实度为 0.9118（judged 34/34），**达到 0.9 发布阈值**，详见上方状态表与 `docs/evidence/llm_judge_faithfulness.json`。
 
 ## 管理员账户与当前管理范围
 

@@ -1,0 +1,2030 @@
+{
+  "timestamp": "2026-08-05T05:57:03+00:00",
+  "generation_model": "qwen-plus",
+  "judge_model": "deepseek-v4-flash",
+  "judge_base_url": "https://api.deepseek.com/v1",
+  "embedding": "text-embedding-v4",
+  "prompt_version": "answer-v5",
+  "scope": "all",
+  "selected": 34,
+  "evaluated": 33,
+  "refused": 0,
+  "judged": 32,
+  "faithful": 29,
+  "unfaithful": 3,
+  "unsupported_claims_total": 3,
+  "run_errors": [
+    {
+      "case_id": "SYN-FA-011",
+      "stage": "generate",
+      "error": "DashScope embedding request failed"
+    },
+    {
+      "case_id": "SYN-FA-015",
+      "stage": "judge",
+      "error": "[Errno 8] nodename nor servname provided, or not known"
+    }
+  ],
+  "skipped_cases": [],
+  "score": 0.9062,
+  "score_basis": "语义忠实度 = 无 unsupported 论断的用例 / 成功裁判的用例；裁判为独立第三方模型逐论断核对检索片段；拒答用例不入分母；本分数与主评测的结构化引用分数互补，不互相替代",
+  "threshold": 0.9,
+  "overall_status": "completed_with_errors",
+  "limit": null,
+  "cases": [
+    {
+      "case_id": "FF-001",
+      "model_code": "JH69U1",
+      "query": "解释基站摆放对回充的影响",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "基站摆放对回充的影响体现在空间要求上：确保基站前方有1.5米以上、两侧有0.5米以上空间，以保障主机顺利回充[1]。初次使用时需将主机手动靠上基站，充电极片对准充电弹片；日常使用可直接短按启动智能回充[2]。",
+      "snippet_pages": [
+        7,
+        7,
+        19,
+        11,
+        17
+      ],
+      "claims": [
+        {
+          "claim": "基站摆放要求：前方有1.5米以上、两侧有0.5米以上空间",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]明确写出“确保基站前方有1.5米以上，两侧有0.5米以上空间”"
+        },
+        {
+          "claim": "基站摆放对回充的影响体现在空间要求上，以保障主机顺利回充",
+          "verdict": "unsupported",
+          "evidence_index": null,
+          "reason": "片段只给出空间要求，未说明该要求与回充的因果关系"
+        },
+        {
+          "claim": "初次使用时需将主机手动靠上基站，充电极片对准充电弹片",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "说明书[2]写明“初次使用时…请将主机手动靠上基站，充电极片对准充电弹片”"
+        },
+        {
+          "claim": "日常使用可直接短按启动智能回充",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "说明书[2]写明“日常使用时，可直接短按…启动智能回充”"
+        }
+      ],
+      "claim_summary": {
+        "supported": 3,
+        "unsupported": 1,
+        "uncheckable": 0,
+        "checkable": 4,
+        "faithful": false
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"基站摆放要求：前方有1.5米以上、两侧有0.5米以上空间\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]明确写出“确保基站前方有1.5米以上，两侧有0.5米以上空间”\"}, {\"claim\": \"基站摆放对回充的影响体现在空间要求上，以保障主机顺利回充\", \"verdict\": \"unsupported\", \"evidence_index\": null, \"reason\": \"片段只给出空间要求，未说明该要求与回充的因果关系\"}, {\"claim\": \"初次使用时需将主机手动靠上基站，充电极片对准充电弹片\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"说明书[2]写明“初次使用时…请将主机手动靠上基站，充电极片对准充电弹片”\"}, {\"claim\": \"日常使用可直接短按启动智能回充\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"说明书[2]写明“日常使用时，可直接短按…启动智能回充”\"}]}"
+    },
+    {
+      "case_id": "FF-002",
+      "model_code": "JH69U1",
+      "query": "解释为什么只用干燥软布清洁回充部件",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "因为说明书明确要求“请定期使用柔软干布清洁防跌落传感器、前回充灯、后回充灯”，且特别提示“请勿使用洗涤剂或喷雾剂等化学用品清洁防跌落传感器、前回充灯和后回充灯”[1]；同时说明书强调“请勿用湿布或湿手擦拭或清理基站的充电弹片”[2]，并规定“请勿使用湿布擦拭或任何液体冲洗主机、基站”[2]。这些要求共同说明回充相关部件（如前回充灯、后回充灯、充电弹片）仅允许用干燥软布清洁。",
+      "snippet_pages": [
+        14,
+        3,
+        7,
+        16,
+        11
+      ],
+      "claims": [
+        {
+          "claim": "说明书明确要求定期使用柔软干布清洁防跌落传感器、前回充灯、后回充灯",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]原文有相同要求"
+        },
+        {
+          "claim": "说明书特别提示请勿使用洗涤剂或喷雾剂等化学用品清洁防跌落传感器、前回充灯和后回充灯",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]注意条款直接说明"
+        },
+        {
+          "claim": "说明书强调请勿用湿布或湿手擦拭或清理基站的充电弹片",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]原文明确指出"
+        },
+        {
+          "claim": "说明书规定请勿使用湿布擦拭或任何液体冲洗主机、基站",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]原文有相同规定"
+        },
+        {
+          "claim": "这些要求共同说明回充相关部件（如前回充灯、后回充灯、充电弹片）仅允许用干燥软布清洁",
+          "verdict": "unsupported",
+          "evidence_index": null,
+          "reason": "片段仅说明前/后回充灯用柔软干布清洁，且禁止化学用品；对充电弹片只禁止湿布湿手，未说明可用干燥软布清洁，推断过度"
+        }
+      ],
+      "claim_summary": {
+        "supported": 4,
+        "unsupported": 1,
+        "uncheckable": 0,
+        "checkable": 5,
+        "faithful": false
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"说明书明确要求定期使用柔软干布清洁防跌落传感器、前回充灯、后回充灯\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]原文有相同要求\"}, {\"claim\": \"说明书特别提示请勿使用洗涤剂或喷雾剂等化学用品清洁防跌落传感器、前回充灯和后回充灯\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]注意条款直接说明\"}, {\"claim\": \"说明书强调请勿用湿布或湿手擦拭或清理基站的充电弹片\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]原文明确指出\"}, {\"claim\": \"说明书规定请勿使用湿布擦拭或任何液体冲洗主机、基站\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]原文有相同规定\"}, {\"claim\": \"这些要求共同说明回充相关部件（如前回充灯、后回充灯、充电弹片）仅允许用干燥软布清洁\", \"verdict\": \"unsupported\", \"evidence_index\": null, \"reason\": \"片段仅说明前/后回充灯用柔软干布清洁，且禁止化学用品；对充电弹片只禁止湿布湿手，未说明可用干燥软布清洁，推断过度\"}]}"
+    },
+    {
+      "case_id": "FF-003",
+      "model_code": "JH69U1",
+      "query": "说明最后一次回充确认应该怎么做",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "最后一次回充确认应通过短按“回充键”启动智能回充 [1]。",
+      "snippet_pages": [
+        7,
+        11,
+        10,
+        11,
+        7
+      ],
+      "claims": [
+        {
+          "claim": "日常使用时，可直接短按“回充键”启动智能回充",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书第7页提到“日常使用时，可直接短按……启动智能回充”，与短按回充键启动智能回充一致。"
+        },
+        {
+          "claim": "该操作属于“最后一次回充确认”步骤",
+          "verdict": "unsupported",
+          "evidence_index": null,
+          "reason": "说明书未提及“最后一次回充确认”，仅笼统说明日常使用时短按启动智能回充。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 1,
+        "unsupported": 1,
+        "uncheckable": 0,
+        "checkable": 2,
+        "faithful": false
+      },
+      "judge_raw": "{\"claims\":[{\"claim\":\"日常使用时，可直接短按“回充键”启动智能回充\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"说明书第7页提到“日常使用时，可直接短按……启动智能回充”，与短按回充键启动智能回充一致。\"},{\"claim\":\"该操作属于“最后一次回充确认”步骤\",\"verdict\":\"unsupported\",\"evidence_index\":null,\"reason\":\"说明书未提及“最后一次回充确认”，仅笼统说明日常使用时短按启动智能回充。\"}]}"
+    },
+    {
+      "case_id": "FF-004",
+      "model_code": "JH69U1",
+      "query": "我的 JH69U1 无法清洗拖布，水箱要怎么检查处理？",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "根据资料片段，JH69U1 型号设备的清水箱过滤管清洁步骤如下：\n\n1. 取出清水箱；  \n2. 将清水箱中的过滤管拔出；  \n3. 抠开滤盖，清洗滤盖和海绵网；  \n4. 清理完毕后，重新装回过滤管 [1]。\n\n资料中未提及“无法清洗拖布”的具体故障原因或对应处理步骤，也未说明水箱本身（非过滤管部分）的检查或处理方法，仅强调需定期清理清水箱过滤管以防堵塞 [1]，并提示清水箱加水至最高水位线以下 [2]。关于拖布清洗功能异常，资料仅列出“请确认拖布已装好”“请确认清洗支架已装好”“主机无法执行扫拖功能，请及时检查并确认拖布已安装好”等提示 [5]，但未提供水箱导致拖布无法清洗的排查或维修操作。",
+      "snippet_pages": [
+        12,
+        8,
+        1,
+        6,
+        16
+      ],
+      "claims": [
+        {
+          "claim": "JH69U1 型号设备的清水箱过滤管清洁步骤包括取出清水箱",
+          "verdict": "supported",
+          "evidence_index": [
+            1
+          ],
+          "reason": "片段[1]明确记载‘取出清水箱’的步骤。"
+        },
+        {
+          "claim": "将清水箱中的过滤管拔出",
+          "verdict": "supported",
+          "evidence_index": [
+            1
+          ],
+          "reason": "片段[1]有‘将清水箱中的过滤管拔出’的原文。"
+        },
+        {
+          "claim": "抠开滤盖，清洗滤盖和海绵网",
+          "verdict": "supported",
+          "evidence_index": [
+            1
+          ],
+          "reason": "片段[1]原文为‘抠开滤盖，清洗滤盖和海绵网’。"
+        },
+        {
+          "claim": "清理完毕后，重新装回过滤管",
+          "verdict": "supported",
+          "evidence_index": [
+            1
+          ],
+          "reason": "片段[1]写明‘清理完毕后，重新装回过滤管’。"
+        },
+        {
+          "claim": "资料中未提及“无法清洗拖布”的具体故障原因或对应处理步骤",
+          "verdict": "supported",
+          "evidence_index": [
+            5
+          ],
+          "reason": "片段[5]仅有‘请确认拖布已装好’等提示，未给出针对‘无法清洗拖布’的故障原因或维修步骤。"
+        },
+        {
+          "claim": "资料未说明水箱本身（非过滤管部分）的检查或处理方法",
+          "verdict": "supported",
+          "evidence_index": [
+            1
+          ],
+          "reason": "片段[1]只涉及取出水箱和清洗过滤管，未提供水箱本身的检查或处理方法。"
+        },
+        {
+          "claim": "仅强调需定期清理清水箱过滤管以防堵塞",
+          "verdict": "supported",
+          "evidence_index": [
+            1
+          ],
+          "reason": "片段[1]明确‘定期清理清水箱过滤管，避免污垢堵塞过滤管’。"
+        },
+        {
+          "claim": "提示清水箱加水至最高水位线以下",
+          "verdict": "supported",
+          "evidence_index": [
+            2
+          ],
+          "reason": "片段[2]有‘加入市政自来水至最高水位线以下’的说明。"
+        },
+        {
+          "claim": "关于拖布清洗功能异常，资料仅列出“请确认拖布已装好”“请确认清洗支架已装好”“主机无法执行扫拖功能，请及时检查并确认拖布已安装好”等提示",
+          "verdict": "supported",
+          "evidence_index": [
+            5
+          ],
+          "reason": "片段[5]中确实包含这些故障提示原文。"
+        },
+        {
+          "claim": "未提供水箱导致拖布无法清洗的排查或维修操作",
+          "verdict": "supported",
+          "evidence_index": [
+            1,
+            5
+          ],
+          "reason": "所有检索片段均未涉及水箱导致拖布无法清洗的排查或维修内容。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 10,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 10,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"JH69U1 型号设备的清水箱过滤管清洁步骤包括取出清水箱\", \"verdict\": \"supported\", \"evidence_index\": [1], \"reason\": \"片段[1]明确记载‘取出清水箱’的步骤。\"}, {\"claim\": \"将清水箱中的过滤管拔出\", \"verdict\": \"supported\", \"evidence_index\": [1], \"reason\": \"片段[1]有‘将清水箱中的过滤管拔出’的原文。\"}, {\"claim\": \"抠开滤盖，清洗滤盖和海绵网\", \"verdict\": \"supported\", \"evidence_index\": [1], \"reason\": \"片段[1]原文为‘抠开滤盖，清洗滤盖和海绵网’。\"}, {\"claim\": \"清理完毕后，重新装回过滤管\", \"verdict\": \"supported\", \"evidence_index\": [1], \"reason\": \"片段[1]写明‘清理完毕后，重新装回过滤管’。\"}, {\"claim\": \"资料中未提及“无法清洗拖布”的具体故障原因或对应处理步骤\", \"verdict\": \"supported\", \"evidence_index\": [5], \"reason\": \"片段[5]仅有‘请确认拖布已装好’等提示，未给出针对‘无法清洗拖布’的故障原因或维修步骤。\"}, {\"claim\": \"资料未说明水箱本身（非过滤管部分）的检查或处理方法\", \"verdict\": \"supported\", \"evidence_index\": [1], \"reason\": \"片段[1]只涉及取出水箱和清洗过滤管，未提供水箱本身的检查或处理方法。\"}, {\"claim\": \"仅强调需定期清理清水箱过滤管以防堵塞\", \"verdict\": \"supported\", \"evidence_index\": [1], \"reason\": \"片段[1]明确‘定期清理清水箱过滤管，避免污垢堵塞过滤管’。\"}, {\"claim\": \"提示清水箱加水至最高水位线以下\", \"verdict\": \"supported\", \"evidence_index\": [2], \"reason\": \"片段[2]有‘加入市政自来水至最高水位线以下’的说明。\"}, {\"claim\": \"关于拖布清洗功能异常，资料仅列出“请确认拖布已装好”“请确认清洗支架已装好”“主机无法执行扫拖功能，请及时检查并确认拖布已安装好”等提示\", \"verdict\": \"supported\", \"evidence_index\": [5], \"reason\": \"片段[5]中确实包含这些故障提示原文。\"}, {\"claim\": \"未提供水箱导致拖布无法清洗的排查或维修操作\", \"verdict\": \"supported\", \"evidence_index\": [1, 5], \"reason\": \"所有检索片段均未涉及水箱导致拖布无法清洗的排查或维修内容。\"}]}"
+    },
+    {
+      "case_id": "FF-005",
+      "model_code": "JH69U1",
+      "query": "说明清洗槽可以清理哪些位置",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "清洗槽可以清理的位置包括：清洗槽本身，需用清洁刷进行清理 [2]。  \n清理清洗槽时，需先将主机搬离基站 [2][5]。  \n清洗槽与清洗支架可配合使用基站清洁功能 [2]。  \n清洗槽已满时需立即清理，并检查污水箱是否安装到位 [3]。",
+      "snippet_pages": [
+        6,
+        14,
+        16,
+        12,
+        11
+      ],
+      "claims": [
+        {
+          "claim": "清洗槽可以清理的位置包括清洗槽本身，需用清洁刷进行清理",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]明确说明用清洁刷清理清洗槽"
+        },
+        {
+          "claim": "清理清洗槽时，需先将主机搬离基站",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]提示清理基站清洗槽时先将主机搬离基站"
+        },
+        {
+          "claim": "清洗槽与清洗支架可配合使用基站清洁功能",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]标题明确写明可配合使用基站清洁功能"
+        },
+        {
+          "claim": "清洗槽已满时需立即清理，并检查污水箱是否安装到位",
+          "verdict": "supported",
+          "evidence_index": 3,
+          "reason": "片段[3]故障排除中写明清洗槽已满需立即清理并检查污水箱安装"
+        }
+      ],
+      "claim_summary": {
+        "supported": 4,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 4,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"清洗槽可以清理的位置包括清洗槽本身，需用清洁刷进行清理\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]明确说明用清洁刷清理清洗槽\"}, {\"claim\": \"清理清洗槽时，需先将主机搬离基站\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]提示清理基站清洗槽时先将主机搬离基站\"}, {\"claim\": \"清洗槽与清洗支架可配合使用基站清洁功能\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]标题明确写明可配合使用基站清洁功能\"}, {\"claim\": \"清洗槽已满时需立即清理，并检查污水箱是否安装到位\", \"verdict\": \"supported\", \"evidence_index\": 3, \"reason\": \"片段[3]故障排除中写明清洗槽已满需立即清理并检查污水箱安装\"}]}"
+    },
+    {
+      "case_id": "FF-006",
+      "model_code": "JH69U1",
+      "query": "说明清洗支架确认的边界",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "清洗支架确认的边界仅限于以下明确提及的内容：\n\n- 清洗支架可被双手大拇指扣住两边的孔，先往上再往外拉取出 [1]；  \n- 清洗支架需“安装到位”，否则会触发故障提示“请确认清洗支架已装好” [4]；  \n- 清洗支架需“清洁干净”，并“确认清洗支架安装到位”，作为解决相关故障的方法之一 [4]；  \n- 清洗支架与清洗槽配套使用，属于基站清洁功能的一部分，清洗时需先将主机搬离基站 [1][3]；  \n- 清洗支架位于基站内，与清洗槽、清水箱、污水箱等同属基站结构部件 [5]。\n\n以上即为资料片段中关于清洗支架确认所涉及的所有边界内容。",
+      "snippet_pages": [
+        14,
+        11,
+        11,
+        16,
+        6
+      ],
+      "claims": [
+        {
+          "claim": "清洗支架可被双手大拇指扣住两边的孔，先往上再往外拉取出",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]明确描述取出清洗支架的操作方法"
+        },
+        {
+          "claim": "清洗支架需安装到位，否则会触发故障提示“请确认清洗支架已装好”",
+          "verdict": "supported",
+          "evidence_index": 4,
+          "reason": "片段[4]故障排除列表中包含该提示及对应确认要求"
+        },
+        {
+          "claim": "清洗支架需清洁干净，并确认清洗支架安装到位，作为解决相关故障的方法之一",
+          "verdict": "supported",
+          "evidence_index": 4,
+          "reason": "片段[4]明确写出‘请将清洗支架清洁干净，并确认清洗支架安装到位’"
+        },
+        {
+          "claim": "清洗支架与清洗槽配套使用，属于基站清洁功能的一部分，清洗时需先将主机搬离基站",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]说明清洗槽/清洗支架可配合基站清洁使用，并提示清理时先将主机搬离基站；片段[3]亦有类似提示"
+        },
+        {
+          "claim": "清洗支架位于基站内，与清洗槽、清水箱、污水箱等同属基站结构部件",
+          "verdict": "supported",
+          "evidence_index": 5,
+          "reason": "片段[5]基站结构图中列出清洗支架、清洗槽、清水箱、污水箱等部件"
+        }
+      ],
+      "claim_summary": {
+        "supported": 5,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 5,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"清洗支架可被双手大拇指扣住两边的孔，先往上再往外拉取出\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]明确描述取出清洗支架的操作方法\"}, {\"claim\": \"清洗支架需安装到位，否则会触发故障提示“请确认清洗支架已装好”\", \"verdict\": \"supported\", \"evidence_index\": 4, \"reason\": \"片段[4]故障排除列表中包含该提示及对应确认要求\"}, {\"claim\": \"清洗支架需清洁干净，并确认清洗支架安装到位，作为解决相关故障的方法之一\", \"verdict\": \"supported\", \"evidence_index\": 4, \"reason\": \"片段[4]明确写出‘请将清洗支架清洁干净，并确认清洗支架安装到位’\"}, {\"claim\": \"清洗支架与清洗槽配套使用，属于基站清洁功能的一部分，清洗时需先将主机搬离基站\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]说明清洗槽/清洗支架可配合基站清洁使用，并提示清理时先将主机搬离基站；片段[3]亦有类似提示\"}, {\"claim\": \"清洗支架位于基站内，与清洗槽、清水箱、污水箱等同属基站结构部件\", \"verdict\": \"supported\", \"evidence_index\": 5, \"reason\": \"片段[5]基站结构图中列出清洗支架、清洗槽、清水箱、污水箱等部件\"}]}"
+    },
+    {
+      "case_id": "FF-007",
+      "model_code": "VC35U1",
+      "query": "解释配网前的 Wi-Fi 覆盖条件",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "配网前的 Wi-Fi 覆盖条件包括：  \n- 手机和主机均需处于 Wi-Fi 覆盖范围内 [1]；  \n- 手机和主机应尽可能靠近路由器 [1]；  \n- 充电座需放置于 Wi-Fi 能覆盖的范围内 [1]；  \n- 扫地机器人不支持 5G Wi-Fi [1]；  \n- 扫地机器人不支持 WEP 加密方式的 Wi-Fi 连接 [1]。",
+      "snippet_pages": [
+        8,
+        4,
+        9,
+        8,
+        14
+      ],
+      "claims": [
+        {
+          "claim": "手机和主机均需处于 Wi-Fi 覆盖范围内",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]写明'配网前请确保手机、主机在 WiFi 覆盖范围内'"
+        },
+        {
+          "claim": "手机和主机应尽可能靠近路由器",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]写明'并尽可能的靠近路由器'"
+        },
+        {
+          "claim": "充电座需放置于 Wi-Fi 能覆盖的范围内",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]写明'请将充电座放置于 WiFi 能覆盖的范围内'"
+        },
+        {
+          "claim": "扫地机器人不支持 5G Wi-Fi",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]写明'扫地机器人暂不支持 5G WiFi'"
+        },
+        {
+          "claim": "扫地机器人不支持 WEP 加密方式的 Wi-Fi 连接",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]写明'扫地机器人不支持 WEP 加密方式的 WiFi 连接'"
+        }
+      ],
+      "claim_summary": {
+        "supported": 5,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 5,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"手机和主机均需处于 Wi-Fi 覆盖范围内\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]写明'配网前请确保手机、主机在 WiFi 覆盖范围内'\"}, {\"claim\": \"手机和主机应尽可能靠近路由器\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]写明'并尽可能的靠近路由器'\"}, {\"claim\": \"充电座需放置于 Wi-Fi 能覆盖的范围内\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]写明'请将充电座放置于 WiFi 能覆盖的范围内'\"}, {\"claim\": \"扫地机器人不支持 5G Wi-Fi\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]写明'扫地机器人暂不支持 5G WiFi'\"}, {\"claim\": \"扫地机器人不支持 WEP 加密方式的 Wi-Fi 连接\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]写明'扫地机器人不支持 WEP 加密方式的 WiFi 连接'\"}]}"
+    },
+    {
+      "case_id": "FF-008",
+      "model_code": "VC35U1",
+      "query": "解释 VC35U1 的网络兼容限制",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "VC35U1 扫地机器人不支持 5G WiFi [5]；  \nVC35U1 扫地机器人不支持 WEP 加密方式的 WiFi 连接 [5]。",
+      "snippet_pages": [
+        14,
+        19,
+        2,
+        3,
+        8
+      ],
+      "claims": [
+        {
+          "claim": "VC35U1 扫地机器人不支持 5G WiFi",
+          "verdict": "supported",
+          "evidence_index": 5,
+          "reason": "说明书第8页明确记载‘扫地机器人暂不支持 5G WiFi’"
+        },
+        {
+          "claim": "VC35U1 扫地机器人不支持 WEP 加密方式的 WiFi 连接",
+          "verdict": "supported",
+          "evidence_index": 5,
+          "reason": "说明书第8页明确记载‘扫地机器人不支持 WEP 加密方式的 WiFi 连接’"
+        }
+      ],
+      "claim_summary": {
+        "supported": 2,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 2,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"VC35U1 扫地机器人不支持 5G WiFi\", \"verdict\": \"supported\", \"evidence_index\": 5, \"reason\": \"说明书第8页明确记载‘扫地机器人暂不支持 5G WiFi’\"}, {\"claim\": \"VC35U1 扫地机器人不支持 WEP 加密方式的 WiFi 连接\", \"verdict\": \"supported\", \"evidence_index\": 5, \"reason\": \"说明书第8页明确记载‘扫地机器人不支持 WEP 加密方式的 WiFi 连接’\"}]}"
+    },
+    {
+      "case_id": "FF-009",
+      "model_code": "VC35U1",
+      "query": "解释重新进入配网状态的操作",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "重新进入配网状态的操作是：主机待机状态下，同时按下启动键和回充键，直到听到语音提示，再根据APP提示进行操作 [2]。  \n配网时灯光状态为白灯闪烁，表示处于配网状态 [1]。  \n当路由器配置修改、密码更换或其它原因导致手机无法和设备连接时，需重启主机并重新进行配网 [4]。",
+      "snippet_pages": [
+        4,
+        8,
+        15,
+        8,
+        13
+      ],
+      "claims": [
+        {
+          "claim": "重新进入配网状态的操作是：主机待机状态下，同时按下启动键和回充键，直到听到语音提示，再根据APP提示进行操作。",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]明确记载了该操作步骤。"
+        },
+        {
+          "claim": "配网时灯光状态为白灯闪烁，表示处于配网状态。",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]明确说明配网状态时白灯闪烁。"
+        },
+        {
+          "claim": "当路由器配置修改、密码更换或其它原因导致手机无法和设备连接时，需重启主机并重新进行配网。",
+          "verdict": "supported",
+          "evidence_index": 4,
+          "reason": "片段[4]原文完全一致。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 3,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 3,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"重新进入配网状态的操作是：主机待机状态下，同时按下启动键和回充键，直到听到语音提示，再根据APP提示进行操作。\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]明确记载了该操作步骤。\"}, {\"claim\": \"配网时灯光状态为白灯闪烁，表示处于配网状态。\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]明确说明配网状态时白灯闪烁。\"}, {\"claim\": \"当路由器配置修改、密码更换或其它原因导致手机无法和设备连接时，需重启主机并重新进行配网。\", \"verdict\": \"supported\", \"evidence_index\": 4, \"reason\": \"片段[4]原文完全一致。\"}]}"
+    },
+    {
+      "case_id": "FF-010",
+      "model_code": "VC35U1",
+      "query": "解释异响时第一步检查什么",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "清扫时有异响，检查清理滚刷、边刷、驱动轮、万向轮上的异物，清洁主机底盘和防撞条 [2]。",
+      "snippet_pages": [
+        13,
+        15,
+        5,
+        6,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "清扫时有异响，检查清理滚刷、边刷、驱动轮、万向轮上的异物",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "说明书[2]中‘清扫时有异响’的解决办法明确写了‘请检查清理滚刷、边刷、驱动轮、万向轮上的异物’"
+        },
+        {
+          "claim": "清洁主机底盘和防撞条",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "说明书[2]中同一条解决办法包含‘清洁主机底盘和防撞条’"
+        }
+      ],
+      "claim_summary": {
+        "supported": 2,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 2,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"清扫时有异响，检查清理滚刷、边刷、驱动轮、万向轮上的异物\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"说明书[2]中‘清扫时有异响’的解决办法明确写了‘请检查清理滚刷、边刷、驱动轮、万向轮上的异物’\"}, {\"claim\": \"清洁主机底盘和防撞条\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"说明书[2]中同一条解决办法包含‘清洁主机底盘和防撞条’\"}]}"
+    },
+    {
+      "case_id": "FF-011",
+      "model_code": "VC35U1",
+      "query": "解释滚刷和边刷的清理方式",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "滚刷清理方式：翻转机身，向内按压滚刷罩上的卡扣，取出滚刷；使用工具清理滚刷上的缠绕物；清洁完后，装回滚刷，扣好滚刷罩 [1]。\n\n边刷清理方式：翻转机身，将边刷向上提拉，拔出；清理边刷和边刷轴承上的缠绕物；将边刷对准主机上的边刷轴承用力按下，装回边刷 [1]。",
+      "snippet_pages": [
+        11,
+        3,
+        5,
+        15,
+        13
+      ],
+      "claims": [
+        {
+          "claim": "翻转机身，向内按压滚刷罩上的卡扣，取出滚刷",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]中滚刷清理步骤原文一致"
+        },
+        {
+          "claim": "使用工具清理滚刷上的缠绕物",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]中明确写有该步骤"
+        },
+        {
+          "claim": "清洁完后，装回滚刷，扣好滚刷罩",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]中明确写有该步骤"
+        },
+        {
+          "claim": "翻转机身，将边刷向上提拉，拔出",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]中边刷清理步骤原文一致"
+        },
+        {
+          "claim": "清理边刷和边刷轴承上的缠绕物",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]中明确写有该步骤"
+        },
+        {
+          "claim": "将边刷对准主机上的边刷轴承用力按下，装回边刷",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]中明确写有该步骤"
+        }
+      ],
+      "claim_summary": {
+        "supported": 6,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 6,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"翻转机身，向内按压滚刷罩上的卡扣，取出滚刷\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]中滚刷清理步骤原文一致\"}, {\"claim\": \"使用工具清理滚刷上的缠绕物\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]中明确写有该步骤\"}, {\"claim\": \"清洁完后，装回滚刷，扣好滚刷罩\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]中明确写有该步骤\"}, {\"claim\": \"翻转机身，将边刷向上提拉，拔出\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]中边刷清理步骤原文一致\"}, {\"claim\": \"清理边刷和边刷轴承上的缠绕物\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]中明确写有该步骤\"}, {\"claim\": \"将边刷对准主机上的边刷轴承用力按下，装回边刷\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]中明确写有该步骤\"}]}"
+    },
+    {
+      "case_id": "FF-012",
+      "model_code": "VC35U1",
+      "query": "VC35U1 清扫时有异响，该怎么检查处理？",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "清扫时有异响，请检查清理滚刷、边刷、驱动轮、万向轮上的异物，清洁主机底盘和防撞条 [1]。",
+      "snippet_pages": [
+        15,
+        13,
+        6,
+        3,
+        12
+      ],
+      "claims": [
+        {
+          "claim": "清扫时有异响，请检查清理滚刷、边刷、驱动轮、万向轮上的异物",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]中清扫时有异响的解决办法完全一致"
+        },
+        {
+          "claim": "清扫时有异响，请清洁主机底盘和防撞条",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]中清扫时有异响的解决办法包含此操作"
+        }
+      ],
+      "claim_summary": {
+        "supported": 2,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 2,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"清扫时有异响，请检查清理滚刷、边刷、驱动轮、万向轮上的异物\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]中清扫时有异响的解决办法完全一致\"}, {\"claim\": \"清扫时有异响，请清洁主机底盘和防撞条\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]中清扫时有异响的解决办法包含此操作\"}]}"
+    },
+    {
+      "case_id": "FF-013",
+      "model_code": "JH69U1",
+      "query": "用一段话总结无法回充流程，但不要增加说明书外的维修动作",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "无法回充时，应将主机搬回基站；主机无法感应基站位置时，也应将主机放回基站充电；初次使用时需长按指定键3秒开机后，手动将主机靠上基站并确保充电极片对准充电弹片；日常使用中可短按该键启动智能回充；基站前方需有1.5米以上、两侧需有0.5米以上空间；清水箱、污水箱、集尘袋须安装到位；主机连接基站后将自动开机，充电过程中无法关机 [2][3][5]。",
+      "snippet_pages": [
+        18,
+        7,
+        16,
+        10,
+        7
+      ],
+      "claims": [
+        {
+          "claim": "无法回充时，应将主机搬回基站",
+          "verdict": "supported",
+          "evidence_index": 3,
+          "reason": "故障排除表中明确写有“回充失败，请将主机搬回基站”"
+        },
+        {
+          "claim": "主机无法感应基站位置时，也应将主机放回基站充电",
+          "verdict": "supported",
+          "evidence_index": 3,
+          "reason": "故障排除表中明确写有“主机无法感应基站位置，请将主机放回基站充电”"
+        },
+        {
+          "claim": "初次使用时需长按指定键3秒开机",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "说明书写明“初次使用时，长按键3秒开机”"
+        },
+        {
+          "claim": "开机后手动将主机靠上基站并确保充电极片对准充电弹片",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "说明书写明“请将主机手动靠上基站，充电极片对准充电弹片”"
+        },
+        {
+          "claim": "日常使用中可短按该键启动智能回充",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "说明书写明“日常使用时，可直接短按启动智能回充”"
+        },
+        {
+          "claim": "基站前方需有1.5米以上、两侧需有0.5米以上空间",
+          "verdict": "supported",
+          "evidence_index": 5,
+          "reason": "安装提示中明确“确保基站前方有1.5米以上，两侧有0.5米以上空间”"
+        },
+        {
+          "claim": "清水箱、污水箱、集尘袋须安装到位",
+          "verdict": "supported",
+          "evidence_index": 5,
+          "reason": "安装提示中明确“清水箱、污水箱、集尘袋需安装到位”"
+        },
+        {
+          "claim": "主机连接基站后将自动开机，充电过程中无法关机",
+          "verdict": "supported",
+          "evidence_index": 5,
+          "reason": "提示中写明“主机连接基站后将自动开机，在充电过程中无法关机”"
+        }
+      ],
+      "claim_summary": {
+        "supported": 8,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 8,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\":[{\"claim\":\"无法回充时，应将主机搬回基站\",\"verdict\":\"supported\",\"evidence_index\":3,\"reason\":\"故障排除表中明确写有“回充失败，请将主机搬回基站”\"},{\"claim\":\"主机无法感应基站位置时，也应将主机放回基站充电\",\"verdict\":\"supported\",\"evidence_index\":3,\"reason\":\"故障排除表中明确写有“主机无法感应基站位置，请将主机放回基站充电”\"},{\"claim\":\"初次使用时需长按指定键3秒开机\",\"verdict\":\"supported\",\"evidence_index\":2,\"reason\":\"说明书写明“初次使用时，长按键3秒开机”\"},{\"claim\":\"开机后手动将主机靠上基站并确保充电极片对准充电弹片\",\"verdict\":\"supported\",\"evidence_index\":2,\"reason\":\"说明书写明“请将主机手动靠上基站，充电极片对准充电弹片”\"},{\"claim\":\"日常使用中可短按该键启动智能回充\",\"verdict\":\"supported\",\"evidence_index\":2,\"reason\":\"说明书写明“日常使用时，可直接短按启动智能回充”\"},{\"claim\":\"基站前方需有1.5米以上、两侧需有0.5米以上空间\",\"verdict\":\"supported\",\"evidence_index\":5,\"reason\":\"安装提示中明确“确保基站前方有1.5米以上，两侧有0.5米以上空间”\"},{\"claim\":\"清水箱、污水箱、集尘袋须安装到位\",\"verdict\":\"supported\",\"evidence_index\":5,\"reason\":\"安装提示中明确“清水箱、污水箱、集尘袋需安装到位”\"},{\"claim\":\"主机连接基站后将自动开机，充电过程中无法关机\",\"verdict\":\"supported\",\"evidence_index\":5,\"reason\":\"提示中写明“主机连接基站后将自动开机，在充电过程中无法关机”\"}]}"
+    },
+    {
+      "case_id": "FF-014",
+      "model_code": "VC35U1",
+      "query": "用一段话总结配网流程，但不要编造蓝牙或工程模式步骤",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "配网流程为：确保手机和主机均在WiFi覆盖范围内且尽可能靠近路由器，打开机器物理开关使主机开机，待开机完成并有语音提示后，在主机待机状态下同时按下启动键和回充键，直到听到语音提示，再根据APP提示进行后续操作；配网过程中主机灯光白灯闪烁表示处于配网状态，白灯常亮表示联网成功，白灯熄灭表示未联网成功 [2][4]。",
+      "snippet_pages": [
+        4,
+        8,
+        12,
+        8,
+        15
+      ],
+      "claims": [
+        {
+          "claim": "确保手机和主机均在WiFi覆盖范围内且尽可能靠近路由器",
+          "verdict": "supported",
+          "evidence_index": 4,
+          "reason": "片段[4]有‘配网前请确保手机、主机在 WiFi 覆盖范围内，并尽可能的靠近路由器’"
+        },
+        {
+          "claim": "打开机器物理开关使主机开机，待开机完成并有语音提示后",
+          "verdict": "supported",
+          "evidence_index": 4,
+          "reason": "片段[4]有‘打开机器物理开关后……主机进入开机状态，开机完成后，将有语音提示’"
+        },
+        {
+          "claim": "在主机待机状态下同时按下启动键和回充键，直到听到语音提示，再根据APP提示进行后续操作",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]有‘主机待机状态下，同时按下启动键和回充键，直到听到语言提示，再根据APP提示进行操作’"
+        },
+        {
+          "claim": "配网过程中主机灯光白灯闪烁表示处于配网状态",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]中‘配网’部分写明‘白灯闪烁：配网状态’"
+        },
+        {
+          "claim": "白灯常亮表示联网成功",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]中写明‘白灯常亮：联网成功’"
+        },
+        {
+          "claim": "白灯熄灭表示未联网成功",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]中写明‘白灯熄灭：未联网成功’"
+        },
+        {
+          "claim": "引用标注[2][4]",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "引用格式标注，非事实性论断"
+        }
+      ],
+      "claim_summary": {
+        "supported": 6,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 6,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"确保手机和主机均在WiFi覆盖范围内且尽可能靠近路由器\", \"verdict\": \"supported\", \"evidence_index\": 4, \"reason\": \"片段[4]有‘配网前请确保手机、主机在 WiFi 覆盖范围内，并尽可能的靠近路由器’\"}, {\"claim\": \"打开机器物理开关使主机开机，待开机完成并有语音提示后\", \"verdict\": \"supported\", \"evidence_index\": 4, \"reason\": \"片段[4]有‘打开机器物理开关后……主机进入开机状态，开机完成后，将有语音提示’\"}, {\"claim\": \"在主机待机状态下同时按下启动键和回充键，直到听到语音提示，再根据APP提示进行后续操作\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]有‘主机待机状态下，同时按下启动键和回充键，直到听到语言提示，再根据APP提示进行操作’\"}, {\"claim\": \"配网过程中主机灯光白灯闪烁表示处于配网状态\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]中‘配网’部分写明‘白灯闪烁：配网状态’\"}, {\"claim\": \"白灯常亮表示联网成功\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]中写明‘白灯常亮：联网成功’\"}, {\"claim\": \"白灯熄灭表示未联网成功\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]中写明‘白灯熄灭：未联网成功’\"}, {\"claim\": \"引用标注[2][4]\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"引用格式标注，非事实性论断\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-001",
+      "model_code": "RC-S200",
+      "query": "无法回充，找不到充电座",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "针对“无法回充，找不到充电座”问题，适用资料片段[1]，按顺序执行以下步骤，任一步骤解决后即可结束排查：\n\n步骤1（检查基站供电与摆放）：确认基站电源指示灯亮起，基站靠墙放置，前方1.5米、两侧0.5米内无障碍物和强反光物体 [1]。\n\n步骤2（清洁充电触点）：关机后用干燥软布轻擦主机充电极片与基站弹片，去除灰尘和毛发，不要使用湿布或金属工具；平台禁止用金属工具刮擦或短接触点 [1]。\n\n步骤3（清理回充路径）：移开基站前方的地毯边缘、拖鞋和数据线等杂物，确保机器人能从任意方向接近基站 [1]。\n\n步骤4（近距离重试回充）：把机器人放到基站前约1米处，按机身回充键重试；仍失败请结束自助排查并联系售后 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        9,
+        22,
+        7,
+        21,
+        14
+      ],
+      "claims": [
+        {
+          "claim": "针对“无法回充，找不到充电座”问题，适用资料片段[1]。",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "引用格式标注和问题场景描述，非事实性论断。"
+        },
+        {
+          "claim": "按顺序执行以下步骤，任一步骤解决后即可结束排查。",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]开头明确“按顺序执行以下步骤，任一步骤解决后即可结束排查”。"
+        },
+        {
+          "claim": "步骤1：确认基站电源指示灯亮起，基站靠墙放置，前方1.5米、两侧0.5米内无障碍物和强反光物体。",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与片段[1]步骤1原文一致。"
+        },
+        {
+          "claim": "步骤2：关机后用干燥软布轻擦主机充电极片与基站弹片，去除灰尘和毛发，不要使用湿布或金属工具；平台禁止用金属工具刮擦或短接触点。",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与片段[1]步骤2及安全提示一致。"
+        },
+        {
+          "claim": "步骤3：移开基站前方的地毯边缘、拖鞋和数据线等杂物，确保机器人能从任意方向接近基站。",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与片段[1]步骤3原文一致。"
+        },
+        {
+          "claim": "步骤4：把机器人放到基站前约1米处，按机身回充键重试。",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与片段[1]步骤4前半句一致。"
+        },
+        {
+          "claim": "步骤4：仍失败请结束自助排查并联系售后。",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于“请联系售后”类兜底话术，非事实性论断。"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后。",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于“请联系售后”类兜底话术，非事实性论断。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 5,
+        "unsupported": 0,
+        "uncheckable": 3,
+        "checkable": 5,
+        "faithful": true
+      },
+      "judge_raw": "{\n  \"claims\": [\n    {\n      \"claim\": \"针对“无法回充，找不到充电座”问题，适用资料片段[1]。\",\n      \"verdict\": \"uncheckable\",\n      \"evidence_index\": null,\n      \"reason\": \"引用格式标注和问题场景描述，非事实性论断。\"\n    },\n    {\n      \"claim\": \"按顺序执行以下步骤，任一步骤解决后即可结束排查。\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"片段[1]开头明确“按顺序执行以下步骤，任一步骤解决后即可结束排查”。\"\n    },\n    {\n      \"claim\": \"步骤1：确认基站电源指示灯亮起，基站靠墙放置，前方1.5米、两侧0.5米内无障碍物和强反光物体。\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"与片段[1]步骤1原文一致。\"\n    },\n    {\n      \"claim\": \"步骤2：关机后用干燥软布轻擦主机充电极片与基站弹片，去除灰尘和毛发，不要使用湿布或金属工具；平台禁止用金属工具刮擦或短接触点。\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"与片段[1]步骤2及安全提示一致。\"\n    },\n    {\n      \"claim\": \"步骤3：移开基站前方的地毯边缘、拖鞋和数据线等杂物，确保机器人能从任意方向接近基站。\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"与片段[1]步骤3原文一致。\"\n    },\n    {\n      \"claim\": \"步骤4：把机器人放到基站前约1米处，按机身回充键重试。\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"与片段[1]步骤4前半句一致。\"\n    },\n    {\n      \"claim\": \"步骤4：仍失败请结束自助排查并联系售后。\",\n      \"verdict\": \"uncheckable\",\n      \"evidence_index\": null,\n      \"reason\": \"属于“请联系售后”类兜底话术，非事实性论断。\"\n    },\n    {\n      \"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后。\",\n      \"verdict\": \"uncheckable\",\n      \"evidence_index\": null,\n      \"reason\": \"属于“请联系售后”类兜底话术，非事实性论断。\"\n    }\n  ]\n}"
+    },
+    {
+      "case_id": "SYN-FA-002",
+      "model_code": "RC-S200",
+      "query": "配网失败，wifi 连接不上",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "配网失败、Wi-Fi 连接不上时，应按以下步骤操作：\n\n- 确认手机连接的是 2.4GHz Wi-Fi，RC-S200 不支持 5GHz 单频网络 [2]；  \n- 长按回充键与电源键 3 秒直到提示音响起，机器进入配网模式，指示灯慢闪 [2]；  \n- 将机器人和手机移动到路由器同一房间内重新配网，避开微波炉等干扰源 [2]；  \n- 优先使用 2.4GHz 网络，并将机器移至路由器附近 [1]；  \n- 进入配网模式：按说明书指定的组合键长按 3 秒，指示灯慢闪或语音提示后在 App 按引导操作 [1]；  \n- 路由器建议关闭 AP 隔离与访客网络限制，Wi-Fi 名称避免特殊符号；双频合一路由建议临时拆分名称 [1]；  \n- 在 App 中删除旧设备记录后重新扫码可解决大部分绑定异常 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [2]。",
+      "snippet_pages": [
+        5,
+        10,
+        22,
+        17,
+        21
+      ],
+      "claims": [
+        {
+          "claim": "确认手机连接的是 2.4GHz Wi-Fi",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]步骤1明确要求确认手机连接2.4GHz Wi-Fi"
+        },
+        {
+          "claim": "RC-S200 不支持 5GHz 单频网络",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]步骤1明确说明不支持5GHz单频网络"
+        },
+        {
+          "claim": "长按回充键与电源键 3 秒直到提示音响起，机器进入配网模式，指示灯慢闪",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]步骤2原文完全相同"
+        },
+        {
+          "claim": "将机器人和手机移动到路由器同一房间内重新配网，避开微波炉等干扰源",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]步骤3原文完全相同"
+        },
+        {
+          "claim": "优先使用 2.4GHz 网络，并将机器移至路由器附近",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]明确要求优先使用2.4GHz网络并移至路由器附近"
+        },
+        {
+          "claim": "进入配网模式：按说明书指定的组合键长按 3 秒，指示灯慢闪或语音提示后在 App 按引导操作",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]原文完全相同"
+        },
+        {
+          "claim": "路由器建议关闭 AP 隔离与访客网络限制",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]原文匹配"
+        },
+        {
+          "claim": "Wi-Fi 名称避免特殊符号",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]原文匹配"
+        },
+        {
+          "claim": "双频合一路由建议临时拆分名称",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]原文匹配"
+        },
+        {
+          "claim": "在 App 中删除旧设备记录后重新扫码可解决大部分绑定异常",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]原文匹配"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "这是兜底话术，非事实性论断"
+        }
+      ],
+      "claim_summary": {
+        "supported": 10,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 10,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"确认手机连接的是 2.4GHz Wi-Fi\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]步骤1明确要求确认手机连接2.4GHz Wi-Fi\"}, {\"claim\": \"RC-S200 不支持 5GHz 单频网络\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]步骤1明确说明不支持5GHz单频网络\"}, {\"claim\": \"长按回充键与电源键 3 秒直到提示音响起，机器进入配网模式，指示灯慢闪\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]步骤2原文完全相同\"}, {\"claim\": \"将机器人和手机移动到路由器同一房间内重新配网，避开微波炉等干扰源\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]步骤3原文完全相同\"}, {\"claim\": \"优先使用 2.4GHz 网络，并将机器移至路由器附近\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]明确要求优先使用2.4GHz网络并移至路由器附近\"}, {\"claim\": \"进入配网模式：按说明书指定的组合键长按 3 秒，指示灯慢闪或语音提示后在 App 按引导操作\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]原文完全相同\"}, {\"claim\": \"路由器建议关闭 AP 隔离与访客网络限制\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]原文匹配\"}, {\"claim\": \"Wi-Fi 名称避免特殊符号\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]原文匹配\"}, {\"claim\": \"双频合一路由建议临时拆分名称\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]原文匹配\"}, {\"claim\": \"在 App 中删除旧设备记录后重新扫码可解决大部分绑定异常\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]原文匹配\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"这是兜底话术，非事实性论断\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-003",
+      "model_code": "RC-S200",
+      "query": "清扫的时候噪音很大",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-S200 清扫噪音异常排查适用于“清扫的时候噪音很大”这一问题，按顺序执行以下步骤，任一步骤解决后即可结束排查：\n\n步骤1（检查边刷缠绕）：关机后取下边刷，清理缠绕的毛发和线头，确认边刷卡扣完好后重新装回 [1]。\n\n步骤2（清理滚刷与滚刷罩）：打开滚刷罩取出滚刷，用清洁工具割除缠发，检查滚刷两端轴承处是否卡入异物 [1]。\n\n步骤3（检查万向轮与驱动轮）：翻转机器检查万向轮转动是否顺畅，取出万向轮清理轴孔内的毛发和碎屑；驱动轮内部结构不可拆解，异响持续请转售后 [1]。\n\n步骤4（空旷区域试运行）：在无地毯的空旷区域运行2分钟，若异响仍存在请记录声音位置并联系售后 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        11,
+        6,
+        18,
+        4,
+        2
+      ],
+      "claims": [
+        {
+          "claim": "RC-S200 清扫噪音异常排查适用于“清扫的时候噪音很大”这一问题",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]明确写明适用问题和常见表现。"
+        },
+        {
+          "claim": "按顺序执行以下步骤，任一步骤解决后即可结束排查",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]原文有此说明。"
+        },
+        {
+          "claim": "步骤1：关机后取下边刷，清理缠绕的毛发和线头，确认边刷卡扣完好后重新装回",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1内容一致。"
+        },
+        {
+          "claim": "步骤2：打开滚刷罩取出滚刷，用清洁工具割除缠发，检查滚刷两端轴承处是否卡入异物",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2内容一致。"
+        },
+        {
+          "claim": "步骤3：翻转机器检查万向轮转动是否顺畅，取出万向轮清理轴孔内的毛发和碎屑；驱动轮内部结构不可拆解，异响持续请转售后",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3内容一致。"
+        },
+        {
+          "claim": "步骤4：在无地毯的空旷区域运行2分钟，若异响仍存在请记录声音位置并联系售后",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤4内容一致。"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]最后一句原文一致。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 7,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 7,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"RC-S200 清扫噪音异常排查适用于“清扫的时候噪音很大”这一问题\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]明确写明适用问题和常见表现。\"}, {\"claim\": \"按顺序执行以下步骤，任一步骤解决后即可结束排查\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]原文有此说明。\"}, {\"claim\": \"步骤1：关机后取下边刷，清理缠绕的毛发和线头，确认边刷卡扣完好后重新装回\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤1内容一致。\"}, {\"claim\": \"步骤2：打开滚刷罩取出滚刷，用清洁工具割除缠发，检查滚刷两端轴承处是否卡入异物\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤2内容一致。\"}, {\"claim\": \"步骤3：翻转机器检查万向轮转动是否顺畅，取出万向轮清理轴孔内的毛发和碎屑；驱动轮内部结构不可拆解，异响持续请转售后\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤3内容一致。\"}, {\"claim\": \"步骤4：在无地毯的空旷区域运行2分钟，若异响仍存在请记录声音位置并联系售后\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤4内容一致。\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]最后一句原文一致。\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-004",
+      "model_code": "RC-S200",
+      "query": "吸力变小了，扫不干净",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-S200 吸力下降排查适用于问题“吸力变小了，扫不干净”，按顺序执行以下步骤，任一步骤解决后即可结束排查：\n\n步骤1（清空尘盒）：取出尘盒倒空垃圾，尘盒装满会直接导致吸力明显下降 [1]。\n\n步骤2（清理滤网）：取出海帕滤网轻拍除尘，滤网只能干洗晾干，严禁水洗后立即装回 [1]。\n\n步骤3（检查吸尘口堵塞）：翻转机器检查吸尘口是否被纸团、袜子等大件异物堵住并清理 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        12,
+        3,
+        17,
+        11,
+        6
+      ],
+      "claims": [
+        {
+          "claim": "RC-S200 吸力下降排查适用于问题“吸力变小了，扫不干净”，按顺序执行以下步骤，任一步骤解决后即可结束排查",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]第一句明确给出适用问题和执行规则。"
+        },
+        {
+          "claim": "步骤1（清空尘盒）：取出尘盒倒空垃圾，尘盒装满会直接导致吸力明显下降",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与说明书[1]步骤1内容一致。"
+        },
+        {
+          "claim": "步骤2（清理滤网）：取出海帕滤网轻拍除尘，滤网只能干洗晾干，严禁水洗后立即装回",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与说明书[1]步骤2内容一致。"
+        },
+        {
+          "claim": "步骤3（检查吸尘口堵塞）：翻转机器检查吸尘口是否被纸团、袜子等大件异物堵住并清理",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与说明书[1]步骤3内容一致。"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于“联系售后”类兜底话术，不构成可验证的事实论断。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 4,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 4,
+        "faithful": true
+      },
+      "judge_raw": "{\n  \"claims\": [\n    {\n      \"claim\": \"RC-S200 吸力下降排查适用于问题“吸力变小了，扫不干净”，按顺序执行以下步骤，任一步骤解决后即可结束排查\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"说明书[1]第一句明确给出适用问题和执行规则。\"\n    },\n    {\n      \"claim\": \"步骤1（清空尘盒）：取出尘盒倒空垃圾，尘盒装满会直接导致吸力明显下降\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"与说明书[1]步骤1内容一致。\"\n    },\n    {\n      \"claim\": \"步骤2（清理滤网）：取出海帕滤网轻拍除尘，滤网只能干洗晾干，严禁水洗后立即装回\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"与说明书[1]步骤2内容一致。\"\n    },\n    {\n      \"claim\": \"步骤3（检查吸尘口堵塞）：翻转机器检查吸尘口是否被纸团、袜子等大件异物堵住并清理\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"与说明书[1]步骤3内容一致。\"\n    },\n    {\n      \"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\",\n      \"verdict\": \"uncheckable\",\n      \"evidence_index\": null,\n      \"reason\": \"属于“联系售后”类兜底话术，不构成可验证的事实论断。\"\n    }\n  ]\n}"
+    },
+    {
+      "case_id": "SYN-FA-005",
+      "model_code": "RC-S200",
+      "query": "拖布不出水",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "适用问题为 RC-S200 拖布不出水排查 [1]。按顺序执行以下步骤，任一步骤解决后即可结束排查：\n\n步骤1（检查水箱水量与安装）：取下水箱确认水量充足，重新安装时听到咔哒声表示到位 [1]。\n\n步骤2（检查拖布安装）：确认拖布支架卡入机身，拖布魔术贴平整无褶皱，出水孔未被拖布挡住 [1]。\n\n步骤3（疏通出水孔）：用随机附带的清理针轻轻疏通水箱出水孔，清除水垢堵塞；安全提示：不要使用尖锐金属物大力捅刺出水孔 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        13,
+        6,
+        3,
+        19,
+        12
+      ],
+      "claims": [
+        {
+          "claim": "适用问题为 RC-S200 拖布不出水排查",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]标题即为“RC-S200 拖布不出水排查”。"
+        },
+        {
+          "claim": "按顺序执行以下步骤，任一步骤解决后即可结束排查",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]在排查步骤前有相同表述。"
+        },
+        {
+          "claim": "步骤1：取下水箱确认水量充足，重新安装时听到咔哒声表示到位",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1内容完全相同。"
+        },
+        {
+          "claim": "步骤2：确认拖布支架卡入机身，拖布魔术贴平整无褶皱，出水孔未被拖布挡住",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2内容完全相同。"
+        },
+        {
+          "claim": "步骤3：用随机附带的清理针轻轻疏通水箱出水孔，清除水垢堵塞",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3内容完全相同。"
+        },
+        {
+          "claim": "安全提示：不要使用尖锐金属物大力捅刺出水孔",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于通用安全提醒，非事实性论断。"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于“请联系售后”类兜底话术。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 5,
+        "unsupported": 0,
+        "uncheckable": 2,
+        "checkable": 5,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\":[{\"claim\":\"适用问题为 RC-S200 拖布不出水排查\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]标题即为“RC-S200 拖布不出水排查”。\"},{\"claim\":\"按顺序执行以下步骤，任一步骤解决后即可结束排查\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]在排查步骤前有相同表述。\"},{\"claim\":\"步骤1：取下水箱确认水量充足，重新安装时听到咔哒声表示到位\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]步骤1内容完全相同。\"},{\"claim\":\"步骤2：确认拖布支架卡入机身，拖布魔术贴平整无褶皱，出水孔未被拖布挡住\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]步骤2内容完全相同。\"},{\"claim\":\"步骤3：用随机附带的清理针轻轻疏通水箱出水孔，清除水垢堵塞\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]步骤3内容完全相同。\"},{\"claim\":\"安全提示：不要使用尖锐金属物大力捅刺出水孔\",\"verdict\":\"uncheckable\",\"evidence_index\":null,\"reason\":\"属于通用安全提醒，非事实性论断。\"},{\"claim\":\"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\",\"verdict\":\"uncheckable\",\"evidence_index\":null,\"reason\":\"属于“请联系售后”类兜底话术。\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-006",
+      "model_code": "RC-S200",
+      "query": "无法开机，按开机键没反应",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "针对“无法开机，按开机键没反应”问题，适用资料为[1]，按顺序执行以下步骤：\n\n步骤1（先充电再开机）：电量耗尽后机器无法立即开机，将机器放上基站充电30分钟后再尝试开机 [1]。\n\n步骤2（检查侧边总开关）：确认机身侧面的总电源开关处于ON位置；运输或收纳后开关常被拨到OFF [1]。\n\n步骤3（确认基站充电正常）：机器放上基站后充电指示灯应亮起；不亮时更换插座并检查电源线两端插紧 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        14,
+        9,
+        4,
+        12,
+        18
+      ],
+      "claims": [
+        {
+          "claim": "适用资料为[1]",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "引用格式标注，非事实内容"
+        },
+        {
+          "claim": "步骤1：电量耗尽后机器无法立即开机，将机器放上基站充电30分钟后再尝试开机",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]步骤1明确说明此操作及因果"
+        },
+        {
+          "claim": "步骤2：确认机身侧面的总电源开关处于ON位置；运输或收纳后开关常被拨到OFF",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]步骤2原文一致"
+        },
+        {
+          "claim": "步骤3：机器放上基站后充电指示灯应亮起；不亮时更换插座并检查电源线两端插紧",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书[1]步骤3原文一致"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "兜底售后话术，非事实性论断"
+        }
+      ],
+      "claim_summary": {
+        "supported": 3,
+        "unsupported": 0,
+        "uncheckable": 2,
+        "checkable": 3,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"适用资料为[1]\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"引用格式标注，非事实内容\"}, {\"claim\": \"步骤1：电量耗尽后机器无法立即开机，将机器放上基站充电30分钟后再尝试开机\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]步骤1明确说明此操作及因果\"}, {\"claim\": \"步骤2：确认机身侧面的总电源开关处于ON位置；运输或收纳后开关常被拨到OFF\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]步骤2原文一致\"}, {\"claim\": \"步骤3：机器放上基站后充电指示灯应亮起；不亮时更换插座并检查电源线两端插紧\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书[1]步骤3原文一致\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"兜底售后话术，非事实性论断\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-007",
+      "model_code": "RC-S200",
+      "query": "机器人总是被困，被电线缠住",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "针对“机器人总是被困，被电线缠住”问题，适用资料片段[1]。按顺序执行以下步骤，任一步骤解决后即可结束排查：\n\n步骤1（收纳地面线缆）：清理地面数据线、充电线和窗帘绳，机器容易被线缆缠绕导致被困 [1]。\n\n步骤2（确认门槛高度）：RC-S200 最大越障高度约 18 毫米，超过的门槛请设置虚拟墙或垫斜坡 [1]。\n\n步骤3（清洁悬崖传感器）：用干布擦拭机身底部的悬崖传感器，传感器脏污会导致机器在深色地面误判被困 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        15,
+        9,
+        14,
+        18,
+        16
+      ],
+      "claims": [
+        {
+          "claim": "针对“机器人总是被困，被电线缠住”问题，适用资料片段[1]",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "引用格式标注，非事实论断"
+        },
+        {
+          "claim": "按顺序执行以下步骤，任一步骤解决后即可结束排查",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]明确说明按顺序执行，任一步骤解决后结束排查"
+        },
+        {
+          "claim": "清理地面数据线、充电线和窗帘绳，机器容易被线缆缠绕导致被困",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1原文一致"
+        },
+        {
+          "claim": "RC-S200 最大越障高度约 18 毫米，超过的门槛请设置虚拟墙或垫斜坡",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2原文一致"
+        },
+        {
+          "claim": "用干布擦拭机身底部的悬崖传感器，传感器脏污会导致机器在深色地面误判被困",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3原文一致"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "兜底话术，非事实性论断"
+        }
+      ],
+      "claim_summary": {
+        "supported": 4,
+        "unsupported": 0,
+        "uncheckable": 2,
+        "checkable": 4,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\":[{\"claim\":\"针对“机器人总是被困，被电线缠住”问题，适用资料片段[1]\",\"verdict\":\"uncheckable\",\"evidence_index\":null,\"reason\":\"引用格式标注，非事实论断\"},{\"claim\":\"按顺序执行以下步骤，任一步骤解决后即可结束排查\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]明确说明按顺序执行，任一步骤解决后结束排查\"},{\"claim\":\"清理地面数据线、充电线和窗帘绳，机器容易被线缆缠绕导致被困\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]步骤1原文一致\"},{\"claim\":\"RC-S200 最大越障高度约 18 毫米，超过的门槛请设置虚拟墙或垫斜坡\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]步骤2原文一致\"},{\"claim\":\"用干布擦拭机身底部的悬崖传感器，传感器脏污会导致机器在深色地面误判被困\",\"verdict\":\"supported\",\"evidence_index\":1,\"reason\":\"片段[1]步骤3原文一致\"},{\"claim\":\"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\",\"verdict\":\"uncheckable\",\"evidence_index\":null,\"reason\":\"兜底话术，非事实性论断\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-008",
+      "model_code": "RC-S200",
+      "query": "驱动轮报错了，显示 E01",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-S200 型号出现错误码 E01（驱动轮异常）时，按说明书第 16 页和第 19 页内容，应执行以下步骤：  \n关机后按压两侧驱动轮，确认能正常回弹，并清理轮轴处缠绕的毛发 [1]；  \n检查驱动轮与机身缝隙是否卡入石子或玩具零件并取出 [1]；  \n重新开机，在平整地面试运行 [1]；  \n若 E01 仍出现，说明轮组内部故障，需联系售后 [1][2]；  \n驱动轮电机不可自行拆解维修 [1]。",
+      "snippet_pages": [
+        16,
+        19,
+        21,
+        23,
+        22
+      ],
+      "claims": [
+        {
+          "claim": "RC-S200 型号出现错误码 E01 表示驱动轮异常",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "第16页故障排查标题明确“RC-S200 错误码 E01 驱动轮异常”，第19页速查表也确认E01为驱动轮异常"
+        },
+        {
+          "claim": "关机后按压两侧驱动轮，确认能正常回弹，并清理轮轴处缠绕的毛发",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与第16页步骤1完全一致"
+        },
+        {
+          "claim": "检查驱动轮与机身缝隙是否卡入石子或玩具零件并取出",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与第16页步骤2完全一致"
+        },
+        {
+          "claim": "重新开机，在平整地面试运行",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与第16页步骤3一致"
+        },
+        {
+          "claim": "若E01仍出现，说明轮组内部故障，需联系售后",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "第16页步骤3和第19页速查表均说明重启后仍报E01为轮组内部故障，需联系售后"
+        },
+        {
+          "claim": "驱动轮电机不可自行拆解维修",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "第16页安全提示明确写出"
+        }
+      ],
+      "claim_summary": {
+        "supported": 6,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 6,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"RC-S200 型号出现错误码 E01 表示驱动轮异常\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"第16页故障排查标题明确“RC-S200 错误码 E01 驱动轮异常”，第19页速查表也确认E01为驱动轮异常\"}, {\"claim\": \"关机后按压两侧驱动轮，确认能正常回弹，并清理轮轴处缠绕的毛发\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与第16页步骤1完全一致\"}, {\"claim\": \"检查驱动轮与机身缝隙是否卡入石子或玩具零件并取出\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与第16页步骤2完全一致\"}, {\"claim\": \"重新开机，在平整地面试运行\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与第16页步骤3一致\"}, {\"claim\": \"若E01仍出现，说明轮组内部故障，需联系售后\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"第16页步骤3和第19页速查表均说明重启后仍报E01为轮组内部故障，需联系售后\"}, {\"claim\": \"驱动轮电机不可自行拆解维修\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"第16页安全提示明确写出\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-009",
+      "model_code": "RC-S200",
+      "query": "续航变短了，一次扫不完就没电",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "针对“续航变短了，一次扫不完就没电”问题，适用资料为[1]，按顺序执行以下步骤：\n\n步骤1（确认清扫档位与环境）：在 App 查看是否长期使用最高吸力档，高档位与地毯环境耗电明显加快，改用标准档对比一次续航 [1]。\n\n步骤2（完整充放校准电量）：让机器清扫至自动回充，然后一次性充到指示灯显示充满，重复一轮以校准电量显示 [1]。\n\n步骤3（清洁充电触点）：触点脏污会导致未充满即中断，关机后用干燥软布轻擦主机极片与基站弹片；禁止使用湿布或金属工具接触触点 [1]。\n\n步骤4（判断电池老化）：使用超过两年且校准后续航仍明显缩短的，属电池自然衰减，应结束自助排查并联系售后；电池不可自行拆卸或更换，必须由官方售后处理 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        17,
+        22,
+        18,
+        9,
+        20
+      ],
+      "claims": [
+        {
+          "claim": "针对“续航变短了，一次扫不完就没电”问题，适用资料为[1]并按其步骤执行",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "检索片段[1]标题即为该问题的排查步骤"
+        },
+        {
+          "claim": "步骤1：在App查看是否长期使用最高吸力档，高档位与地毯环境耗电明显加快，改用标准档对比一次续航",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1原文一致"
+        },
+        {
+          "claim": "步骤2：让机器清扫至自动回充，然后一次性充到指示灯显示充满，重复一轮以校准电量显示",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2原文一致"
+        },
+        {
+          "claim": "步骤3：触点脏污会导致未充满即中断，关机后用干燥软布轻擦主机极片与基站弹片；禁止使用湿布或金属工具接触触点",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3及安全提示一致"
+        },
+        {
+          "claim": "步骤4：使用超过两年且校准后续航仍明显缩短的，属电池自然衰减，应结束自助排查并联系售后；电池不可自行拆卸或更换，必须由官方售后处理",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤4及安全提示一致"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]最后一句一致"
+        }
+      ],
+      "claim_summary": {
+        "supported": 6,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 6,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"针对“续航变短了，一次扫不完就没电”问题，适用资料为[1]并按其步骤执行\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"检索片段[1]标题即为该问题的排查步骤\"}, {\"claim\": \"步骤1：在App查看是否长期使用最高吸力档，高档位与地毯环境耗电明显加快，改用标准档对比一次续航\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤1原文一致\"}, {\"claim\": \"步骤2：让机器清扫至自动回充，然后一次性充到指示灯显示充满，重复一轮以校准电量显示\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤2原文一致\"}, {\"claim\": \"步骤3：触点脏污会导致未充满即中断，关机后用干燥软布轻擦主机极片与基站弹片；禁止使用湿布或金属工具接触触点\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤3及安全提示一致\"}, {\"claim\": \"步骤4：使用超过两年且校准后续航仍明显缩短的，属电池自然衰减，应结束自助排查并联系售后；电池不可自行拆卸或更换，必须由官方售后处理\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤4及安全提示一致\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]最后一句一致\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-010",
+      "model_code": "RC-S200",
+      "query": "定时清扫没有执行",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-S200 定时清扫不执行的排查步骤如下：  \n步骤1（检查定时任务设置）：在 App 确认定时任务处于启用状态，任务时间与手机系统时区一致，修改后保存并等待同步成功提示 [1]。  \n步骤2（检查勿扰模式冲突）：定时时间落在勿扰时段内时机器不会启动，调整勿扰时段或把定时时间挪出勿扰区间 [1]。  \n步骤3（确认电量与在座状态）：电量过低或机器不在基站上时定时任务可能不执行，定时开始前让机器在基站充电待命 [1]。  \n步骤4（确认设备在线）：App 首页显示设备离线时定时指令无法下发，按配网章恢复在线后重试；仍不执行请联系售后 [1]。  \n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        18,
+        6,
+        11,
+        17,
+        13
+      ],
+      "claims": [
+        {
+          "claim": "RC-S200 定时清扫不执行的排查步骤1：在 App 确认定时任务处于启用状态，任务时间与手机系统时区一致，修改后保存并等待同步成功提示",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与说明书[1]步骤1完全一致"
+        },
+        {
+          "claim": "步骤2：定时时间落在勿扰时段内时机器不会启动，调整勿扰时段或把定时时间挪出勿扰区间",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与说明书[1]步骤2完全一致"
+        },
+        {
+          "claim": "步骤3：电量过低或机器不在基站上时定时任务可能不执行，定时开始前让机器在基站充电待命",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与说明书[1]步骤3完全一致"
+        },
+        {
+          "claim": "步骤4：App 首页显示设备离线时定时指令无法下发，按配网章恢复在线后重试；仍不执行请联系售后",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与说明书[1]步骤4完全一致"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于兜底话术，不构成可验证的事实性论断"
+        }
+      ],
+      "claim_summary": {
+        "supported": 4,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 4,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"RC-S200 定时清扫不执行的排查步骤1：在 App 确认定时任务处于启用状态，任务时间与手机系统时区一致，修改后保存并等待同步成功提示\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与说明书[1]步骤1完全一致\"}, {\"claim\": \"步骤2：定时时间落在勿扰时段内时机器不会启动，调整勿扰时段或把定时时间挪出勿扰区间\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与说明书[1]步骤2完全一致\"}, {\"claim\": \"步骤3：电量过低或机器不在基站上时定时任务可能不执行，定时开始前让机器在基站充电待命\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与说明书[1]步骤3完全一致\"}, {\"claim\": \"步骤4：App 首页显示设备离线时定时指令无法下发，按配网章恢复在线后重试；仍不执行请联系售后\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与说明书[1]步骤4完全一致\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"属于兜底话术，不构成可验证的事实性论断\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-012",
+      "model_code": "RC-M500",
+      "query": "配网失败连不上网络",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "配网失败连不上网络时，应按以下步骤操作：\n\n确认手机连接 2.4GHz Wi-Fi；若为双频合一路由建议临时分开 2.4G/5G 名称 [2]。  \n长按基站上的召回键与清洗键 3 秒，机器语音提示进入配网模式 [2]。  \n在 App 中删除旧设备记录后重新扫描水箱盖内侧二维码绑定 [2]。  \n\n本机支持 2.4GHz Wi-Fi；配网失败时请优先使用 2.4GHz 网络，并将机器移至路由器附近 [1]。  \n进入配网模式需按说明书指定的组合键长按 3 秒，指示灯慢闪或语音提示后在 App 按引导操作 [1]。  \n路由器建议关闭 AP 隔离与访客网络限制，Wi-Fi 名称避免特殊符号；双频合一路由建议临时拆分名称 [1]。  \n在 App 中删除旧设备记录后重新扫码可解决大部分绑定异常 [1]。  \n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [2][4]。",
+      "snippet_pages": [
+        5,
+        10,
+        24,
+        18,
+        17
+      ],
+      "claims": [
+        {
+          "claim": "确认手机连接 2.4GHz Wi-Fi",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段2步骤1明确要求确认手机连接2.4GHz Wi-Fi"
+        },
+        {
+          "claim": "若为双频合一路由建议临时分开 2.4G/5G 名称",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段2步骤1写明双频合一路由建议临时分开2.4G/5G名称"
+        },
+        {
+          "claim": "长按基站上的召回键与清洗键 3 秒，机器语音提示进入配网模式",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段2步骤2原文一致"
+        },
+        {
+          "claim": "在 App 中删除旧设备记录后重新扫描水箱盖内侧二维码绑定",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段2步骤3原文一致"
+        },
+        {
+          "claim": "本机支持 2.4GHz Wi-Fi",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段1原文直接说明本机支持2.4GHz Wi-Fi"
+        },
+        {
+          "claim": "配网失败时请优先使用 2.4GHz 网络，并将机器移至路由器附近",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段1原文有相同建议"
+        },
+        {
+          "claim": "进入配网模式需按说明书指定的组合键长按 3 秒，指示灯慢闪或语音提示后在 App 按引导操作",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段1原文一致"
+        },
+        {
+          "claim": "路由器建议关闭 AP 隔离与访客网络限制，Wi-Fi 名称避免特殊符号；双频合一路由建议临时拆分名称",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段1原文一致"
+        },
+        {
+          "claim": "在 App 中删除旧设备记录后重新扫码可解决大部分绑定异常",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段1原文一致"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于联系售后的兜底话术，非事实性论断"
+        }
+      ],
+      "claim_summary": {
+        "supported": 9,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 9,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"确认手机连接 2.4GHz Wi-Fi\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段2步骤1明确要求确认手机连接2.4GHz Wi-Fi\"}, {\"claim\": \"若为双频合一路由建议临时分开 2.4G/5G 名称\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段2步骤1写明双频合一路由建议临时分开2.4G/5G名称\"}, {\"claim\": \"长按基站上的召回键与清洗键 3 秒，机器语音提示进入配网模式\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段2步骤2原文一致\"}, {\"claim\": \"在 App 中删除旧设备记录后重新扫描水箱盖内侧二维码绑定\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段2步骤3原文一致\"}, {\"claim\": \"本机支持 2.4GHz Wi-Fi\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段1原文直接说明本机支持2.4GHz Wi-Fi\"}, {\"claim\": \"配网失败时请优先使用 2.4GHz 网络，并将机器移至路由器附近\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段1原文有相同建议\"}, {\"claim\": \"进入配网模式需按说明书指定的组合键长按 3 秒，指示灯慢闪或语音提示后在 App 按引导操作\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段1原文一致\"}, {\"claim\": \"路由器建议关闭 AP 隔离与访客网络限制，Wi-Fi 名称避免特殊符号；双频合一路由建议临时拆分名称\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段1原文一致\"}, {\"claim\": \"在 App 中删除旧设备记录后重新扫码可解决大部分绑定异常\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段1原文一致\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"属于联系售后的兜底话术，非事实性论断\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-013",
+      "model_code": "RC-M500",
+      "query": "清洗拖布不进水",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-M500 基站清洗拖布不进水时，应按以下顺序排查：  \n步骤1（检查清水箱）：取出基站清水箱确认水量高于最低水位线，安装时按压到位听到咔哒声 [1]。  \n步骤2（检查水箱出水阀）：检查清水箱底部出水阀是否被水垢卡住，用温水冲洗阀口 [1]。  \n步骤3（清理清洗槽）：取出清洗槽刮板，清理槽内毛发与污泥，喷水孔堵塞时用软毛刷清理 [1]。  \n步骤4（手动触发自清洗验证）：在基站面板按下清洗键观察是否正常喷水；仍不进水请联系售后检查水泵 [1]。  \n安全提示：基站水泵不可自行拆解 [1]。  \n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        11,
+        7,
+        19,
+        6,
+        3
+      ],
+      "claims": [
+        {
+          "claim": "RC-M500 基站清洗拖布不进水时，应按步骤1检查清水箱，确认水量高于最低水位线，安装时按压到位听到咔哒声",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书步骤1原文一致"
+        },
+        {
+          "claim": "步骤2检查水箱出水阀是否被水垢卡住，用温水冲洗阀口",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书步骤2原文一致"
+        },
+        {
+          "claim": "步骤3取出清洗槽刮板，清理槽内毛发与污泥，喷水孔堵塞时用软毛刷清理",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书步骤3原文一致"
+        },
+        {
+          "claim": "步骤4在基站面板按下清洗键观察是否正常喷水；仍不进水请联系售后检查水泵",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书步骤4原文一致"
+        },
+        {
+          "claim": "安全提示：基站水泵不可自行拆解",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "说明书安全提示原文一致"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于兜底售后话术，非事实性技术论断"
+        }
+      ],
+      "claim_summary": {
+        "supported": 5,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 5,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"RC-M500 基站清洗拖布不进水时，应按步骤1检查清水箱，确认水量高于最低水位线，安装时按压到位听到咔哒声\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书步骤1原文一致\"}, {\"claim\": \"步骤2检查水箱出水阀是否被水垢卡住，用温水冲洗阀口\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书步骤2原文一致\"}, {\"claim\": \"步骤3取出清洗槽刮板，清理槽内毛发与污泥，喷水孔堵塞时用软毛刷清理\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书步骤3原文一致\"}, {\"claim\": \"步骤4在基站面板按下清洗键观察是否正常喷水；仍不进水请联系售后检查水泵\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书步骤4原文一致\"}, {\"claim\": \"安全提示：基站水泵不可自行拆解\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"说明书安全提示原文一致\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"属于兜底售后话术，非事实性技术论断\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-014",
+      "model_code": "RC-M500",
+      "query": "污水箱一直报警",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-M500 污水箱一直报警时，应按顺序执行以下步骤：  \n步骤1（倒空污水箱）：取出污水箱倒掉污水并用清水冲洗，污水箱满或浮子卡住都会触发报警 [1]。  \n步骤2（清洁浮子传感器）：冲洗污水箱内的白色浮子并确认其上下浮动自如 [1]。  \n步骤3（重新安装污水箱）：擦干污水箱底部与基站接口后装回，确认到位后报警应消除 [1]。  \n以上步骤全部执行后问题仍存在的，应停止自助排查并联系官方售后 [1]。  \n污水箱内置浮子传感器，污水满或浮子卡住会触发满水报警 [2]。  \n错误码 E08（污水箱满）对应现象为污水箱已满或浮子卡住，自助排查方法为倒空污水箱并清洁浮子传感器；清洁后误报持续则需售后支持 [3]。",
+      "snippet_pages": [
+        12,
+        7,
+        23,
+        11,
+        19
+      ],
+      "claims": [
+        {
+          "claim": "RC-M500 污水箱一直报警时，应按顺序执行以下步骤",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]明确说明按顺序执行步骤"
+        },
+        {
+          "claim": "步骤1（倒空污水箱）：取出污水箱倒掉污水并用清水冲洗，污水箱满或浮子卡住都会触发报警",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1原文一致"
+        },
+        {
+          "claim": "步骤2（清洁浮子传感器）：冲洗污水箱内的白色浮子并确认其上下浮动自如",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2原文一致"
+        },
+        {
+          "claim": "步骤3（重新安装污水箱）：擦干污水箱底部与基站接口后装回，确认到位后报警应消除",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3原文一致"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，应停止自助排查并联系官方售后",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]结尾原文一致"
+        },
+        {
+          "claim": "污水箱内置浮子传感器，污水满或浮子卡住会触发满水报警",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]明确写明该内容"
+        },
+        {
+          "claim": "错误码 E08（污水箱满）对应现象为污水箱已满或浮子卡住",
+          "verdict": "supported",
+          "evidence_index": 3,
+          "reason": "片段[3]错误码E08描述一致"
+        },
+        {
+          "claim": "自助排查方法为倒空污水箱并清洁浮子传感器",
+          "verdict": "supported",
+          "evidence_index": 3,
+          "reason": "片段[3]自助排查内容一致"
+        },
+        {
+          "claim": "清洁后误报持续则需售后支持",
+          "verdict": "supported",
+          "evidence_index": 3,
+          "reason": "片段[3]注明清洁后误报持续需售后"
+        }
+      ],
+      "claim_summary": {
+        "supported": 9,
+        "unsupported": 0,
+        "uncheckable": 0,
+        "checkable": 9,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"RC-M500 污水箱一直报警时，应按顺序执行以下步骤\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]明确说明按顺序执行步骤\"}, {\"claim\": \"步骤1（倒空污水箱）：取出污水箱倒掉污水并用清水冲洗，污水箱满或浮子卡住都会触发报警\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤1原文一致\"}, {\"claim\": \"步骤2（清洁浮子传感器）：冲洗污水箱内的白色浮子并确认其上下浮动自如\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤2原文一致\"}, {\"claim\": \"步骤3（重新安装污水箱）：擦干污水箱底部与基站接口后装回，确认到位后报警应消除\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤3原文一致\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，应停止自助排查并联系官方售后\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]结尾原文一致\"}, {\"claim\": \"污水箱内置浮子传感器，污水满或浮子卡住会触发满水报警\", \"verdict\": \"supported\", \"evidence_index\": 2, \"reason\": \"片段[2]明确写明该内容\"}, {\"claim\": \"错误码 E08（污水箱满）对应现象为污水箱已满或浮子卡住\", \"verdict\": \"supported\", \"evidence_index\": 3, \"reason\": \"片段[3]错误码E08描述一致\"}, {\"claim\": \"自助排查方法为倒空污水箱并清洁浮子传感器\", \"verdict\": \"supported\", \"evidence_index\": 3, \"reason\": \"片段[3]自助排查内容一致\"}, {\"claim\": \"清洁后误报持续则需售后支持\", \"verdict\": \"supported\", \"evidence_index\": 3, \"reason\": \"片段[3]注明清洁后误报持续需售后\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-015",
+      "model_code": "RC-M500",
+      "query": "基站不集尘",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-M500 基站不集尘的排查步骤如下：  \n步骤1（检查集尘袋）：打开基站上盖检查集尘袋是否装满或未卡入卡槽，更换新集尘袋 [1]。  \n步骤2（检查集尘风道）：检查基站集尘口与机器尘盒对接处是否被纸屑堵塞并清理 [1]。  \n步骤3（检查尘盒密封胶条）：检查机器尘盒底盖密封胶条是否变形脱落 [1]。  \n步骤4（手动集尘验证）：机器上基站后在 App 点击手动集尘，观察风机声音；无反应请联系售后 [1]。  \n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        13,
+        7,
+        3,
+        4,
+        15
+      ]
+    },
+    {
+      "case_id": "SYN-FA-016",
+      "model_code": "RC-M500",
+      "query": "运行噪音很大有异响",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-M500 运行噪音很大有异响时，应按以下顺序执行排查步骤，任一步骤解决后即可结束排查：\n\n步骤1（清理边刷与滚刷）：关机后清理边刷和滚刷缠绕的毛发，检查滚刷浮动框架是否卡异物 [1]。\n\n步骤2（检查拖布支架）：确认两块旋转拖布支架安装到位，拖布脱落偏心旋转会产生异响 [1]。\n\n步骤3（区分基站噪音）：若噪音只在回洗或集尘时出现，属基站风机与水泵正常工作音；音量突然增大请联系售后 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        14,
+        15,
+        12,
+        13,
+        17
+      ],
+      "claims": [
+        {
+          "claim": "RC-M500 运行噪音很大有异响时，应按顺序执行排查步骤",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]写明适用问题为RC-M500清扫噪音异常排查，常见表现为运行噪音很大有异响，且按顺序执行步骤。"
+        },
+        {
+          "claim": "任一步骤解决后即可结束排查",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]明确说明任一步骤解决后即可结束排查。"
+        },
+        {
+          "claim": "步骤1：关机后清理边刷和滚刷缠绕的毛发，检查滚刷浮动框架是否卡异物",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1原文与此完全一致。"
+        },
+        {
+          "claim": "步骤2：确认两块旋转拖布支架安装到位，拖布脱落偏心旋转会产生异响",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2原文与此完全一致。"
+        },
+        {
+          "claim": "步骤3：若噪音只在回洗或集尘时出现，属基站风机与水泵正常工作音；音量突然增大请联系售后",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3原文与此完全一致。"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于'请联系售后'类兜底话术，不构成可验证的事实性论断。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 5,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 5,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"RC-M500 运行噪音很大有异响时，应按顺序执行排查步骤\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]写明适用问题为RC-M500清扫噪音异常排查，常见表现为运行噪音很大有异响，且按顺序执行步骤。\"}, {\"claim\": \"任一步骤解决后即可结束排查\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]明确说明任一步骤解决后即可结束排查。\"}, {\"claim\": \"步骤1：关机后清理边刷和滚刷缠绕的毛发，检查滚刷浮动框架是否卡异物\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤1原文与此完全一致。\"}, {\"claim\": \"步骤2：确认两块旋转拖布支架安装到位，拖布脱落偏心旋转会产生异响\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤2原文与此完全一致。\"}, {\"claim\": \"步骤3：若噪音只在回洗或集尘时出现，属基站风机与水泵正常工作音；音量突然增大请联系售后\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤3原文与此完全一致。\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"属于'请联系售后'类兜底话术，不构成可验证的事实性论断。\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-017",
+      "model_code": "RC-M500",
+      "query": "吸力下降吸不干净",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-M500 吸力下降吸不干净时，按顺序执行以下步骤：  \n步骤1（清空尘盒并清理滤网）：倒空尘盒、轻拍海帕滤网除尘，滤网水洗后必须完全晾干再装回 [1]。  \n步骤2（检查吸尘口）：翻转机器清理吸尘口堵塞的大件异物 [1]。  \n步骤3（确认吸力档位）：在 App 检查是否被设为节能档，地毯环境建议开启地毯增压 [1]。  \n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        15,
+        7,
+        3,
+        6,
+        23
+      ],
+      "claims": [
+        {
+          "claim": "RC-M500 吸力下降吸不干净时，按顺序执行以下步骤",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]明确说明适用问题为吸力下降吸不干净，并按顺序执行步骤"
+        },
+        {
+          "claim": "步骤1：倒空尘盒、轻拍海帕滤网除尘，滤网水洗后必须完全晾干再装回",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与片段[1]步骤1完全一致"
+        },
+        {
+          "claim": "步骤2：翻转机器清理吸尘口堵塞的大件异物",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与片段[1]步骤2完全一致"
+        },
+        {
+          "claim": "步骤3：在App检查是否被设为节能档，地毯环境建议开启地毯增压",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "与片段[1]步骤3完全一致"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于联系售后的兜底话术，按规则归为不可核查"
+        }
+      ],
+      "claim_summary": {
+        "supported": 4,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 4,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"RC-M500 吸力下降吸不干净时，按顺序执行以下步骤\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]明确说明适用问题为吸力下降吸不干净，并按顺序执行步骤\"}, {\"claim\": \"步骤1：倒空尘盒、轻拍海帕滤网除尘，滤网水洗后必须完全晾干再装回\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与片段[1]步骤1完全一致\"}, {\"claim\": \"步骤2：翻转机器清理吸尘口堵塞的大件异物\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与片段[1]步骤2完全一致\"}, {\"claim\": \"步骤3：在App检查是否被设为节能档，地毯环境建议开启地毯增压\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"与片段[1]步骤3完全一致\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"属于联系售后的兜底话术，按规则归为不可核查\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-018",
+      "model_code": "RC-M500",
+      "query": "开不了机没有反应",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-M500 开不了机没有反应时，按顺序执行以下步骤：\n\n步骤1：先把机器放上基站充电30分钟，深度亏电后需充电半小时才能开机 [1]。\n\n步骤2：确认机身侧面总开关在ON位置 [1]。\n\n步骤3：确认机器充电极片与基站弹片贴合，指示灯亮起表示充电正常 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        16,
+        22,
+        24,
+        10,
+        21
+      ],
+      "claims": [
+        {
+          "claim": "RC-M500 开不了机没有反应",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]标题为'RC-M500 无法开机排查'，常见表现为'开不了机没有反应'"
+        },
+        {
+          "claim": "先把机器放上基站充电30分钟",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1为'上基站充电30分钟'"
+        },
+        {
+          "claim": "深度亏电后需充电半小时才能开机",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1原文为'深度亏电后需充电半小时才能开机'"
+        },
+        {
+          "claim": "确认机身侧面总开关在ON位置",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2原文为'确认机身侧面总开关在 ON 位置'"
+        },
+        {
+          "claim": "确认机器充电极片与基站弹片贴合",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3原文为'确认机器充电极片与基站弹片贴合'"
+        },
+        {
+          "claim": "指示灯亮起表示充电正常",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3原文为'指示灯亮起表示充电正常'"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于'请联系售后'类兜底话术，非事实性内容"
+        }
+      ],
+      "claim_summary": {
+        "supported": 6,
+        "unsupported": 0,
+        "uncheckable": 1,
+        "checkable": 6,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"RC-M500 开不了机没有反应\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]标题为'RC-M500 无法开机排查'，常见表现为'开不了机没有反应'\"}, {\"claim\": \"先把机器放上基站充电30分钟\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤1为'上基站充电30分钟'\"}, {\"claim\": \"深度亏电后需充电半小时才能开机\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤1原文为'深度亏电后需充电半小时才能开机'\"}, {\"claim\": \"确认机身侧面总开关在ON位置\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤2原文为'确认机身侧面总开关在 ON 位置'\"}, {\"claim\": \"确认机器充电极片与基站弹片贴合\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤3原文为'确认机器充电极片与基站弹片贴合'\"}, {\"claim\": \"指示灯亮起表示充电正常\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤3原文为'指示灯亮起表示充电正常'\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"属于'请联系售后'类兜底话术，非事实性内容\"}]}"
+    },
+    {
+      "case_id": "SYN-FA-019",
+      "model_code": "RC-M500",
+      "query": "报错 E07 水路异常",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "RC-M500 型号报错 E07 水路异常时，按顺序执行以下步骤：  \n步骤1（补水并重新安装清水箱）：E07 表示供水异常，先确认清水箱水量并重新安装到位 [1]。  \n步骤2（清理出水阀水垢）：温水冲洗清水箱出水阀，硬水地区建议每月除垢一次 [1]。  \n步骤3（重启验证）：重启基站后手动触发清洗验证；E07 复现请联系售后 [1]。  \n\n错误码 E07（水路异常）的原因为清水箱缺水、未装到位或出水阀被水垢堵塞 [2]。自助排查方法为补水并重新安装清水箱，温水冲洗出水阀 [2]。若重启后 E07 复现，则需检查水泵，应联系售后 [2]。  \n\n以上步骤全部执行后问题仍存在，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        17,
+        22,
+        21,
+        20,
+        24
+      ],
+      "claims": [
+        {
+          "claim": "RC-M500 型号报错 E07 水路异常时，按顺序执行以下步骤",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]开头明确说明适用于RC-M500错误码E07水路异常排查，并按顺序执行以下步骤。"
+        },
+        {
+          "claim": "E07 表示供水异常",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1原文写明“E07 表示供水异常”。"
+        },
+        {
+          "claim": "先确认清水箱水量并重新安装到位",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1写明“先确认清水箱水量并重新安装到位”。"
+        },
+        {
+          "claim": "温水冲洗清水箱出水阀",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2写明“温水冲洗清水箱出水阀”。"
+        },
+        {
+          "claim": "硬水地区建议每月除垢一次",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2写明“硬水地区建议每月除垢一次”。"
+        },
+        {
+          "claim": "重启基站后手动触发清洗验证",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3写明“重启基站后手动触发清洗验证”。"
+        },
+        {
+          "claim": "E07 复现请联系售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于“请联系售后”类兜底话术，非事实性内容。"
+        },
+        {
+          "claim": "错误码 E07（水路异常）的原因为清水箱缺水、未装到位或出水阀被水垢堵塞",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]错误码速查中写明E07原因为“清水箱缺水、未装到位或出水阀被水垢堵塞”。"
+        },
+        {
+          "claim": "自助排查方法为补水并重新安装清水箱，温水冲洗出水阀",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]自助排查写明“补水并重新安装清水箱，温水冲洗出水阀”。"
+        },
+        {
+          "claim": "若重启后 E07 复现，则需检查水泵",
+          "verdict": "supported",
+          "evidence_index": 2,
+          "reason": "片段[2]需要售后写明“重启后 E07 复现，需检查水泵”。"
+        },
+        {
+          "claim": "若重启后 E07 复现，应联系售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "属于“请联系售后”类兜底话术，非事实性内容。"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "兜底售后话术，非事实性内容。"
+        }
+      ],
+      "claim_summary": {
+        "supported": 9,
+        "unsupported": 0,
+        "uncheckable": 3,
+        "checkable": 9,
+        "faithful": true
+      },
+      "judge_raw": "{\n  \"claims\": [\n    {\n      \"claim\": \"RC-M500 型号报错 E07 水路异常时，按顺序执行以下步骤\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"片段[1]开头明确说明适用于RC-M500错误码E07水路异常排查，并按顺序执行以下步骤。\"\n    },\n    {\n      \"claim\": \"E07 表示供水异常\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"片段[1]步骤1原文写明“E07 表示供水异常”。\"\n    },\n    {\n      \"claim\": \"先确认清水箱水量并重新安装到位\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"片段[1]步骤1写明“先确认清水箱水量并重新安装到位”。\"\n    },\n    {\n      \"claim\": \"温水冲洗清水箱出水阀\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"片段[1]步骤2写明“温水冲洗清水箱出水阀”。\"\n    },\n    {\n      \"claim\": \"硬水地区建议每月除垢一次\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"片段[1]步骤2写明“硬水地区建议每月除垢一次”。\"\n    },\n    {\n      \"claim\": \"重启基站后手动触发清洗验证\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 1,\n      \"reason\": \"片段[1]步骤3写明“重启基站后手动触发清洗验证”。\"\n    },\n    {\n      \"claim\": \"E07 复现请联系售后\",\n      \"verdict\": \"uncheckable\",\n      \"evidence_index\": null,\n      \"reason\": \"属于“请联系售后”类兜底话术，非事实性内容。\"\n    },\n    {\n      \"claim\": \"错误码 E07（水路异常）的原因为清水箱缺水、未装到位或出水阀被水垢堵塞\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 2,\n      \"reason\": \"片段[2]错误码速查中写明E07原因为“清水箱缺水、未装到位或出水阀被水垢堵塞”。\"\n    },\n    {\n      \"claim\": \"自助排查方法为补水并重新安装清水箱，温水冲洗出水阀\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 2,\n      \"reason\": \"片段[2]自助排查写明“补水并重新安装清水箱，温水冲洗出水阀”。\"\n    },\n    {\n      \"claim\": \"若重启后 E07 复现，则需检查水泵\",\n      \"verdict\": \"supported\",\n      \"evidence_index\": 2,\n      \"reason\": \"片段[2]需要售后写明“重启后 E07 复现，需检查水泵”。\"\n    },\n    {\n      \"claim\": \"若重启后 E07 复现，应联系售后\",\n      \"verdict\": \"uncheckable\",\n      \"evidence_index\": null,\n      \"reason\": \"属于“请联系售后”类兜底话术，非事实性内容。\"\n    },\n    {\n      \"claim\": \"以上步骤全部执行后问题仍存在，请停止自助排查并联系官方售后\",\n      \"verdict\": \"uncheckable\",\n      \"evidence_index\": null,\n      \"reason\": \"兜底售后话术，非事实性内容。\"\n    }\n  ]\n}"
+    },
+    {
+      "case_id": "SYN-FA-020",
+      "model_code": "RC-M500",
+      "query": "App 显示设备离线，固件升级失败",
+      "generation_status": "answered",
+      "refusal_reason": null,
+      "answer": "App 显示设备离线、固件升级失败时，应按顺序执行以下步骤，任一步骤解决后即可结束排查 [1]：\n\n步骤1（确认路由器与信号强度）：机器与基站处于 Wi-Fi 信号弱区会频繁离线，尽量让基站位于路由器覆盖良好的位置，避免隔多堵承重墙 [1]。\n\n步骤2（重启机器与路由器）：关闭机身总电源开关 10 秒后重新开机，同时重启路由器，等待约 2 分钟观察 App 是否恢复在线 [1]。\n\n步骤3（满足固件升级条件）：固件升级需机器停在基站上且电量不低于 50%，升级过程中不要断电、搬动机器或关闭 App [1]。\n\n步骤4（删除设备重新绑定）：仍离线或升级反复失败时，在 App 删除设备记录后按配网章重新配网绑定；再失败请联系售后 [1]。\n\n以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后 [1]。",
+      "snippet_pages": [
+        18,
+        5,
+        10,
+        21,
+        20
+      ],
+      "claims": [
+        {
+          "claim": "App 显示设备离线、固件升级失败时，应按顺序执行以下步骤，任一步骤解决后即可结束排查",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]开头明确给出适用问题与排查步骤说明"
+        },
+        {
+          "claim": "机器与基站处于 Wi-Fi 信号弱区会频繁离线，尽量让基站位于路由器覆盖良好的位置，避免隔多堵承重墙",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤1原文一致"
+        },
+        {
+          "claim": "关闭机身总电源开关 10 秒后重新开机，同时重启路由器，等待约 2 分钟观察 App 是否恢复在线",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤2原文一致"
+        },
+        {
+          "claim": "固件升级需机器停在基站上且电量不低于 50%，升级过程中不要断电、搬动机器或关闭 App",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤3原文一致"
+        },
+        {
+          "claim": "仍离线或升级反复失败时，在 App 删除设备记录后按配网章重新配网绑定",
+          "verdict": "supported",
+          "evidence_index": 1,
+          "reason": "片段[1]步骤4前半句原文一致"
+        },
+        {
+          "claim": "再失败请联系售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "兜底话术，非事实性论断"
+        },
+        {
+          "claim": "以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后",
+          "verdict": "uncheckable",
+          "evidence_index": null,
+          "reason": "兜底话术，非事实性论断"
+        }
+      ],
+      "claim_summary": {
+        "supported": 5,
+        "unsupported": 0,
+        "uncheckable": 2,
+        "checkable": 5,
+        "faithful": true
+      },
+      "judge_raw": "{\"claims\": [{\"claim\": \"App 显示设备离线、固件升级失败时，应按顺序执行以下步骤，任一步骤解决后即可结束排查\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]开头明确给出适用问题与排查步骤说明\"}, {\"claim\": \"机器与基站处于 Wi-Fi 信号弱区会频繁离线，尽量让基站位于路由器覆盖良好的位置，避免隔多堵承重墙\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤1原文一致\"}, {\"claim\": \"关闭机身总电源开关 10 秒后重新开机，同时重启路由器，等待约 2 分钟观察 App 是否恢复在线\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤2原文一致\"}, {\"claim\": \"固件升级需机器停在基站上且电量不低于 50%，升级过程中不要断电、搬动机器或关闭 App\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤3原文一致\"}, {\"claim\": \"仍离线或升级反复失败时，在 App 删除设备记录后按配网章重新配网绑定\", \"verdict\": \"supported\", \"evidence_index\": 1, \"reason\": \"片段[1]步骤4前半句原文一致\"}, {\"claim\": \"再失败请联系售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"兜底话术，非事实性论断\"}, {\"claim\": \"以上步骤全部执行后问题仍存在的，请停止自助排查并联系官方售后\", \"verdict\": \"uncheckable\", \"evidence_index\": null, \"reason\": \"兜底话术，非事实性论断\"}]}"
+    }
+  ]
+}

@@ -73,6 +73,44 @@ def test_answer_with_valid_citations_is_persisted(client):
         assert record.snippets_sha256 and record.latency_ms >= 0
 
 
+def test_trailing_refuse_marker_is_stripped_from_delivered_answer(client):
+    # v3 在线评测 FF-001 实锤：模型在完整回答末尾附加 REFUSE 控制标记，
+    # 旧逻辑只看首行前 20 字，标记被原样发给用户并写进留痕。
+    model_id = _prepare_model_with_knowledge(client)
+    provider = ScriptedGenerationProvider(["先清空尘盒并清理滤网 [1]。 REFUSE"])
+    with client.app.state.session_factory() as db:
+        result = generate_answer(
+            db,
+            user_id=None,
+            robot_model_id=model_id,
+            query="吸力变小了怎么办",
+            embedding_provider=HashingNgramEmbeddingProvider(),
+            generation_provider=provider,
+            min_score=0.0,
+        )
+        assert result.status == "answered"
+        assert "REFUSE" not in result.answer
+        assert result.answer.endswith("[1]。")
+        record = db.get(GenerationRecord, result.record_id)
+        assert "REFUSE" not in record.answer
+
+
+def test_answer_that_is_only_a_trailing_refuse_marker_still_refuses(client):
+    # 剥掉标记后没有正文 → 必须按拒答处理，不能返回空回答
+    model_id = _prepare_model_with_knowledge(client)
+    with client.app.state.session_factory() as db:
+        result = generate_answer(
+            db,
+            user_id=None,
+            robot_model_id=model_id,
+            query="吸力变小了怎么办",
+            embedding_provider=HashingNgramEmbeddingProvider(),
+            generation_provider=ScriptedGenerationProvider(["。 REFUSE"]),
+            min_score=0.0,
+        )
+        assert result.status == "refused" and result.refusal_reason == "model_refused"
+
+
 def test_knowledge_gap_refuses_without_calling_model(client):
     # 不入库任何知识 → 检索为空 → 直接拒答且绝不调用生成模型
     with client.app.state.session_factory() as db:

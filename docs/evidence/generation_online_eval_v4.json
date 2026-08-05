@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-08-05T05:40:47+00:00",
+  "timestamp": "2026-08-05T04:41:30+00:00",
   "model": "qwen-plus",
   "embedding": "text-embedding-v4",
-  "prompt_version": "answer-v5",
+  "prompt_version": "answer-v4",
   "scope": "all",
   "dataset_faithfulness_total": 34,
   "selected": 34,
@@ -526,7 +526,6 @@
         "expected_page_retrieved": true,
         "cited_pages": [
           4,
-          8,
           8
         ],
         "supported_claims_total": 2,
@@ -1430,6 +1429,7 @@
         ],
         "expected_page_retrieved": true,
         "cited_pages": [
+          24,
           9
         ],
         "supported_claims_total": 0,

@@ -51,11 +51,19 @@ export interface KnowledgeModelHealth extends KnowledgeModelStatus {
   ready: boolean
 }
 
+export interface KnowledgeProbe {
+  embedding_service: boolean
+  retrieval_end_to_end: boolean
+  generation_service: boolean
+  errors: string[]
+}
+
 export interface KnowledgeHealth {
   status: 'normal' | 'knowledge_degraded' | 'external_model_unavailable'
   ready: boolean
   embedding_configured: boolean
   models: KnowledgeModelHealth[]
+  probe?: KnowledgeProbe | null
 }
 
 export interface AdminGenerationStats {

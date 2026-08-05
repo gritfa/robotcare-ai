@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheck, Delete, Document, InfoFilled, Picture, Upload, Warning } from '@element-plus/icons-vue'
 import { apiError, diagnosticApi, parseApiError, userFacingApiError } from '../api'
 import { useDiagnosticStore } from '../stores'

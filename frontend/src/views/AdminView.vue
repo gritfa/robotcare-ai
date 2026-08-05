@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import type { UploadFile, UploadInstance } from 'element-plus'
 import {
   CircleCheckFilled,
@@ -178,7 +177,7 @@ onMounted(dashboard.load)
                   inline-prompt
                   active-text="启用"
                   inactive-text="停用"
-                  @change="(value: string | number | boolean) => updateModel(row, value)"
+                  @change="(value: string | number | boolean) => updateModel(row as AdminModel, value)"
                 />
               </template>
             </el-table-column>

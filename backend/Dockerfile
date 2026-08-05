@@ -11,13 +11,24 @@ RUN apt-get update \
 
 WORKDIR /app/backend
 
-COPY backend/pyproject.toml backend/README.md backend/alembic.ini ./
+# 依赖层：只依赖 pyproject.toml。改业务代码不会让这一层失效，
+# 重建时直接命中缓存（否则每次改一行代码都要重装全部第三方依赖）。
+# 用空的 app 包占位让 setuptools 能构建元数据，装完即删。
+COPY backend/pyproject.toml backend/README.md ./
+RUN mkdir -p app \
+    && touch app/__init__.py \
+    && pip install --no-cache-dir ".[postgres]" \
+    && rm -rf app build *.egg-info
+
+# 代码层：改动频繁，放在依赖层之后
+COPY backend/alembic.ini ./
 COPY backend/app ./app
 COPY backend/migrations ./migrations
 COPY backend/docker-entrypoint.sh /usr/local/bin/robotcare-entrypoint
 COPY knowledge /app/knowledge
 
-RUN pip install --no-cache-dir ".[postgres]" \
+# --no-deps：依赖已在上一层装好，这里只把真实代码覆盖掉占位包
+RUN pip install --no-cache-dir --no-deps ".[postgres]" \
     && addgroup --system robotcare \
     && adduser --system --ingroup robotcare --home /app robotcare \
     && mkdir -p /app/data/attachments /app/data/reports \

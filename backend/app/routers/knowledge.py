@@ -28,6 +28,7 @@ from ..schemas import (
     KnowledgeAnswerResponse,
     KnowledgeHealthRead,
     KnowledgeModelHealthRead,
+    KnowledgeProbeRead,
     KnowledgeSearchRequest,
     KnowledgeSearchResult,
     KnowledgeStatusRead,
@@ -314,19 +315,86 @@ def knowledge_status(
     return [KnowledgeStatusRead(**item.__dict__) for item in get_knowledge_status(db)]
 
 
+def _probe_external_models(
+    db: Session, request: Request, model_health: list
+) -> KnowledgeProbeRead:
+    """对 embedding / 检索链路 / 生成模型各发一次真实请求。
+
+    配置存在不等于服务可用（DNS、key 失效、权限、接口格式都可能 503），
+    所以每一项都必须由实际调用证明。探测会产生真实模型调用费用，
+    仅在显式传 probe=true 时执行，并走 embedding 限流。
+    """
+    errors: list[str] = []
+    embedding_ok = False
+    retrieval_ok = False
+    generation_ok = False
+
+    try:
+        vector = request.app.state.embedding_provider.embed_query("健康探测")
+        embedding_ok = bool(vector)
+    except Exception as exc:  # noqa: BLE001 — 探测必须报告任何失败而不是 500
+        errors.append(f"embedding: {type(exc).__name__}: {exc}"[:200])
+
+    if embedding_ok:
+        ready_model = next((item for item in model_health if item.ready), None)
+        if ready_model is None:
+            errors.append("retrieval: no ready knowledge model to probe")
+        else:
+            try:
+                search_knowledge(
+                    db,
+                    robot_model_id=ready_model.robot_model_id,
+                    query="健康探测",
+                    top_k=1,
+                    min_score=0.0,
+                    provider=request.app.state.embedding_provider,
+                )
+                retrieval_ok = True
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"retrieval: {type(exc).__name__}: {exc}"[:200])
+
+    try:
+        reply = request.app.state.generation_provider.generate(
+            system="你是健康探测程序。", prompt="请只回复 OK。"
+        )
+        generation_ok = bool(reply and reply.strip())
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"generation: {type(exc).__name__}: {exc}"[:200])
+
+    return KnowledgeProbeRead(
+        embedding_service=embedding_ok,
+        retrieval_end_to_end=retrieval_ok,
+        generation_service=generation_ok,
+        errors=errors,
+    )
+
+
 @router.get("/knowledge/health", response_model=KnowledgeHealthRead)
 def knowledge_health(
     request: Request,
+    probe: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> KnowledgeHealthRead:
-    del user
     model_health = get_knowledge_health(db)
     embedding_configured = bool(
         getattr(request.app.state, "embedding_configured", False)
     )
     knowledge_ready = bool(model_health) and all(item.ready for item in model_health)
+
+    probe_result: KnowledgeProbeRead | None = None
+    if probe:
+        enforce_embedding_rate_limit(db, request, user_id=user.id)
+        probe_result = _probe_external_models(db, request, model_health)
+
     if not embedding_configured:
+        health_status = "external_model_unavailable"
+    elif probe_result is not None and not (
+        probe_result.embedding_service
+        and probe_result.retrieval_end_to_end
+        and probe_result.generation_service
+    ):
+        # 深度探测发现外部模型实际不可用：覆盖"配置看起来正常"的结论
         health_status = "external_model_unavailable"
     elif not knowledge_ready:
         health_status = "knowledge_degraded"
@@ -334,7 +402,8 @@ def knowledge_health(
         health_status = "normal"
     return KnowledgeHealthRead(
         status=health_status,
-        ready=knowledge_ready and embedding_configured,
+        ready=health_status == "normal",
         embedding_configured=embedding_configured,
         models=[KnowledgeModelHealthRead(**item.__dict__) for item in model_health],
+        probe=probe_result,
     )

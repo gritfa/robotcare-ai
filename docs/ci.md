@@ -19,7 +19,7 @@ python -m pytest                                  # 全量回归（PG 单方言�
 # 之后：CREATE DATABASE robotcare_smoke → alembic upgrade head → postgres_integration_smoke.py
 ```
 
-本地完整回归的当前证据为 `180 passed, 0 skipped (29.7s)`，全部跑在 PostgreSQL 16 + pgvector 测试容器（`127.0.0.1:55433`）上；原 `ROBOTCARE_TEST_POSTGRES_URL` + 破坏性开关的 skip 机制已删除，PG 集成测试成为常规回归的一部分。原 8 条 SQLite 无效状态参数化用例与 PG 集成测试中相同的 8 条无效 UPDATE 断言合并，测试总数由 188 变为 180，无覆盖损失。
+本地完整回归的当前证据为 `278 passed, 0 skipped (47.11s，2026-08-05)`，全部跑在 PostgreSQL 16 + pgvector 测试容器（`127.0.0.1:55433`）上；原 `ROBOTCARE_TEST_POSTGRES_URL` + 破坏性开关的 skip 机制已删除，PG 集成测试成为常规回归的一部分。原 8 条 SQLite 无效状态参数化用例与 PG 集成测试中相同的 8 条无效 UPDATE 断言合并，测试总数由 188 变为 180，无覆盖损失。
 
 ### Frontend
 
@@ -34,7 +34,7 @@ npm run build
 
 `npm ci` 要求 `package.json` 与 `package-lock.json` 保持同步。构建失败时不应改用 `npm install` 掩盖锁文件不一致。
 
-本地当前证据为 Vitest `36 passed`，`vue-tsc` 与 Vite production build 通过，1706 个模块完成转换。新增结构化 429 解析和附件失败队列重试。
+本地当前证据为 Vitest `45 passed`（2026-08-05），`vue-tsc` 与 Vite production build 通过；element-plus 改为按需引入（`unplugin-auto-import` + `unplugin-vue-components`），入口包由 1.11 MB 降到 `224.97 kB`（gzip 83.78 kB），其余按页面/组件懒加载。注意不要给 element-plus 配 `manualChunks`：手动分块会把模块当成 chunk 入口保留全部导出，实测整包回涨到 937 kB。
 
 ### Browser E2E
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Document, InfoFilled, Link, Reading, Refresh, Search } from '@element-plus/icons-vue'
+import { Aim, CircleCheck, CircleClose, Document, InfoFilled, Link, Reading, Refresh, Search } from '@element-plus/icons-vue'
 import { apiError, deviceApi, knowledgeApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import { refusalPresentation } from '../answerDisplay'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
@@ -23,6 +22,8 @@ const searchError = ref('')
 const statusError = ref('')
 const safetyError = ref<ApiErrorInfo | null>(null)
 const knowledgeHealth = ref<KnowledgeHealth | null>(null)
+const probing = ref(false)
+const probeError = ref('')
 const answering = ref(false)
 const answerResult = ref<KnowledgeAnswer | null>(null)
 const answerError = ref('')
@@ -39,7 +40,25 @@ const healthPresentation = computed(() => {
   if (knowledgeHealth.value.status === 'knowledge_degraded') {
     return { title: '知识库降级', type: 'warning' as const, description: '部分型号资料尚未完整就绪，检索结果可能为空或不完整。' }
   }
-  return { title: '外部模型不可用', type: 'error' as const, description: '向量模型尚未配置，系统不会生成替代结果；请稍后重试或使用安全诊断流程。' }
+  return { title: '外部模型不可用', type: 'error' as const, description: '向量模型尚未配置或实际调用失败，系统不会生成替代结果；请稍后重试或使用安全诊断流程。' }
+})
+
+// 四项深度探测结果：前三项由真实外部调用证明，最后一项来自服务端索引状态
+const probeItems = computed(() => {
+  const probe = knowledgeHealth.value?.probe
+  if (!probe || !knowledgeHealth.value) return []
+  const models = knowledgeHealth.value.models
+  return [
+    { key: 'embedding', label: '向量模型', ok: probe.embedding_service, note: '实际发起一次 embedding 调用' },
+    { key: 'retrieval', label: '检索链路', ok: probe.retrieval_end_to_end, note: '向量库端到端检索一次' },
+    { key: 'generation', label: '生成模型', ok: probe.generation_service, note: '实际发起一次生成调用' },
+    {
+      key: 'index',
+      label: '知识库索引',
+      ok: models.length > 0 && models.every(item => item.ready),
+      note: `${models.filter(item => item.ready).length}/${models.length} 个型号资料就绪`,
+    },
+  ]
 })
 
 onMounted(async () => {
@@ -106,9 +125,24 @@ async function askAnswer() {
   }
 }
 
+async function runProbe() {
+  probing.value = true
+  probeError.value = ''
+  try {
+    knowledgeHealth.value = await knowledgeApi.health(true)
+    statuses.value = knowledgeHealth.value.models
+    statusError.value = ''
+  } catch (error) {
+    probeError.value = userFacingApiError(error, '深度探测失败，请稍后重试')
+  } finally {
+    probing.value = false
+  }
+}
+
 async function loadStatus() {
   statusLoading.value = true
   statusError.value = ''
+  probeError.value = ''
   try {
     knowledgeHealth.value = await knowledgeApi.health()
     statuses.value = knowledgeHealth.value.models
@@ -231,6 +265,25 @@ function safeSourceUrl(value: string) {
           :closable="false"
           show-icon
         />
+        <div class="probe-block">
+          <el-button class="probe-button" size="small" :icon="Aim" :loading="probing" @click="runProbe">深度探测</el-button>
+          <p class="probe-hint">对向量模型、检索链路、生成模型各发一次真实请求，确认"配置正常"之外是否真的可用（约需数秒）。</p>
+          <ul v-if="probeItems.length" class="probe-list">
+            <li v-for="item in probeItems" :key="item.key" :class="item.ok ? 'probe-ok' : 'probe-fail'">
+              <el-icon><component :is="item.ok ? CircleCheck : CircleClose" /></el-icon>
+              <div><strong>{{ item.label }}</strong><span>{{ item.note }}</span></div>
+            </li>
+          </ul>
+          <el-alert
+            v-for="(message, index) in knowledgeHealth?.probe?.errors ?? []"
+            :key="index"
+            class="probe-error"
+            :title="message"
+            type="error"
+            :closable="false"
+          />
+          <el-alert v-if="probeError" class="probe-error" :title="probeError" type="error" :closable="false" show-icon />
+        </div>
         <template v-if="selectedModel">
           <div class="model-code">{{ selectedModel.code }}</div>
           <strong>{{ selectedModel.name }}</strong>
@@ -309,5 +362,5 @@ function safeSourceUrl(value: string) {
 </template>
 
 <style scoped>
-.guide-page{max-width:1320px}.disclaimer-alert{margin-bottom:20px}.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px}.search-panel{padding:28px}.section-title{display:flex;gap:14px;align-items:center;margin-bottom:25px}.section-title h2,.status-head h2,.results-head h2{margin:0;font-size:19px}.section-title p,.status-head p,.results-head p{margin:5px 0 0;color:var(--muted);font-size:12px}.title-icon{width:45px;height:45px;border-radius:12px;background:var(--soft);color:var(--brand);display:grid;place-items:center;font-size:22px}.selector-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.option-count{float:right;margin-left:24px;color:var(--muted)}.search-actions{display:flex;align-items:center;justify-content:space-between;gap:20px}.action-buttons{display:flex;gap:10px}.answer-card{padding:26px}.answer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.answer-head h2{margin:0;font-size:18px}.answer-body{margin:0 0 16px;line-height:1.9;color:#2d3f38;white-space:pre-wrap}.answer-citations{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:14px;border-top:1px solid var(--line)}.citations-title{font-size:12px;color:var(--muted)}.citation-tag{font-size:12px}.answer-note{margin:12px 0 0;font-size:11px;color:var(--muted)}.search-actions>span{font-size:11px;color:var(--muted)}.status-panel{padding:24px;align-self:start}.status-head{display:flex;justify-content:space-between;align-items:start;padding-bottom:19px;border-bottom:1px solid var(--line)}.health-alert{margin-top:16px}.model-code{display:inline-block;margin:20px 0 8px;padding:4px 9px;border-radius:6px;background:var(--soft);color:var(--brand);font-size:12px;font-weight:800;letter-spacing:.6px}.status-panel>strong{display:block;font-size:14px}.status-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:18px 0}.status-stats div{background:#f6f9f8;border-radius:10px;padding:12px 5px;text-align:center}.status-stats b,.status-stats span{display:block}.status-stats b{font-size:19px;color:var(--brand)}.status-stats span{font-size:10px;color:var(--muted);margin-top:4px}.status-note{display:flex;align-items:flex-start;gap:7px;color:var(--muted);font-size:11px;line-height:1.6;margin:18px 0 0}.status-note .el-icon{margin-top:2px;color:var(--brand);flex:none}.results-section{margin-top:25px}.results-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.result-list{display:grid;gap:12px}.result-card{display:grid;grid-template-columns:42px 1fr;padding:22px;gap:15px}.result-rank{width:34px;height:34px;border-radius:10px;background:#153e33;color:#fff;display:grid;place-items:center;font-weight:800}.result-meta,.source-row{display:flex;align-items:center;justify-content:space-between;gap:14px}.result-meta>span{display:flex;align-items:center;gap:7px;font-weight:750;font-size:13px}.result-meta .el-icon{color:var(--brand)}.result-content>p{margin:14px 0;color:#40534b;line-height:1.85;white-space:pre-wrap}.source-row{justify-content:flex-start;padding-top:13px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}.source-row a{display:flex;align-items:center;gap:4px;color:var(--brand);font-weight:700}.missing-source{color:#a26a13}.empty-result,.result-placeholder{min-height:150px;display:flex;align-items:center;justify-content:center;gap:17px;padding:28px;color:var(--muted);text-align:left}.empty-result{flex-direction:column;text-align:center}.empty-result>.el-icon,.result-placeholder>.el-icon{font-size:34px;color:#8eb6a7}.empty-result h3,.result-placeholder h3{margin:0;color:var(--ink);font-size:16px}.empty-result p,.result-placeholder p{margin:6px 0 0;font-size:12px;line-height:1.7;max-width:650px}@media(max-width:1000px){.workspace-grid{grid-template-columns:1fr}.status-panel{width:100%}}@media(max-width:760px){.selector-grid{grid-template-columns:1fr}.search-actions{align-items:flex-start;flex-direction:column}.search-actions .el-button{width:100%}}
+.guide-page{max-width:1320px}.disclaimer-alert{margin-bottom:20px}.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px}.search-panel{padding:28px}.section-title{display:flex;gap:14px;align-items:center;margin-bottom:25px}.section-title h2,.status-head h2,.results-head h2{margin:0;font-size:19px}.section-title p,.status-head p,.results-head p{margin:5px 0 0;color:var(--muted);font-size:12px}.title-icon{width:45px;height:45px;border-radius:12px;background:var(--soft);color:var(--brand);display:grid;place-items:center;font-size:22px}.selector-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.option-count{float:right;margin-left:24px;color:var(--muted)}.search-actions{display:flex;align-items:center;justify-content:space-between;gap:20px}.action-buttons{display:flex;gap:10px}.answer-card{padding:26px}.answer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.answer-head h2{margin:0;font-size:18px}.answer-body{margin:0 0 16px;line-height:1.9;color:#2d3f38;white-space:pre-wrap}.answer-citations{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:14px;border-top:1px solid var(--line)}.citations-title{font-size:12px;color:var(--muted)}.citation-tag{font-size:12px}.answer-note{margin:12px 0 0;font-size:11px;color:var(--muted)}.search-actions>span{font-size:11px;color:var(--muted)}.status-panel{padding:24px;align-self:start}.status-head{display:flex;justify-content:space-between;align-items:start;padding-bottom:19px;border-bottom:1px solid var(--line)}.health-alert{margin-top:16px}.probe-block{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}.probe-button{width:100%}.probe-hint{margin:9px 0 0;font-size:11px;line-height:1.6;color:var(--muted)}.probe-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}.probe-list li{display:flex;align-items:flex-start;gap:8px;font-size:12px}.probe-list li .el-icon{margin-top:2px;font-size:15px;flex:none}.probe-list strong{display:block;font-size:12px}.probe-list span{display:block;color:var(--muted);font-size:11px;margin-top:2px}.probe-ok .el-icon{color:var(--brand)}.probe-fail .el-icon{color:#c45656}.probe-fail strong{color:#c45656}.probe-error{margin-top:10px;word-break:break-all}.model-code{display:inline-block;margin:20px 0 8px;padding:4px 9px;border-radius:6px;background:var(--soft);color:var(--brand);font-size:12px;font-weight:800;letter-spacing:.6px}.status-panel>strong{display:block;font-size:14px}.status-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:18px 0}.status-stats div{background:#f6f9f8;border-radius:10px;padding:12px 5px;text-align:center}.status-stats b,.status-stats span{display:block}.status-stats b{font-size:19px;color:var(--brand)}.status-stats span{font-size:10px;color:var(--muted);margin-top:4px}.status-note{display:flex;align-items:flex-start;gap:7px;color:var(--muted);font-size:11px;line-height:1.6;margin:18px 0 0}.status-note .el-icon{margin-top:2px;color:var(--brand);flex:none}.results-section{margin-top:25px}.results-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.result-list{display:grid;gap:12px}.result-card{display:grid;grid-template-columns:42px 1fr;padding:22px;gap:15px}.result-rank{width:34px;height:34px;border-radius:10px;background:#153e33;color:#fff;display:grid;place-items:center;font-weight:800}.result-meta,.source-row{display:flex;align-items:center;justify-content:space-between;gap:14px}.result-meta>span{display:flex;align-items:center;gap:7px;font-weight:750;font-size:13px}.result-meta .el-icon{color:var(--brand)}.result-content>p{margin:14px 0;color:#40534b;line-height:1.85;white-space:pre-wrap}.source-row{justify-content:flex-start;padding-top:13px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}.source-row a{display:flex;align-items:center;gap:4px;color:var(--brand);font-weight:700}.missing-source{color:#a26a13}.empty-result,.result-placeholder{min-height:150px;display:flex;align-items:center;justify-content:center;gap:17px;padding:28px;color:var(--muted);text-align:left}.empty-result{flex-direction:column;text-align:center}.empty-result>.el-icon,.result-placeholder>.el-icon{font-size:34px;color:#8eb6a7}.empty-result h3,.result-placeholder h3{margin:0;color:var(--ink);font-size:16px}.empty-result p,.result-placeholder p{margin:6px 0 0;font-size:12px;line-height:1.7;max-width:650px}@media(max-width:1000px){.workspace-grid{grid-template-columns:1fr}.status-panel{width:100%}}@media(max-width:760px){.selector-grid{grid-template-columns:1fr}.search-actions{align-items:flex-start;flex-direction:column}.search-actions .el-button{width:100%}}
 </style>

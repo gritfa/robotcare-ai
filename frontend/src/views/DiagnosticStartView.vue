@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Camera, Close, InfoFilled, Plus, Warning } from '@element-plus/icons-vue'
 import { apiError, deviceApi, diagnosticApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { apiError, diagnosticApi } from '../api'
 import type { Diagnostic } from '../types'
@@ -42,8 +41,8 @@ function open(diagnostic: Diagnostic) {
         <el-table-column prop="device_id" label="设备 ID" width="110" />
         <el-table-column label="已执行步骤" width="120"><template #default="{ row }">{{ row.executions?.length || 0 }} 步</template></el-table-column>
         <el-table-column label="创建时间" width="170"><template #default="{ row }">{{ row.created_at?.replace('T', ' ').slice(0, 16) || '-' }}</template></el-table-column>
-        <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="row.status === 'resolved' ? 'success' : hasReport(row) ? 'primary' : row.status === 'unresolved' ? 'danger' : 'warning'">{{ hasReport(row) ? '报告已生成' : label(row.status) }}</el-tag></template></el-table-column>
-        <el-table-column width="120"><template #default="{ row }"><el-button link type="primary" @click.stop="open(row)">{{ hasReport(row) ? '查看报告' : '查看详情' }}</el-button></template></el-table-column>
+        <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="row.status === 'resolved' ? 'success' : hasReport(row as Diagnostic) ? 'primary' : row.status === 'unresolved' ? 'danger' : 'warning'">{{ hasReport(row as Diagnostic) ? '报告已生成' : label(row.status) }}</el-tag></template></el-table-column>
+        <el-table-column width="120"><template #default="{ row }"><el-button link type="primary" @click.stop="open(row as Diagnostic)">{{ hasReport(row as Diagnostic) ? '查看报告' : '查看详情' }}</el-button></template></el-table-column>
         <template #empty><div class="empty">暂无诊断记录</div></template>
       </el-table>
     </section>

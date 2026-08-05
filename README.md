@@ -10,11 +10,12 @@
 
 | 子系统 | 状态 | 说明 |
 | --- | --- | --- |
-| FastAPI 后端 | `【已验证】` | 单方言重构后全部测试直接跑在 PostgreSQL 16 + pgvector 测试容器上：`180 passed, 0 skipped (29.7s)`；原独立 PG 集成测试并入常规回归，不再有 skip |
-| Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康及认证恢复共 `36 passed`；生产构建通过，Vite 转换 1706 个模块 |
+| FastAPI 后端 | `【已验证】` | 单方言重构后全部测试直接跑在 PostgreSQL 16 + pgvector 测试容器上：`278 passed, 0 skipped (47.11s，2026-08-05 本机)`；原独立 PG 集成测试并入常规回归，不再有 skip |
+| Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康、会话流式及认证恢复共 `45 passed`；`vue-tsc + vite build` 通过，element-plus 已改为按需引入，入口包 `224.97 kB (gzip 83.78 kB)`，其余按页面/组件懒加载（改造前单主包 1.11 MB） |
+| 智能客服会话层 | `【已验证：本地】` | 多轮会话（conversations/conversation_messages，迁移 `20260804_0010`）、SSE 流式回答（先校验引用后分片下发）、会话一键转分步诊断（`20260804_0011` 记录来源会话）、售后报告附带会话摘要；后端 pytest + 前端单测覆盖，真实浏览器长会话压力未测 |
 | Microsoft Edge E2E | `【已验证：本机关键链路】` | 本机真实 Edge 完成闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流，共 `8 passed (44.9s)`（该证据基于当时的隔离 SQLite 库）；现 E2E 脚本已改为使用隔离 PostgreSQL 测试库（`ROBOTCARE_E2E_DATABASE_URL`），改造后的 E2E 尚未在本机重新跑过，仍不代表 Docker/HTTPS |
 | 分类与流程一致性 | `【已验证】` | 型号级确定性关键词/错误码候选；明显冲突拒绝创建，模糊场景要求用户确认；用户选择、系统候选和最终类别写入会话与报告 |
-| 知识安全与业务健康 | `【已验证：本地】` | 高风险检索在 Embedding 前阻断；普通用户不能覆盖阈值；`/knowledge/health` 区分正常、知识降级和外部模型不可用；版本化发布清单支持 SHA256 校验、幂等与事务回滚 |
+| 知识安全与业务健康 | `【已验证：本地】` | 高风险检索在 Embedding 前阻断；普通用户不能覆盖阈值；`/knowledge/health` 区分正常、知识降级和外部模型不可用；`?probe=true` 深度探测对 embedding、检索链路、生成模型各发一次真实请求（走 embedding 限流），任一失败即把状态降级为 `external_model_unavailable`，避免"配置存在"冒充"服务可用"；版本化发布清单支持 SHA256 校验、幂等与事务回滚 |
 | 认证生命周期 | `【已验证】` | 登录不存在用户时使用固定 Argon2 dummy hash；email、email/IP、独立 IP 三桶原子限流、可信代理 CIDR、清理 CLI，以及刷新轮换/重放撤销、退出失效和用户状态均有测试 |
 | 业务接口限流 | `【已验证：单实例 Beta】` | 注册、知识检索、诊断、附件、报告和 PDF 使用数据库原子用户/IP 或邮箱/IP 配额；Embedding 同时有分钟/日配额；429 返回结构化 `RATE_LIMITED` 与 `Retry-After`；缓存只在单进程共享 |
 | 可观测性基线 | `【已验证】` | `X-Request-ID`、JSON 请求/领域事件日志、递归脱敏、带 `trace_id` 的安全错误响应以及数据库/Alembic/存储就绪检查均通过测试；尚未接入外部日志、告警或 OpenTelemetry |
@@ -23,11 +24,11 @@
 | 图片上传安全 | `【已验证】` | Pillow 真实解码及既有限制不变；PostgreSQL 会话行锁（`SELECT ... FOR UPDATE`）保证并发上传最多 5 张，失败不遗留数据库记录或孤立文件 |
 | 官方说明书证据 | `【已验证】` | JH69U1、VC35U1 官方 PDF 已下载、校验 SHA256、按页解析并完成指定页面目视检查；仓库所有者确认具备公开再分发授权后，两份原始 PDF 已纳入 `knowledge/raw/` |
 | 诊断流程发布 | `【已验证】` | JSON 是唯一种子来源；14 条真实型号逐步骤说明书复核流程已发布（JH69U1 7 条 / VC35U1 7 条，2026-07-31 新增 10 条全部逐字对照官方说明书页），1 条导航流程因因果证据不足保持草稿且普通用户不可调用 |
-| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；迁移链单方言化后在空 PostgreSQL 库完成 `upgrade head → downgrade base → upgrade head` 往返，head `20260730_0009`，metadata 零漂移 |
+| 流程版本与迁移 | `【已验证】` | stable_key + version + draft/published/retired；迁移链单方言化后在空 PostgreSQL 库完成 `upgrade head → downgrade base → upgrade head` 往返，head `20260804_0011`，metadata 零漂移 |
 | 型号级向量检索基线 | `【已验证】` | 两份说明书已通过 DashScope `text-embedding-v4` 入库：JH69U1 31 个向量、VC35U1 22 个向量；5 条真实检索冒烟用例通过 |
 | RAG/安全评测数据与离线审计 | `【已验证】` | 评测集 411 条（113 条原有 + 298 条 D1 合成同源生成，全部 `needs_human_review` 不冒充人工已审）；离线真实执行七指标全 1.0：`safety_block 47/47`、`source_page 45/45`、`step_selection 45/45`、`model_isolation 31/31`、`retrieval_recall 61/61`、`classification 62/62`、`refusal(门控层) 30/30`（合成型号内存库 + 确定性 hashing 词面向量执行，结论不外推到语义向量） |
 | LLM 生成层（强制引用/拒答/留痕） | `【已验证：本地 mock】` | `POST /knowledge/answer`：安全前置阻断→检索→生成；检索空/低于阈值不调模型直接拒答，引用缺失/越界拒答，回答命中安全规则拦截留痕；generation_records 全量留痕（prompt 版本/模型/片段 SHA/引用/耗时）；6 项 pytest 用 mock Provider 验证，真实 DashScope 生成调用未在本机执行 |
-| faithfulness 在线评测 | `【部分评测：20/34】` | 2026-07-31 真实 DashScope 在线执行 20 条合成型号用例 19/20（score 0.95，范围 synthetic，14 条 JH69U1/VC35U1 未进入评测，不是完整评测）；唯一失败 SYN-FA-006 已归因：输入侧安全规则误伤模型输出的安全警告，已改用输出侧独立检测 `detect_unsafe_generated_answer` 修复（本地自动化验证通过，在线重跑待执行）；脚本已支持 `--scope synthetic/all` 显式覆盖口径（见 `docs/online_eval_scope.md`），34/34 完整在线评测待持有 key 的机器执行 |
+| faithfulness 在线评测 | `【已验证：全量 34/34，含未达阈值项】` | 2026-08-04 prompt `answer-v3` 全量在线执行（`--scope all`）：主评测 34/34 通过、score `1.0`（结构化引用+输出安全+违禁论断防线，`docs/evidence/generation_online_eval.json`）；独立第三方裁判（deepseek-v4-flash）逐论断核对的语义忠实度 `0.8824`（30/34 faithful，8 条 unsupported 论断，v2 为 0.7941），脚本阈值 0.9 **未达标**，`overall_status=below_threshold`（`docs/evidence/llm_judge_faithfulness.json`），prompt v4 继续追 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 单方言：`vector(256)` 字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚全部直接在真实 PostgreSQL 上回归（SQLite 双方言分叉已删除） |
 | PostgreSQL + pgvector 真实运行 | `【已验证：GitHub Actions】` | PostgreSQL 16 + pgvector Job 已验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；本机 Docker、多实例压力与生产数据仍未验证 |
 | 远端 CI | `【已验证】` | 单方言五 Job 工作流（PG16+pgvector 回归、前端、Chromium E2E、部署契约、知识校验）已在远端跑通：提交 `bd77ad5` run 30600605830 五个 Job 全部 success（2026-07-31，https://github.com/gritfa/robotcare-ai/actions/runs/30600605830） |
@@ -37,27 +38,36 @@
 | 运营闭环（缺口榜/看板/知识上传） | `【已验证：本地】` | 检索空结果与资料缺口拒答双埋点写 `knowledge_gap_events`（埋点失败不影响主流程）；`GET /admin/content-gaps` 按归一化查询聚合（次数/型号/最近发生，不含用户信息）；overview 增加近 30 天回答/拒答/拒答原因分布与缺口数；`POST /admin/knowledge/upload` 管理员上传 PDF（魔数/30MB/型号校验，ingest 与审计同事务）；前端缺口榜/生成统计/上传入口已通过单元测试与生产构建；真实语义向量下的缺口数据尚未积累 |
 | 管理员完整内容运营 | `【部分实现】` | 知识 PDF 上传已进后台（见上行）；流程审核发布仍走 catalog JSON 文件 + 代码评审，知识重建/停用、评测执行与结果持久化仍未实现，不能称管理后台全部完成 |
 | Docker 静态部署契约 | `【已验证】` | 部署检查脚本执行与 py_compile 通过；静态检查覆盖启动迁移、外部密钥、认证生产门禁、PostgreSQL/附件/报告持久卷、`/ready` 健康检查和 Noto CJK 字体配置 |
+| Docker 构建缓存 | `【已验证：本机】` | `backend/Dockerfile` 拆成依赖层（只 COPY `pyproject.toml`，空 `app/` 占位装依赖）与代码层（COPY 真实代码后 `pip install --no-deps`）。2026-08-05 本机实测：改依赖后完整重建 `118.7s`；只改 `backend/app/main.py` 再构建 `7.6s`（6 层命中缓存），此前每次改代码都要重装全部依赖 |
 | Docker 实际部署 | `【已验证：本机 development】` | Docker 29.5.2 实测：镜像构建、Compose 三服务 healthy、启动自动迁移至 head、pgvector 就绪、down/up 重建数据保持；production 无 key 启动被门禁拒绝（按设计）；带 key 的 production 启动仍待持 key 机器执行（docs/evidence/docker_deploy_20260730.md） |
 
 ## 已验证命令
 
-后端：
+后端（2026-08-05 本机 macOS + PostgreSQL 16/pgvector 测试容器）：
 
-```powershell
+```bash
 cd backend
-$base = Join-Path $env:TEMP ('robotcare_pytest_' + [guid]::NewGuid().ToString('N'))
-python -m pytest -q -p no:cacheprovider --basetemp $base
-# 171 passed, 1 skipped
+.venv/bin/pytest -p no:cacheprovider
+# 278 passed, 2 warnings in 47.11s（退出码 0）
 ```
 
-前端：
+前端（2026-08-05 本机）：
 
-```powershell
+```bash
 cd frontend
-npm.cmd ci --cache .npm-cache
-npm.cmd run test
-npm.cmd run build
-# 36 passed；vue-tsc 与 Vite production build 通过，1706 modules transformed
+npm ci
+npm test          # 45 passed (9 test files)
+npm run build     # vue-tsc + vite build 通过
+# dist/assets/index-*.js  224.97 kB (gzip 83.78 kB)，element-plus 按需引入后
+# 按组件/页面拆成 el-table-column 91.6 kB、el-popper 48.3 kB 等独立块
+```
+
+Docker 依赖层缓存（2026-08-05 本机 Docker 29.5.2）：
+
+```bash
+docker compose build backend        # 依赖变更：118.7s
+# 仅改 backend/app/main.py 后再次执行
+docker compose build backend        # 7.6s，依赖层命中缓存
 ```
 
 本机 Microsoft Edge 关键链路：
@@ -76,7 +86,7 @@ npm.cmd run test:e2e:edge
 评测用例：411（全部 needs_human_review，待人工复核）
 真实检索冒烟：5/5（`docs/evidence/rag_smoke_20260720.json`）
 离线审计（七指标真实执行，全 1.0）：safety_block 47/47；source_page 45/45；step_selection 45/45；model_isolation 31/31；retrieval_recall 61/61；classification 62/62；refusal(门控层) 30/30
-faithfulness：部分评测 20/34（synthetic 范围在线 19/20=0.95；SYN-FA-006 为检测误伤已修复待重跑；`--scope all` 34/34 完整评测待执行，口径见 `docs/online_eval_scope.md`）
+faithfulness：全量 34/34（prompt answer-v3，主评 score 1.0；独立裁判语义忠实度 0.8824，未达 0.9 阈值，口径见 `docs/online_eval_scope.md`）
 ```
 
 真实检索冒烟证据：`docs/evidence/rag_smoke_20260720.json`。
@@ -132,7 +142,7 @@ cd backend
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 
-API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260730_0009`：`0005` 增加数据库状态约束，`0006` 增加独立 IP 登录桶与可信代理配套，`0007` 增加 API/Embedding 配额表，`0008` 增加生成层留痕表 generation_records，`0009` 增加内容缺口事件表 knowledge_gap_events；`create_all()` 仅保留给显式开启的隔离测试。
+API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260804_0011`：`0005` 增加数据库状态约束，`0006` 增加独立 IP 登录桶与可信代理配套，`0007` 增加 API/Embedding 配额表，`0008` 增加生成层留痕表 generation_records，`0009` 增加内容缺口事件表 knowledge_gap_events，`0010` 增加会话表 conversations/conversation_messages，`0011` 给诊断增加来源会话字段；`create_all()` 仅保留给显式开启的隔离测试。
 
 （历史记录，SQLite 时期，现已 PG 单方言）本地开发库曾备份为 `robotcare.db.pre-0007-20260722.bak` 并升级到 `0007`；当时的 4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留，`PRAGMA integrity_check=ok` 且无外键异常。
 

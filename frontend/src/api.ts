@@ -351,7 +351,7 @@ export const knowledgeApi = {
   },
   answer: async (body: { robot_model_id: number; query: string; top_k?: number }) =>
     payload<KnowledgeAnswer>((await http.post('/knowledge/answer', body)).data),
-  health: async () => payload<KnowledgeHealth>((await http.get('/knowledge/health')).data),
+  health: async (probe = false) => payload<KnowledgeHealth>((await http.get('/knowledge/health', { params: probe ? { probe: true } : undefined, timeout: probe ? 60000 : undefined })).data),
   status: async () => listPayload<KnowledgeModelStatus>((await http.get('/knowledge/status')).data),
 }
 

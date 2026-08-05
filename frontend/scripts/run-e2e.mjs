@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -37,9 +38,13 @@ with engine.begin() as connection:
 engine.dispose()
 print("e2e database ready:", name)
 `
-const python = process.env.ROBOTCARE_E2E_PYTHON || (process.platform === 'win32'
+// macOS/Linux 上裸 `python` 常常不存在（只有 python3），直接用后端 venv 解释器；
+// venv 缺失时再退回 python3，仍可用 ROBOTCARE_E2E_PYTHON 覆盖。
+const venvPython = process.platform === 'win32'
   ? path.join(backendDir, '.venv', 'Scripts', 'python.exe')
-  : 'python')
+  : path.join(backendDir, '.venv', 'bin', 'python')
+const python = process.env.ROBOTCARE_E2E_PYTHON
+  || (existsSync(venvPython) ? venvPython : (process.platform === 'win32' ? 'python' : 'python3'))
 
 function start(command, args, options) {
   return spawn(command, args, {

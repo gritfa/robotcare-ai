@@ -682,3 +682,89 @@ def test_postgres_statement_uses_cosine_top_k_and_model_filter():
     assert "robot_model_id" in sql
     assert "ORDER BY" in sql
     assert "LIMIT" in sql
+
+
+class ProbeGenerationProvider:
+    model_name = "probe-generation"
+
+    def __init__(self, reply="OK", error: Exception | None = None):
+        self.reply = reply
+        self.error = error
+
+    def generate(self, *, system: str, prompt: str) -> str:
+        if self.error is not None:
+            raise self.error
+        return self.reply
+
+
+def _seed_ready_knowledge(client):
+    with client.app.state.session_factory() as db:
+        for code, sha in (("JH69U1", "1" * 64), ("VC35U1", "2" * 64)):
+            robot_model_id = model_id(db, code)
+            document = KnowledgeDocument(
+                robot_model_id=robot_model_id,
+                title=f"{code} probe manual",
+                source_url=f"https://example.com/{code}-probe.pdf",
+                sha256=sha,
+                page_count=1,
+            )
+            db.add(document)
+            db.flush()
+            db.add(
+                KnowledgeChunk(
+                    document_id=document.id,
+                    chunk_index=0,
+                    page_number=1,
+                    content="probe content",
+                    embedding=json.dumps(vector(1.0)),
+                )
+            )
+        db.commit()
+
+
+def test_knowledge_health_probe_proves_external_models_with_real_calls(client):
+    token = register(client, "knowledge-probe@example.com")["access_token"]
+    headers = auth(token)
+    client.app.state.embedding_provider = FakeEmbeddingProvider()
+    client.app.state.embedding_configured = True
+    client.app.state.generation_provider = ProbeGenerationProvider()
+    _seed_ready_knowledge(client)
+
+    # 不带 probe：保持轻量，不触发外部调用
+    plain = client.get("/api/v1/knowledge/health", headers=headers)
+    assert plain.status_code == 200
+    assert plain.json()["probe"] is None
+
+    ok = client.get("/api/v1/knowledge/health", params={"probe": True}, headers=headers)
+    assert ok.status_code == 200
+    assert ok.json()["status"] == "normal"
+    assert ok.json()["probe"] == {
+        "embedding_service": True,
+        "retrieval_end_to_end": True,
+        "generation_service": True,
+        "errors": [],
+    }
+
+
+def test_knowledge_health_probe_downgrades_when_generation_actually_fails(client):
+    token = register(client, "knowledge-probe-fail@example.com")["access_token"]
+    headers = auth(token)
+    client.app.state.embedding_provider = FakeEmbeddingProvider()
+    client.app.state.embedding_configured = True
+    client.app.state.generation_provider = ProbeGenerationProvider(
+        error=RuntimeError("upstream 503")
+    )
+    _seed_ready_knowledge(client)
+
+    # 配置全部"看起来正常"，但真实生成调用失败 → 状态必须降级
+    result = client.get(
+        "/api/v1/knowledge/health", params={"probe": True}, headers=headers
+    )
+    assert result.status_code == 200
+    assert result.json()["status"] == "external_model_unavailable"
+    assert result.json()["ready"] is False
+    probe = result.json()["probe"]
+    assert probe["embedding_service"] is True
+    assert probe["retrieval_end_to_end"] is True
+    assert probe["generation_service"] is False
+    assert any("upstream 503" in item for item in probe["errors"])

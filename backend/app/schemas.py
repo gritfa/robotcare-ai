@@ -297,11 +297,21 @@ class KnowledgeModelHealthRead(KnowledgeStatusRead):
     ready: bool
 
 
+class KnowledgeProbeRead(BaseModel):
+    """真实外部调用探测结果：每项都由一次实际请求证明，不是配置检查。"""
+
+    embedding_service: bool
+    retrieval_end_to_end: bool
+    generation_service: bool
+    errors: list[str]
+
+
 class KnowledgeHealthRead(BaseModel):
     status: Literal["normal", "knowledge_degraded", "external_model_unavailable"]
     ready: bool
     embedding_configured: bool
     models: list[KnowledgeModelHealthRead]
+    probe: KnowledgeProbeRead | None = None
 
 
 class KnowledgeAnswerRequest(BaseModel):

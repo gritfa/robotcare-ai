@@ -15,9 +15,11 @@ import {
   Warning,
 } from '@element-plus/icons-vue'
 import { useAdminDashboard } from '../adminDashboard'
-import type { AdminModel } from '../types'
+import { CHUNK_PAGE_SIZE, describeDiff, useKnowledgeConsole } from '../knowledgeConsole'
+import type { AdminContentGap, AdminKnowledgeDocument, AdminModel } from '../types'
 
 const dashboard = useAdminDashboard()
+const console_ = useKnowledgeConsole()
 
 const overviewCards = [
   { key: 'user_count', label: '注册用户', icon: User },
@@ -58,20 +60,212 @@ function onUploadFileChange(file: UploadFile) {
   uploadFile.value = (file.raw as File | undefined) ?? null
 }
 
-async function submitUpload() {
-  if (!canUpload.value || !uploadFile.value) return
+function uploadForm() {
   const form = new FormData()
   form.append('model_code', uploadModelCode.value)
   form.append('source_url', uploadSourceUrl.value.trim())
-  form.append('file', uploadFile.value)
-  const outcome = await dashboard.uploadKnowledge(form)
+  form.append('file', uploadFile.value as File)
+  return form
+}
+
+async function submitUpload() {
+  if (!canUpload.value || !uploadFile.value) return
+  const outcome = await dashboard.uploadKnowledge(uploadForm())
   if (outcome.ok) {
     ElMessage.success(`知识已入库：${uploadModelCode.value} 新增 ${outcome.result?.chunk_count ?? 0} 个分片`)
     uploadFile.value = null
     uploadSourceUrl.value = ''
     uploadRef.value?.clearFiles()
+    console_.clearPreview()
+    await console_.loadDocuments()
   } else if (outcome.error) {
     ElMessage.error(outcome.error)
+  }
+}
+
+async function submitPreview() {
+  if (!canUpload.value || !uploadFile.value) return
+  const outcome = await console_.runPreview(uploadForm())
+  if (!outcome.ok && outcome.error) ElMessage.error(outcome.error)
+}
+
+const previewText = computed(() => (console_.preview.value ? describeDiff(console_.preview.value) : ''))
+
+// --- 知识文档管理 ---
+
+const changeKindLabels: Record<string, string> = {
+  upload: '上传',
+  reindex: '重新向量化',
+  rollback: '版本回滚',
+  release: '发布包',
+}
+
+function formatSize(bytes: number | null) {
+  if (!bytes) return '—'
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`
+}
+
+async function toggleDocument(document: AdminKnowledgeDocument) {
+  const next = document.status === 'active' ? 'disabled' : 'active'
+  if (next === 'disabled') {
+    try {
+      await ElMessageBox.confirm(
+        `停用后《${document.title}》立即不再参与检索与回答，但内容和向量都会保留，可随时启用。`,
+        '确认停用该文档？',
+        { type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消' },
+      )
+    } catch {
+      return
+    }
+  }
+  const result = await console_.setStatus(document, next)
+  if (result.ok) {
+    ElMessage.success(next === 'disabled' ? '已停用，该文档不再参与检索' : '已启用')
+    await dashboard.load()
+  } else if (result.error) {
+    ElMessage.error(result.error)
+  }
+}
+
+async function removeDocument(document: AdminKnowledgeDocument) {
+  try {
+    await ElMessageBox.confirm(
+      `删除《${document.title}》会同时删除它的全部分片、向量与版本历史，且不可恢复。若只是想让它暂时不参与回答，请改用「停用」。`,
+      '确认永久删除该文档？',
+      { type: 'error', confirmButtonText: '永久删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  const result = await console_.remove(document)
+  if (result.ok) {
+    ElMessage.success('文档已删除')
+    await dashboard.load()
+  } else if (result.error) {
+    ElMessage.error(result.error)
+  }
+}
+
+async function reindexDocument(document: AdminKnowledgeDocument) {
+  const result = await console_.reindex(document)
+  if (result.ok) {
+    ElMessage.success('已用存档原件重新向量化')
+    await dashboard.load()
+  } else if (result.error) {
+    ElMessage.error(result.error)
+  }
+}
+
+async function rollbackTo(version: number) {
+  const document = console_.selected.value
+  if (!document) return
+  try {
+    await ElMessageBox.confirm(
+      `将用 v${version} 的原始文件重新入库并替换当前内容。版本号会继续向前（不会退回 v${version}），历史记录完整保留。`,
+      `确认回滚到 v${version}？`,
+      { type: 'warning', confirmButtonText: '回滚', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  const result = await console_.rollback(document, version)
+  if (result.ok) {
+    ElMessage.success(`已回滚到 v${version} 的内容`)
+    await dashboard.load()
+  } else if (result.error) {
+    ElMessage.error(result.error)
+  }
+}
+
+async function renameDocument(document: AdminKnowledgeDocument) {
+  try {
+    const { value } = await ElMessageBox.prompt('文档标题会展示在用户看到的引用来源里。', '修改标题', {
+      inputValue: document.title,
+      inputPattern: /\S+/,
+      inputErrorMessage: '标题不能为空',
+    })
+    const result = await console_.rename(document, value.trim())
+    if (result.ok) ElMessage.success('标题已更新')
+    else if (result.error) ElMessage.error(result.error)
+  } catch {
+    /* 用户取消 */
+  }
+}
+
+async function downloadDocument(document: AdminKnowledgeDocument) {
+  const result = await console_.download(document)
+  if (!result.ok && result.error) ElMessage.error(result.error)
+}
+
+const chunkRangeText = computed(() => {
+  const page = console_.chunkPage.value
+  if (!page || !page.total) return '暂无分片'
+  const from = page.offset + 1
+  const to = Math.min(page.offset + page.limit, page.total)
+  return `第 ${from}–${to} 条，共 ${page.total} 条`
+})
+
+function nextChunks(step: number) {
+  const page = console_.chunkPage.value
+  if (!page) return
+  const offset = Math.max(0, Math.min(page.offset + step * CHUNK_PAGE_SIZE, Math.max(0, page.total - 1)))
+  console_.loadChunks(offset)
+}
+
+// --- 内容缺口闭环 ---
+
+const gapStatusMeta: Record<string, { label: string; type: 'info' | 'warning' | 'success' | 'danger' }> = {
+  open: { label: '待处理', type: 'danger' },
+  investigating: { label: '处理中', type: 'warning' },
+  resolved: { label: '已解决', type: 'success' },
+  wont_fix: { label: '不处理', type: 'info' },
+}
+
+const replayStatusMeta: Record<string, { label: string; type: 'success' | 'danger' | 'warning' }> = {
+  passed: { label: '复测通过', type: 'success' },
+  failed: { label: '复测未通过', type: 'danger' },
+  error: { label: '复测未完成', type: 'warning' },
+}
+
+function documentsForModel(modelId: AdminContentGap['robot_model_id']) {
+  return console_.documents.value.filter((item) => item.robot_model_id === modelId)
+}
+
+async function linkGap(gap: AdminContentGap, documentId: number) {
+  const result = await console_.linkGapDocument(gap, documentId)
+  if (result.ok) {
+    ElMessage.success('已关联文档，接下来可以点「复测」验证是否真的能答了')
+    await dashboard.load()
+  } else if (result.error) {
+    ElMessage.error(result.error)
+  }
+}
+
+async function replayGap(gap: AdminContentGap) {
+  const result = await console_.replayGap(gap)
+  if (!result.ok) {
+    if (result.error) ElMessage.error(result.error)
+    return
+  }
+  const outcome = console_.replayResult.value
+  if (!outcome) return
+  if (outcome.replay_status === 'passed') {
+    ElMessage.success(`复测通过：已能引用 ${outcome.citation_count} 条资料作答，缺口标记为已解决`)
+  } else if (outcome.replay_status === 'failed') {
+    ElMessage.warning(`复测未通过：${outcome.detail}。资料可能未覆盖该问题，或切分后相似度不足`)
+  } else {
+    ElMessage.warning(`${outcome.detail}；这次没测成，缺口状态保持不变`)
+  }
+  await dashboard.load()
+}
+
+async function markGap(gap: AdminContentGap, status: string) {
+  const result = await console_.setGapStatus(gap, status)
+  if (result.ok) {
+    ElMessage.success('缺口状态已更新')
+    await dashboard.load()
+  } else if (result.error) {
+    ElMessage.error(result.error)
   }
 }
 
@@ -96,7 +290,10 @@ async function updateModel(model: AdminModel, value: string | number | boolean) 
   }
 }
 
-onMounted(dashboard.load)
+onMounted(async () => {
+  await dashboard.load()
+  await console_.loadDocuments()
+})
 </script>
 
 <template>
@@ -229,6 +426,14 @@ onMounted(dashboard.load)
               </el-upload>
               <el-button
                 size="small"
+                :loading="console_.previewing.value"
+                :disabled="!canUpload"
+                @click="submitPreview"
+              >
+                预览差异
+              </el-button>
+              <el-button
+                size="small"
                 type="primary"
                 :icon="Upload"
                 :loading="dashboard.uploadingKnowledge.value"
@@ -238,9 +443,110 @@ onMounted(dashboard.load)
                 上传并入库
               </el-button>
             </div>
+            <el-alert
+              v-if="console_.preview.value"
+              class="preview-alert"
+              :type="console_.preview.value.status === 'identical' ? 'info' : 'warning'"
+              :closable="true"
+              show-icon
+              @close="console_.clearPreview()"
+            >
+              <template #title>
+                {{ console_.preview.value.status === 'new' ? '新增文档' : console_.preview.value.status === 'identical' ? '内容无变化' : '将覆盖线上内容' }}
+              </template>
+              <p class="preview-text">{{ previewText }}</p>
+              <p class="preview-meta">
+                新文件 SHA256：{{ console_.preview.value.incoming_sha256.slice(0, 16) }}…
+                <span v-if="console_.preview.value.current_sha256">
+                  ／线上：{{ console_.preview.value.current_sha256.slice(0, 16) }}…
+                </span>
+              </p>
+            </el-alert>
           </div>
         </section>
       </div>
+
+      <section class="panel section-panel table-section">
+        <div class="section-head">
+          <div>
+            <h2>知识文档管理</h2>
+            <p>停用只是把文档挡在检索之外（内容保留、可恢复）；删除会连同分片、向量与版本历史一并清除，不可恢复。</p>
+          </div>
+          <div class="section-actions">
+            <el-select v-model="console_.modelFilter.value" placeholder="全部型号" size="small" clearable class="filter-select" @change="console_.loadDocuments()">
+              <el-option v-for="item in dashboard.models.value" :key="item.code" :label="item.code" :value="item.code" />
+            </el-select>
+            <el-select v-model="console_.statusFilter.value" placeholder="全部状态" size="small" clearable class="filter-select" @change="console_.loadDocuments()">
+              <el-option label="启用中" value="active" />
+              <el-option label="已停用" value="disabled" />
+            </el-select>
+            <el-button size="small" :icon="Refresh" :loading="console_.loading.value" @click="console_.loadDocuments()">刷新</el-button>
+          </div>
+        </div>
+        <el-alert
+          v-if="console_.missingArchiveCount.value > 0"
+          type="info"
+          :closable="false"
+          show-icon
+          class="archive-hint"
+          :title="`有 ${console_.missingArchiveCount.value} 份文档没有原件存档（存档功能上线前入库），无法重新向量化、回滚或下载原件；重新上传同一份 PDF 即可补齐。`"
+        />
+        <el-table :data="console_.documents.value" empty-text="暂无知识文档" v-loading="console_.loading.value">
+          <el-table-column prop="model_code" label="型号" width="100" />
+          <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
+          <el-table-column label="版本" width="80" align="center">
+            <template #default="{ row }">v{{ (row as AdminKnowledgeDocument).version }}</template>
+          </el-table-column>
+          <el-table-column label="发布时间" width="170">
+            <template #default="{ row }">{{ formatTime((row as AdminKnowledgeDocument).updated_at) }}</template>
+          </el-table-column>
+          <el-table-column label="页/片/量" width="120" align="center">
+            <template #default="{ row }">
+              {{ (row as AdminKnowledgeDocument).page_count }}/{{ (row as AdminKnowledgeDocument).chunk_count }}/{{ (row as AdminKnowledgeDocument).vector_count }}
+            </template>
+          </el-table-column>
+          <el-table-column label="SHA256" width="130">
+            <template #default="{ row }">
+              <span class="mono" :title="(row as AdminKnowledgeDocument).sha256">{{ (row as AdminKnowledgeDocument).sha256.slice(0, 12) }}…</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="95" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" :type="(row as AdminKnowledgeDocument).status === 'active' ? 'success' : 'info'">
+                {{ (row as AdminKnowledgeDocument).status === 'active' ? '启用中' : '已停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" min-width="300" align="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="console_.openDocument((row as AdminKnowledgeDocument).id)">分片/版本</el-button>
+              <el-button link size="small" :disabled="console_.isBusy((row as AdminKnowledgeDocument).id)" @click="renameDocument(row as AdminKnowledgeDocument)">改名</el-button>
+              <el-button
+                link
+                size="small"
+                :disabled="!(row as AdminKnowledgeDocument).has_archived_file"
+                :title="(row as AdminKnowledgeDocument).has_archived_file ? '' : '无原件存档'"
+                @click="downloadDocument(row as AdminKnowledgeDocument)"
+              >
+                原件
+              </el-button>
+              <el-button
+                link
+                size="small"
+                :loading="console_.isBusy((row as AdminKnowledgeDocument).id)"
+                :disabled="!(row as AdminKnowledgeDocument).has_archived_file"
+                @click="reindexDocument(row as AdminKnowledgeDocument)"
+              >
+                重新向量化
+              </el-button>
+              <el-button link size="small" :disabled="console_.isBusy((row as AdminKnowledgeDocument).id)" @click="toggleDocument(row as AdminKnowledgeDocument)">
+                {{ (row as AdminKnowledgeDocument).status === 'active' ? '停用' : '启用' }}
+              </el-button>
+              <el-button link type="danger" size="small" :disabled="console_.isBusy((row as AdminKnowledgeDocument).id)" @click="removeDocument(row as AdminKnowledgeDocument)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
 
       <section class="panel section-panel table-section">
         <div class="section-head">
@@ -250,17 +556,171 @@ onMounted(dashboard.load)
           </div>
           <el-tag type="warning">Top {{ dashboard.contentGaps.value.length }}</el-tag>
         </div>
+        <p class="gap-loop-hint">
+          处理闭环：关联刚上传的官方资料 → 点「复测」把原问题原样再问一遍 → 能引用作答才自动标记为已解决。
+          复测不通过会把「已解决」打回处理中，避免缺口榜自欺欺人。
+        </p>
         <el-table :data="dashboard.contentGaps.value" empty-text="近 30 天没有内容缺口记录">
-          <el-table-column prop="query_normalized" label="查询" min-width="260" show-overflow-tooltip />
-          <el-table-column prop="count" label="次数" width="80" align="right" />
-          <el-table-column label="涉及型号" min-width="150">
-            <template #default="{ row }">{{ row.model_codes.join('、') }}</template>
+          <el-table-column prop="query_normalized" label="查询" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="count" label="次数" width="70" align="right" />
+          <el-table-column prop="model_code" label="型号" width="100" />
+          <el-table-column label="状态" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" :type="gapStatusMeta[(row as AdminContentGap).status].type">
+                {{ gapStatusMeta[(row as AdminContentGap).status].label }}
+              </el-tag>
+            </template>
           </el-table-column>
-          <el-table-column label="最近发生" width="170">
-            <template #default="{ row }">{{ formatTime(row.last_seen_at) }}</template>
+          <el-table-column label="关联资料" min-width="170">
+            <template #default="{ row }">
+              <span v-if="(row as AdminContentGap).linked_document_title" class="linked-doc">
+                {{ (row as AdminContentGap).linked_document_title }}
+              </span>
+              <el-select
+                v-else
+                size="small"
+                placeholder="选择该型号文档"
+                class="gap-doc-select"
+                @change="(value: number) => linkGap(row as AdminContentGap, value)"
+              >
+                <el-option
+                  v-for="item in documentsForModel((row as AdminContentGap).robot_model_id)"
+                  :key="item.id"
+                  :label="item.title"
+                  :value="item.id"
+                />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="复测" min-width="150">
+            <template #default="{ row }">
+              <div v-if="(row as AdminContentGap).replay_status" class="replay-cell">
+                <el-tag size="small" :type="replayStatusMeta[(row as AdminContentGap).replay_status!].type">
+                  {{ replayStatusMeta[(row as AdminContentGap).replay_status!].label }}
+                </el-tag>
+                <span class="replay-meta">
+                  {{ (row as AdminContentGap).replay_citation_count ?? 0 }} 条引用 ·
+                  {{ formatTime((row as AdminContentGap).replay_checked_at ?? undefined) }}
+                </span>
+                <p v-if="(row as AdminContentGap).replay_answer_excerpt" class="replay-excerpt">
+                  {{ (row as AdminContentGap).replay_answer_excerpt }}
+                </p>
+              </div>
+              <span v-else class="muted">未复测</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="最近发生" width="160">
+            <template #default="{ row }">{{ formatTime((row as AdminContentGap).last_seen_at) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="170" align="right">
+            <template #default="{ row }">
+              <el-button
+                link
+                type="primary"
+                size="small"
+                :loading="console_.isReplaying(row as AdminContentGap)"
+                @click="replayGap(row as AdminContentGap)"
+              >
+                复测
+              </el-button>
+              <el-button
+                v-if="(row as AdminContentGap).status !== 'wont_fix'"
+                link
+                size="small"
+                @click="markGap(row as AdminContentGap, 'wont_fix')"
+              >
+                不处理
+              </el-button>
+              <el-button v-else link size="small" @click="markGap(row as AdminContentGap, 'open')">重新打开</el-button>
+            </template>
           </el-table-column>
         </el-table>
       </section>
+
+      <el-drawer
+        :model-value="console_.selected.value !== null"
+        :title="console_.selected.value ? `${console_.selected.value.title}（v${console_.selected.value.version}）` : ''"
+        size="640px"
+        @close="console_.closeDocument()"
+      >
+        <div v-if="console_.selected.value" v-loading="console_.detailLoading.value" class="doc-detail">
+          <dl class="doc-meta">
+            <div><dt>型号</dt><dd>{{ console_.selected.value.model_code }}</dd></div>
+            <div><dt>来源</dt><dd class="wrap">{{ console_.selected.value.source_url }}</dd></div>
+            <div><dt>SHA256</dt><dd class="mono wrap">{{ console_.selected.value.sha256 }}</dd></div>
+            <div><dt>页数 / 分片</dt><dd>{{ console_.selected.value.page_count }} 页 · {{ console_.selected.value.chunk_count }} 片</dd></div>
+            <div><dt>向量模型</dt><dd>{{ console_.selected.value.embedding_model ?? '—' }}</dd></div>
+            <div><dt>文件大小</dt><dd>{{ formatSize(console_.selected.value.file_size) }}</dd></div>
+          </dl>
+
+          <h4>版本历史</h4>
+          <el-table :data="console_.selected.value.versions" size="small" empty-text="暂无版本记录">
+            <el-table-column label="版本" width="70">
+              <template #default="{ row }">v{{ row.version }}</template>
+            </el-table-column>
+            <el-table-column label="类型" width="100">
+              <template #default="{ row }">{{ changeKindLabels[row.change_kind] ?? row.change_kind }}</template>
+            </el-table-column>
+            <el-table-column label="页/片" width="80">
+              <template #default="{ row }">{{ row.page_count }}/{{ row.chunk_count }}</template>
+            </el-table-column>
+            <el-table-column label="时间" width="150">
+              <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="90" align="right">
+              <template #default="{ row }">
+                <el-button
+                  v-if="row.sha256 !== console_.selected.value?.sha256"
+                  link
+                  type="primary"
+                  size="small"
+                  :disabled="!row.has_archived_file"
+                  :title="row.has_archived_file ? '' : '该版本没有留存原件，无法回滚'"
+                  @click="rollbackTo(row.version)"
+                >
+                  回滚
+                </el-button>
+                <el-tag v-else size="small" type="success">当前</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="chunk-head">
+            <h4>分片内容</h4>
+            <div class="chunk-controls">
+              <el-input-number
+                :model-value="console_.chunkPageFilter.value ?? undefined"
+                size="small"
+                :min="1"
+                :max="console_.selected.value.page_count"
+                placeholder="按页码"
+                controls-position="right"
+                class="page-filter"
+                @change="(value: number | undefined) => console_.loadChunks(0, value ?? null)"
+              />
+              <span class="chunk-range">{{ chunkRangeText }}</span>
+              <el-button size="small" :disabled="console_.chunkOffset.value === 0" @click="nextChunks(-1)">上一页</el-button>
+              <el-button
+                size="small"
+                :disabled="!console_.chunkPage.value || console_.chunkOffset.value + CHUNK_PAGE_SIZE >= console_.chunkPage.value.total"
+                @click="nextChunks(1)"
+              >
+                下一页
+              </el-button>
+            </div>
+          </div>
+          <ul class="chunk-list">
+            <li v-for="chunk in console_.chunkPage.value?.items ?? []" :key="chunk.chunk_index">
+              <div class="chunk-head-row">
+                <span class="chunk-index">#{{ chunk.chunk_index }}</span>
+                <el-tag size="small">第 {{ chunk.page_number }} 页</el-tag>
+                <el-tag v-if="!chunk.has_embedding" size="small" type="danger">无向量</el-tag>
+              </div>
+              <p class="chunk-text">{{ chunk.content }}</p>
+            </li>
+          </ul>
+        </div>
+      </el-drawer>
 
       <section class="panel section-panel table-section">
         <div class="section-head">
@@ -387,5 +847,5 @@ onMounted(dashboard.load)
 </template>
 
 <style scoped>
-.admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.generation-stats{margin-bottom:18px}.refusal-tags{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.refusal-empty{color:var(--muted);font-size:12px}.upload-box{margin-top:16px;padding-top:14px;border-top:1px solid #edf1ef}.upload-box h3{margin:0;font-size:14px}.upload-box p{margin:6px 0 10px;color:var(--muted);font-size:12px;line-height:1.5}.upload-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.upload-model{width:140px;flex-shrink:0}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.sensitive-detail{line-height:1.7}.sensitive-detail pre{white-space:pre-wrap;word-break:break-word;padding:14px;background:#f7faf8;border-radius:8px;max-height:55vh;overflow:auto}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}}
+.admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.generation-stats{margin-bottom:18px}.refusal-tags{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.refusal-empty{color:var(--muted);font-size:12px}.upload-box{margin-top:16px;padding-top:14px;border-top:1px solid #edf1ef}.upload-box h3{margin:0;font-size:14px}.upload-box p{margin:6px 0 10px;color:var(--muted);font-size:12px;line-height:1.5}.upload-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.upload-model{width:140px;flex-shrink:0}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.sensitive-detail{line-height:1.7}.sensitive-detail pre{white-space:pre-wrap;word-break:break-word;padding:14px;background:#f7faf8;border-radius:8px;max-height:55vh;overflow:auto}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}.preview-alert{margin-top:10px}.preview-text{margin:4px 0 2px;font-size:12px;line-height:1.6}.preview-meta{margin:0;font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.section-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.filter-select{width:130px}.archive-hint{margin-bottom:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.gap-loop-hint{margin:-6px 0 14px;padding:10px 12px;background:#f7faf8;border-radius:8px;color:var(--muted);font-size:12px;line-height:1.6}.linked-doc{font-size:12px}.gap-doc-select{width:100%}.replay-cell{display:flex;flex-direction:column;gap:3px}.replay-meta{font-size:11px;color:var(--muted)}.replay-excerpt{margin:2px 0 0;font-size:11px;color:#52635d;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.muted{color:var(--muted);font-size:12px}.doc-detail{padding:0 4px}.doc-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0 0 18px}.doc-meta div{display:flex;gap:8px;font-size:12px}.doc-meta dt{color:var(--muted);flex-shrink:0}.doc-meta dd{margin:0}.wrap{word-break:break-all}.doc-detail h4{margin:18px 0 10px;font-size:14px}.chunk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.chunk-controls{display:flex;align-items:center;gap:8px}.page-filter{width:110px}.chunk-range{font-size:11px;color:var(--muted)}.chunk-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}.chunk-list li{padding:12px;background:#f7faf8;border-radius:8px}.chunk-head-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}.chunk-index{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}.chunk-text{margin:0;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}.doc-meta{grid-template-columns:1fr}}
 </style>

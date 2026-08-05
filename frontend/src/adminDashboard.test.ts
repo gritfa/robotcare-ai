@@ -25,7 +25,12 @@ function createApi(overrides: Partial<AdminDashboardApi> = {}): AdminDashboardAp
     setModelActive: vi.fn().mockImplementation(async (_id, active) => ({ ...model(), active })),
     knowledgeStatus: vi.fn().mockResolvedValue([{ robot_model_id: 1, model_code: 'JH69U1', document_count: 1, chunk_count: 31, vector_count: 31 }]),
     contentGaps: vi.fn().mockResolvedValue([
-      { query_normalized: '石头卡住 怎么办', count: 3, model_codes: ['JH69U1', 'VC35U1'], last_seen_at: '2026-07-30T00:00:00Z' },
+      {
+        query_normalized: '石头卡住 怎么办', count: 3, robot_model_id: 1, model_code: 'JH69U1',
+        last_seen_at: '2026-07-30T00:00:00Z', status: 'open', linked_document_id: null,
+        linked_document_title: null, replay_status: null, replay_citation_count: null,
+        replay_answer_excerpt: null, replay_checked_at: null, resolved_at: null, note: null,
+      },
     ]),
     uploadKnowledge: vi.fn().mockResolvedValue({ document_id: 9, created: true, changed: false, chunk_count: 12, sha256: 'a'.repeat(64) }),
     safetyBlocks: vi.fn().mockResolvedValue([]),
@@ -68,7 +73,8 @@ describe('admin dashboard state', () => {
     expect(dashboard.models.value[0].code).toBe('JH69U1')
     expect(dashboard.knowledgeHealthy.value).toBe(true)
     expect(dashboard.contentGaps.value[0].query_normalized).toBe('石头卡住 怎么办')
-    expect(dashboard.contentGaps.value[0].model_codes).toEqual(['JH69U1', 'VC35U1'])
+    expect(dashboard.contentGaps.value[0].model_code).toBe('JH69U1')
+    expect(dashboard.contentGaps.value[0].status).toBe('open')
   })
 
   it('uploads a knowledge PDF, refreshes the dashboard, and surfaces failures', async () => {

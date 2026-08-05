@@ -38,6 +38,35 @@ with engine.begin() as connection:
 engine.dispose()
 print("e2e database ready:", name)
 `
+const adminEmail = process.env.ROBOTCARE_E2E_ADMIN_EMAIL || 'e2e-admin@example.com'
+const adminPassword = process.env.ROBOTCARE_E2E_ADMIN_PASSWORD || 'E2eAdminPass123'
+
+// 管理员后台需要一个 admin 账号，而注册接口只发普通用户。这里在后端起来
+// （表已由 lifespan 建好）之后直接写库提权，不走 admin_cli——那条路会校验
+// alembic 版本，而 E2E 用的是 auto-create schema，没有迁移版本记录。
+const provisionAdminScript = `
+import os
+from sqlalchemy import select
+from app.database import build_session_factory
+from app.models import User
+from app.security import hash_password
+
+factory = build_session_factory(os.environ["ROBOTCARE_DATABASE_URL"])
+email = os.environ["ROBOTCARE_E2E_ADMIN_EMAIL"].lower()
+with factory() as db:
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None:
+        db.add(User(
+            email=email,
+            password_hash=hash_password(os.environ["ROBOTCARE_E2E_ADMIN_PASSWORD"]),
+            role="admin",
+        ))
+    else:
+        user.role = "admin"
+    db.commit()
+print("e2e admin ready:", email)
+`
+
 // macOS/Linux 上裸 `python` 常常不存在（只有 python3），直接用后端 venv 解释器；
 // venv 缺失时再退回 python3，仍可用 ROBOTCARE_E2E_PYTHON 覆盖。
 const venvPython = process.platform === 'win32'
@@ -105,6 +134,8 @@ const sharedEnvironment = {
   ROBOTCARE_E2E_BACKEND_PORT: backendPort,
   ROBOTCARE_E2E_FRONTEND_PORT: frontendPort,
   ROBOTCARE_E2E_INVITE_CODE: inviteCode,
+  ROBOTCARE_E2E_ADMIN_EMAIL: adminEmail,
+  ROBOTCARE_E2E_ADMIN_PASSWORD: adminPassword,
   ROBOTCARE_E2E_MANAGED_SERVERS: '1',
   ROBOTCARE_DEV_API_TARGET: `http://127.0.0.1:${backendPort}`,
 }
@@ -153,6 +184,17 @@ try {
     waitForUrl(`http://127.0.0.1:${backendPort}/health`, [backend, vite]),
     waitForUrl(`http://127.0.0.1:${frontendPort}/login`, [backend, vite]),
   ])
+  const provisionAdmin = start(
+    python,
+    ['-c', provisionAdminScript],
+    {
+      cwd: backendDir,
+      env: { ...sharedEnvironment, ROBOTCARE_DATABASE_URL: e2eDatabaseUrl },
+    },
+  )
+  if (await waitForExit(provisionAdmin) !== 0) {
+    throw new Error('Failed to provision the E2E administrator account')
+  }
   const playwright = start(
     process.execPath,
     [

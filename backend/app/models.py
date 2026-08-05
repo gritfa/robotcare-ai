@@ -167,7 +167,12 @@ class RobotModel(Base):
 
 class KnowledgeDocument(Base):
     __tablename__ = "knowledge_documents"
-    __table_args__ = (UniqueConstraint("robot_model_id", "source_url"),)
+    __table_args__ = (
+        UniqueConstraint("robot_model_id", "source_url"),
+        CheckConstraint(
+            "status IN ('active', 'disabled')", name="ck_knowledge_documents_status"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     robot_model_id: Mapped[int] = mapped_column(ForeignKey("robot_models.id"), index=True)
@@ -175,6 +180,18 @@ class KnowledgeDocument(Base):
     source_url: Mapped[str] = mapped_column(String(2000))
     sha256: Mapped[str] = mapped_column(String(64), index=True)
     page_count: Mapped[int] = mapped_column(Integer)
+    # 停用不是删除：文档保留、分片保留、向量保留，只把它挡在检索之外，
+    # 随时可恢复。删除才不可逆。
+    status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # 原始 PDF 存档文件名；历史文档（存档层上线之前入库的）为 NULL，
+    # 此时重新向量化/回滚/下载原件都做不了——接口必须明确报"无存档"，不能假装成功。
+    stored_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    uploaded_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -182,6 +199,11 @@ class KnowledgeDocument(Base):
     chunks: Mapped[list[KnowledgeChunk]] = relationship(
         back_populates="document",
         order_by="KnowledgeChunk.chunk_index",
+        cascade="all, delete-orphan",
+    )
+    versions: Mapped[list[KnowledgeDocumentVersion]] = relationship(
+        back_populates="document",
+        order_by="KnowledgeDocumentVersion.version.desc()",
         cascade="all, delete-orphan",
     )
 
@@ -198,6 +220,47 @@ class KnowledgeChunk(Base):
     embedding: Mapped[list[float] | str | None] = mapped_column(EmbeddingVector(), nullable=True)
 
     document: Mapped[KnowledgeDocument] = relationship(back_populates="chunks")
+
+
+class KnowledgeDocumentVersion(Base):
+    """文档版本历史：每次入库/重建/回滚追加一行，只增不改。
+
+    回滚不会把版本号倒退，而是用旧存档重新入库并产生更高版本号——
+    审计链必须能回答"当时线上是哪一份"，倒退版本号会让这个问题无解。
+    """
+
+    __tablename__ = "knowledge_document_versions"
+    __table_args__ = (
+        UniqueConstraint("document_id", "version"),
+        CheckConstraint(
+            "change_kind IN ('upload', 'reindex', 'rollback', 'release')",
+            name="ck_knowledge_document_versions_change_kind",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_documents.id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    source_url: Mapped[str] = mapped_column(String(2000))
+    page_count: Mapped[int] = mapped_column(Integer)
+    chunk_count: Mapped[int] = mapped_column(Integer)
+    stored_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    change_kind: Mapped[str] = mapped_column(String(20), default="upload")
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+    document: Mapped[KnowledgeDocument] = relationship(back_populates="versions")
 
 
 class UserDevice(Base):
@@ -460,6 +523,55 @@ class KnowledgeGapEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )
+
+
+class ContentGapResolution(Base):
+    """内容缺口的处理状态：事件表是只增流水，状态是另一层实体，不回写事件。
+
+    唯一键用 query_hash 而不是 query_normalized 本身——2000 字符的文本列
+    直接建 btree 唯一索引会撞 PostgreSQL 的索引行大小上限。
+    """
+
+    __tablename__ = "content_gap_resolutions"
+    __table_args__ = (
+        UniqueConstraint("robot_model_id", "query_hash"),
+        CheckConstraint(
+            "status IN ('open', 'investigating', 'resolved', 'wont_fix')",
+            name="ck_content_gap_resolutions_status",
+        ),
+        CheckConstraint(
+            "replay_status IS NULL OR replay_status IN ('passed', 'failed', 'error')",
+            name="ck_content_gap_resolutions_replay_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    robot_model_id: Mapped[int] = mapped_column(ForeignKey("robot_models.id"), index=True)
+    query_normalized: Mapped[str] = mapped_column(String(2000))
+    query_hash: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    linked_document_id: Mapped[int | None] = mapped_column(
+        ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
+    )
+    # 复测结果：resolved 不该靠人拍脑袋，要有一次真实重放的证据
+    replay_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    replay_answer_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    replay_citation_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    replay_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    robot_model: Mapped[RobotModel] = relationship()
+    linked_document: Mapped[KnowledgeDocument | None] = relationship()
 
 
 class Conversation(Base):

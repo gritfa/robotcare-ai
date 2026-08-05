@@ -85,11 +85,120 @@ export interface AdminOverview {
   content_gap_count: number
 }
 
+export type ContentGapStatus = 'open' | 'investigating' | 'resolved' | 'wont_fix'
+export type GapReplayStatus = 'passed' | 'failed' | 'error'
+
 export interface AdminContentGap {
   query_normalized: string
   count: number
-  model_codes: string[]
+  robot_model_id: EntityId
+  model_code: string
   last_seen_at: string
+  status: ContentGapStatus
+  linked_document_id: EntityId | null
+  linked_document_title: string | null
+  replay_status: GapReplayStatus | null
+  replay_citation_count: number | null
+  replay_answer_excerpt: string | null
+  replay_checked_at: string | null
+  resolved_at: string | null
+  note: string | null
+}
+
+export interface AdminContentGapResolution {
+  status: ContentGapStatus
+  linked_document_id: EntityId | null
+  linked_document_title: string | null
+  replay_status: GapReplayStatus | null
+  replay_citation_count: number | null
+  replay_answer_excerpt: string | null
+  replay_checked_at: string | null
+  resolved_at: string | null
+  note: string | null
+}
+
+export interface AdminContentGapReplay {
+  replay_status: GapReplayStatus
+  citation_count: number
+  answer_excerpt: string | null
+  detail: string
+  gap_status: ContentGapStatus
+  checked_at: string | null
+}
+
+export interface AdminKnowledgeDocument {
+  id: EntityId
+  robot_model_id: EntityId
+  model_code: string
+  title: string
+  source_url: string
+  sha256: string
+  page_count: number
+  chunk_count: number
+  vector_count: number
+  status: 'active' | 'disabled'
+  version: number
+  embedding_model: string | null
+  file_size: number | null
+  has_archived_file: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminKnowledgeDocumentVersion {
+  version: number
+  sha256: string
+  title: string
+  page_count: number
+  chunk_count: number
+  change_kind: 'upload' | 'reindex' | 'rollback' | 'release'
+  note: string | null
+  has_archived_file: boolean
+  embedding_model: string | null
+  created_at: string
+}
+
+export interface AdminKnowledgeDocumentDetail extends AdminKnowledgeDocument {
+  versions: AdminKnowledgeDocumentVersion[]
+}
+
+export interface AdminKnowledgeChunk {
+  chunk_index: number
+  page_number: number
+  content: string
+  has_embedding: boolean
+}
+
+export interface AdminKnowledgeChunkPage {
+  document_id: EntityId
+  total: number
+  offset: number
+  limit: number
+  items: AdminKnowledgeChunk[]
+}
+
+export interface AdminKnowledgeDiffPreview {
+  status: 'new' | 'identical' | 'changed'
+  model_code: string
+  source_url: string
+  incoming_title: string
+  incoming_sha256: string
+  incoming_page_count: number
+  incoming_chunk_count: number
+  document_id: EntityId | null
+  current_version: number | null
+  current_title: string | null
+  current_sha256: string | null
+  current_page_count: number | null
+  current_chunk_count: number | null
+  current_updated_at: string | null
+  page_delta: number | null
+  chunk_delta: number | null
+  pages_comparable: boolean
+  pages_incomparable_reason: string | null
+  changed_pages: number[]
+  added_pages: number[]
+  removed_pages: number[]
 }
 
 export interface AdminKnowledgeUploadResult {

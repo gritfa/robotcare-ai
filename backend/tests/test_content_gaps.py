@@ -150,18 +150,20 @@ def test_content_gaps_aggregates_orders_and_filters_by_days(client):
     response = client.get("/api/v1/admin/content-gaps", headers=auth(admin_token))
     assert response.status_code == 200, response.text
     body = response.json()
-    assert [item["query_normalized"] for item in body] == [
-        "石头卡住 怎么办",
-        "滤网 多久换一次",
+    # 按 (型号, 问题) 聚合：同一句话在两个型号下是两个缺口，各自独立闭环
+    assert [(item["model_code"], item["query_normalized"], item["count"]) for item in body] == [
+        ("JH69U1", "石头卡住 怎么办", 2),
+        ("VC35U1", "石头卡住 怎么办", 1),
+        ("JH69U1", "滤网 多久换一次", 1),
     ]
     top = body[0]
-    assert top["count"] == 3
-    assert top["model_codes"] == ["JH69U1", "VC35U1"]
     assert top["last_seen_at"] is not None
-    assert body[1]["count"] == 1 and body[1]["model_codes"] == ["JH69U1"]
+    # 尚未处理过的缺口默认 open，且没有任何复测痕迹
+    assert top["status"] == "open"
+    assert top["replay_status"] is None and top["resolved_at"] is None
     # 响应不含任何用户信息
     for item in body:
-        assert set(item) == {"query_normalized", "count", "model_codes", "last_seen_at"}
+        assert not {"user_id", "email", "user"} & set(item)
 
     # 放宽天数窗口后能看到旧缺口；limit 生效
     wide = client.get(

@@ -110,14 +110,23 @@ def knowledge_search(
     )
     threshold_version = db.scalar(
         select(KnowledgeDocument.sha256)
-        .where(KnowledgeDocument.robot_model_id == payload.robot_model_id)
+        .where(
+            KnowledgeDocument.robot_model_id == payload.robot_model_id,
+            KnowledgeDocument.status == "active",
+        )
         .order_by(KnowledgeDocument.id.desc())
         .limit(1)
     )
+    # 缓存版本键只聚合启用中的文档：停用不改 sha256，若把停用文档也算进来，
+    # 键不变 → 缓存命中 → 停用后的 TTL 窗口内仍会把已停用内容发给用户。
+    # 修在键上而不是加 invalidate()：多进程部署时各进程各自算键，天然一致。
     document_shas = list(
         db.scalars(
             select(KnowledgeDocument.sha256)
-            .where(KnowledgeDocument.robot_model_id == payload.robot_model_id)
+            .where(
+                KnowledgeDocument.robot_model_id == payload.robot_model_id,
+                KnowledgeDocument.status == "active",
+            )
             .order_by(KnowledgeDocument.sha256)
         )
     )
@@ -263,7 +272,10 @@ def knowledge_answer(
     enforce_embedding_rate_limit(db, request, user_id=user.id, settings=settings)
     threshold_version = db.scalar(
         select(KnowledgeDocument.sha256)
-        .where(KnowledgeDocument.robot_model_id == payload.robot_model_id)
+        .where(
+            KnowledgeDocument.robot_model_id == payload.robot_model_id,
+            KnowledgeDocument.status == "active",
+        )
         .order_by(KnowledgeDocument.id.desc())
         .limit(1)
     )

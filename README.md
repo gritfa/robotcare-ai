@@ -10,11 +10,11 @@
 
 | 子系统 | 状态 | 说明 |
 | --- | --- | --- |
-| FastAPI 后端 | `【已验证】` | 单方言重构后全部测试直接跑在 PostgreSQL 16 + pgvector 测试容器上：`278 passed, 0 skipped (47.11s，2026-08-05 本机)`；原独立 PG 集成测试并入常规回归，不再有 skip |
-| Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康、会话流式及认证恢复共 `45 passed`；`vue-tsc + vite build` 通过，element-plus 已改为按需引入，入口包 `224.97 kB (gzip 83.78 kB)`，其余按页面/组件懒加载（改造前单主包 1.11 MB） |
+| FastAPI 后端 | `【已验证】` | 单方言重构后全部测试直接跑在 PostgreSQL 16 + pgvector 测试容器上：`344 passed, 0 skipped (60.42s，2026-08-05 本机)`；原独立 PG 集成测试并入常规回归，不再有 skip |
+| Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康、会话流式、知识库后台运维及认证恢复共 `62 passed`；`vue-tsc + vite build` 通过，element-plus 已改为按需引入，入口包 `224.97 kB (gzip 83.78 kB)`，其余按页面/组件懒加载（改造前单主包 1.11 MB） |
 | 智能客服会话层 | `【已验证：本地】` | 多轮会话（conversations/conversation_messages，迁移 `20260804_0010`）、SSE 流式回答（先校验引用后分片下发）、会话一键转分步诊断（`20260804_0011` 记录来源会话）、售后报告附带会话摘要；后端 pytest + 前端单测覆盖，真实浏览器长会话压力未测 |
 | 聊天消息路由层 | `【已验证：本地】` | `message_router.py` 在 RAG 之前分流四类消息：闲聊（"你好"）与产品操作（"生成报告""开始诊断""上传图片"）直接回复，不消耗 embedding 配额、不检索、不调生成模型；上下文追问与知识问题照常走完整链路。判定规则确定性可解释，`intent`/`routing_rule`/`action_code` 随消息持久化（迁移 `20260805_0012`），会话回放时操作按钮仍在。安全前置阻断永远排在路由之前，路由不是绕过安全检测的旁路。前端 Enter 发送 / Shift+Enter 换行，中文输入法组词期间的回车不发送（`composerKeys.ts`，Safari 个别输入法的 compositionend 顺序问题见文件内说明） |
-| 浏览器 E2E | `【已验证：本机关键链路，PostgreSQL 隔离库】` | 2026-08-05 本机 Chromium 在改造后的隔离 PostgreSQL 测试库（`ROBOTCARE_E2E_DATABASE_URL`）上重跑闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流，共 `8 passed (23.4s)`，远端 CI 的 Chromium E2E job 同版本 success；早前 Edge `8 passed (44.9s)` 的证据基于当时的隔离 SQLite 库，**Microsoft Edge 在 PG 库上尚未重跑**；两者都不代表 Docker/HTTPS |
+| 浏览器 E2E | `【已验证：本机关键链路，PostgreSQL 隔离库】` | 2026-08-05 本机 Chromium 在改造后的隔离 PostgreSQL 测试库（`ROBOTCARE_E2E_DATABASE_URL`）上重跑闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流、管理员知识库后台，共 `10 passed (29.0s)`，远端 CI 的 Chromium E2E job 同版本 success；早前 Edge `8 passed (44.9s)` 的证据基于当时的隔离 SQLite 库，**Microsoft Edge 在 PG 库上尚未重跑**；两者都不代表 Docker/HTTPS |
 | 分类与流程一致性 | `【已验证】` | 型号级确定性关键词/错误码候选；明显冲突拒绝创建，模糊场景要求用户确认；用户选择、系统候选和最终类别写入会话与报告 |
 | 知识安全与业务健康 | `【已验证：本地】` | 高风险检索在 Embedding 前阻断；普通用户不能覆盖阈值；`/knowledge/health` 区分正常、知识降级和外部模型不可用；`?probe=true` 深度探测对 embedding、检索链路、生成模型各发一次真实请求（走 embedding 限流），任一失败即把状态降级为 `external_model_unavailable`，避免"配置存在"冒充"服务可用"；版本化发布清单支持 SHA256 校验、幂等与事务回滚 |
 | 认证生命周期 | `【已验证】` | 登录不存在用户时使用固定 Argon2 dummy hash；email、email/IP、独立 IP 三桶原子限流、可信代理 CIDR、清理 CLI，以及刷新轮换/重放撤销、退出失效和用户状态均有测试 |
@@ -36,7 +36,8 @@
 | PDF 售后报告 | `【已验证】` | 并发请求返回同一报告；PDF 采用目标锁、临时文件和原子替换，验证 `%PDF-`/`%%EOF`；Edge 下载校验文件存在、非空和文件头 |
 | 管理员后端与审计 | `【已验证】` | 普通列表不返回故障正文、错误码、阻断原因或关联用户/设备 ID；报告、诊断和安全阻断详情按需读取并在返回前写入不含正文的 fail-closed 审计 |
 | 管理员前端 | `【已验证】` | 真实 API 驱动的运营概览、型号启停、知识健康、安全阻断、未解决报告和审计日志页面已通过单元测试与生产构建；本机 Edge 已验证普通用户访问管理员页面被拒绝，管理员内容运营 E2E 仍为【计划】 |
-| 运营闭环（缺口榜/看板/知识上传） | `【已验证：本地】` | 检索空结果与资料缺口拒答双埋点写 `knowledge_gap_events`（埋点失败不影响主流程）；`GET /admin/content-gaps` 按归一化查询聚合（次数/型号/最近发生，不含用户信息）；overview 增加近 30 天回答/拒答/拒答原因分布与缺口数；`POST /admin/knowledge/upload` 管理员上传 PDF（魔数/30MB/型号校验，ingest 与审计同事务）；前端缺口榜/生成统计/上传入口已通过单元测试与生产构建；真实语义向量下的缺口数据尚未积累 |
+| 运营闭环（缺口榜/看板/知识上传） | `【已验证：本地】` | 检索空结果与资料缺口拒答双埋点写 `knowledge_gap_events`（埋点失败不影响主流程）；`GET /admin/content-gaps` 按 (型号, 归一化查询) 聚合并带回处理状态（不含用户信息）；overview 增加近 30 天回答/拒答/拒答原因分布与缺口数；`POST /admin/knowledge/upload` 管理员上传 PDF（魔数/30MB/型号校验，ingest 与审计同事务）；前端缺口榜/生成统计/上传入口已通过单元测试与生产构建；真实语义向量下的缺口数据尚未积累 |
+| 知识库后台（文档生命周期/版本/缺口闭环） | `【已验证：本地】` | 文档列表（型号/版本/发布时间/来源/SHA256/分片与向量数/状态）、分页查看分片与页码、停用（`status=disabled` 直接从检索与缓存版本键中剔除，内容与向量保留可恢复）、删除（级联分片+版本+按引用计数清理存档）、原件下载、重新向量化、版本历史与回滚（回滚用旧存档重新入库并前进版本号，不倒退审计链）、上传前差异预览（只解析不入库，逐页给出修改/新增/删除页码）；内容缺口闭环：关联文档 → 一键复测（真实检索+生成重放原问题）→ 能引用作答才自动标记已解决，复测失败会把"已解决"打回处理中，外部模型故障记为"未测成"不改状态。所有写操作进 `audit_logs`。**上传原件从本版本起才留存**，此前入库的文档没有存档，重新向量化/回滚/下载原件会明确报"无存档"而不是静默失败 |
 | 管理员完整内容运营 | `【部分实现】` | 知识 PDF 上传已进后台（见上行）；流程审核发布仍走 catalog JSON 文件 + 代码评审，知识重建/停用、评测执行与结果持久化仍未实现，不能称管理后台全部完成 |
 | Docker 静态部署契约 | `【已验证】` | 部署检查脚本执行与 py_compile 通过；静态检查覆盖启动迁移、外部密钥、认证生产门禁、PostgreSQL/附件/报告持久卷、`/ready` 健康检查和 Noto CJK 字体配置 |
 | Docker 构建缓存 | `【已验证：本机】` | `backend/Dockerfile` 拆成依赖层（只 COPY `pyproject.toml`，空 `app/` 占位装依赖）与代码层（COPY 真实代码后 `pip install --no-deps`）。2026-08-05 本机实测：改依赖后完整重建 `118.7s`；只改 `backend/app/main.py` 再构建 `7.6s`（6 层命中缓存），此前每次改代码都要重装全部依赖 |
@@ -49,7 +50,7 @@
 ```bash
 cd backend
 .venv/bin/pytest -p no:cacheprovider
-# 278 passed, 2 warnings in 47.11s（退出码 0）
+# 344 passed, 2 warnings in 60.42s（退出码 0）
 ```
 
 前端（2026-08-05 本机）：
@@ -57,7 +58,7 @@ cd backend
 ```bash
 cd frontend
 npm ci
-npm test          # 45 passed (9 test files)
+npm test          # 62 passed (11 test files)
 npm run build     # vue-tsc + vite build 通过
 # dist/assets/index-*.js  224.97 kB (gzip 83.78 kB)，element-plus 按需引入后
 # 按组件/页面拆成 el-table-column 91.6 kB、el-popper 48.3 kB 等独立块
@@ -77,7 +78,7 @@ docker compose build backend        # 7.6s，依赖层命中缓存
 cd frontend
 # 本机跑时要避开生产 Compose 栈占用的端口
 ROBOTCARE_E2E_BACKEND_PORT=8021 ROBOTCARE_E2E_FRONTEND_PORT=5199 npm run test:e2e
-# 8 passed (23.4s)，命令正常退出并释放测试端口
+# 10 passed (29.0s)，命令正常退出并释放测试端口
 # Microsoft Edge 版本（npm run test:e2e:edge）最近一次证据仍是 SQLite 时期的 8 passed (44.9s)，PG 库上未重跑
 ```
 

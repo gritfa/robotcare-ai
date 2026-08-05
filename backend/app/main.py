@@ -24,6 +24,7 @@ def create_app(
     database_url: str | None = None,
     attachment_dir: str | Path | None = None,
     report_dir: str | Path | None = None,
+    knowledge_dir: str | Path | None = None,
     embedding_provider: EmbeddingProvider | None = None,
     generation_provider: "GenerationProvider | None" = None,
     auto_create_schema: bool | None = None,
@@ -65,6 +66,9 @@ def create_app(
     application.state.attachment_dir.mkdir(parents=True, exist_ok=True)
     application.state.report_dir = Path(report_dir or settings.report_dir).resolve()
     application.state.report_dir.mkdir(parents=True, exist_ok=True)
+    # 知识原件存档目录：重新向量化、版本回滚、下载原件都依赖它
+    application.state.knowledge_dir = Path(knowledge_dir or settings.knowledge_dir).resolve()
+    application.state.knowledge_dir.mkdir(parents=True, exist_ok=True)
     application.state.report_filename_secret = settings.jwt_secret
     application.add_middleware(
         CORSMiddleware,

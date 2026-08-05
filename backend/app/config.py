@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     attachment_dir: str = "./data/attachments"
     report_dir: str = "./data/reports"
+    knowledge_dir: str = "./data/knowledge"
     dashscope_api_key: str | None = None
     dashscope_base_url: str | None = None
     llm_backend: str = "dashscope"  # dashscope | openai-compat

@@ -68,12 +68,64 @@ class AdminOverviewRead(BaseModel):
 
 
 class AdminContentGapRead(BaseModel):
-    """内容缺口榜条目：只含聚合后的查询与型号，不含任何用户信息。"""
+    """内容缺口榜条目：只含聚合后的查询与型号，不含任何用户信息。
+
+    按 (型号, 问题) 聚合而不是只按问题：同一句话在不同型号下是两个缺口——
+    要补的资料不同、复测也必须分别做，合并展示会让闭环无从下手。
+    """
 
     query_normalized: str
     count: int
-    model_codes: list[str]
+    robot_model_id: int
+    model_code: str
     last_seen_at: datetime
+    status: str = "open"
+    linked_document_id: int | None = None
+    linked_document_title: str | None = None
+    replay_status: str | None = None
+    replay_citation_count: int | None = None
+    replay_answer_excerpt: str | None = None
+    replay_checked_at: datetime | None = None
+    resolved_at: datetime | None = None
+    note: str | None = None
+
+
+class AdminContentGapActionRequest(BaseModel):
+    """缺口没有自己的主键：它由 (型号, 归一化问题) 唯一确定，定位信息随请求体走。"""
+
+    robot_model_id: int
+    query_normalized: str = Field(min_length=1, max_length=2000)
+
+
+class AdminContentGapUpdate(AdminContentGapActionRequest):
+    status: Literal["open", "investigating", "resolved", "wont_fix"] | None = None
+    linked_document_id: int | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+
+class AdminContentGapResolutionRead(BaseModel):
+    status: str
+    linked_document_id: int | None = None
+    linked_document_title: str | None = None
+    replay_status: str | None = None
+    replay_citation_count: int | None = None
+    replay_answer_excerpt: str | None = None
+    replay_checked_at: datetime | None = None
+    resolved_at: datetime | None = None
+    note: str | None = None
+
+
+class AdminContentGapReplayRequest(AdminContentGapActionRequest):
+    auto_resolve: bool = True
+
+
+class AdminContentGapReplayRead(BaseModel):
+    replay_status: Literal["passed", "failed", "error"]
+    citation_count: int
+    answer_excerpt: str | None
+    detail: str
+    gap_status: str
+    checked_at: datetime | None
 
 
 class AdminKnowledgeUploadRead(BaseModel):
@@ -82,6 +134,90 @@ class AdminKnowledgeUploadRead(BaseModel):
     changed: bool
     chunk_count: int
     sha256: str
+
+
+class AdminKnowledgeDocumentRead(BaseModel):
+    id: int
+    robot_model_id: int
+    model_code: str
+    title: str
+    source_url: str
+    sha256: str
+    page_count: int
+    chunk_count: int
+    vector_count: int
+    status: str
+    version: int
+    embedding_model: str | None
+    file_size: int | None
+    has_archived_file: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminKnowledgeDocumentVersionRead(BaseModel):
+    version: int
+    sha256: str
+    title: str
+    page_count: int
+    chunk_count: int
+    change_kind: str
+    note: str | None
+    has_archived_file: bool
+    embedding_model: str | None
+    created_at: datetime
+
+
+class AdminKnowledgeDocumentDetailRead(AdminKnowledgeDocumentRead):
+    versions: list[AdminKnowledgeDocumentVersionRead]
+
+
+class AdminKnowledgeChunkRead(BaseModel):
+    chunk_index: int
+    page_number: int
+    content: str
+    has_embedding: bool
+
+
+class AdminKnowledgeChunkPage(BaseModel):
+    document_id: int
+    total: int
+    offset: int
+    limit: int
+    items: list[AdminKnowledgeChunkRead]
+
+
+class AdminKnowledgeDocumentUpdate(BaseModel):
+    status: Literal["active", "disabled"] | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class AdminKnowledgeRollbackRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+class AdminKnowledgeDiffPreviewRead(BaseModel):
+    status: Literal["new", "identical", "changed"]
+    model_code: str
+    source_url: str
+    incoming_title: str
+    incoming_sha256: str
+    incoming_page_count: int
+    incoming_chunk_count: int
+    document_id: int | None = None
+    current_version: int | None = None
+    current_title: str | None = None
+    current_sha256: str | None = None
+    current_page_count: int | None = None
+    current_chunk_count: int | None = None
+    current_updated_at: datetime | None = None
+    page_delta: int | None = None
+    chunk_delta: int | None = None
+    pages_comparable: bool = False
+    pages_incomparable_reason: str | None = None
+    changed_pages: list[int] = Field(default_factory=list)
+    added_pages: list[int] = Field(default_factory=list)
+    removed_pages: list[int] = Field(default_factory=list)
 
 
 class AdminSafetyBlockRead(BaseModel):

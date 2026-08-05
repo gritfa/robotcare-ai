@@ -131,6 +131,7 @@ def client(tmp_path):
         TEST_DATABASE_URL,
         attachment_dir=tmp_path / "attachments",
         report_dir=tmp_path / "reports",
+        knowledge_dir=tmp_path / "knowledge",
         auto_create_schema=False,
     )
     with TestClient(app) as test_client:

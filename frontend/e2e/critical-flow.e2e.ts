@@ -314,3 +314,40 @@ test('聊天交互：Enter 发送、闲聊不走检索、报告指令给出前�
   await expect(page.getByText('若拖布支架未安装到位', { exact: false })).toBeVisible()
   await expect(page.locator('.evidence')).toContainText('第 15 页')
 })
+
+test('管理员知识库后台：文档管理面板可用、缺口闭环入口齐备', async ({ page }) => {
+  // E2E 后端没有配置 embedding key，真上传必然 503，所以这条不测入库；
+  // 它守的是另一件事：管理页模板本身能渲染出全部运维入口——
+  // 单元测试测的是 composable，模板写错只有真跑一遍才发现。
+  const adminEmail = process.env.ROBOTCARE_E2E_ADMIN_EMAIL || 'e2e-admin@example.com'
+  const adminPassword = process.env.ROBOTCARE_E2E_ADMIN_PASSWORD || 'E2eAdminPass123'
+
+  await page.goto('/login')
+  await page.getByPlaceholder('name@example.com').fill(adminEmail)
+  await page.getByPlaceholder('请输入密码').fill(adminPassword)
+  await page.getByRole('button', { name: '登录' }).click()
+  await expect(page).toHaveURL(/\/$/)
+
+  await page.goto('/admin')
+  await expect(page).toHaveURL(/\/admin$/)
+
+  // 文档管理面板：列表 + 生命周期操作入口
+  const documents = page.getByRole('heading', { name: '知识文档管理' })
+  await expect(documents).toBeVisible()
+  const documentSection = page.locator('section', { has: documents })
+  await expect(documentSection.getByRole('columnheader', { name: '版本' })).toBeVisible()
+  await expect(documentSection.getByRole('columnheader', { name: '发布时间' })).toBeVisible()
+  await expect(documentSection.getByRole('columnheader', { name: 'SHA256' })).toBeVisible()
+
+  // 上传前差异预览入口
+  await expect(page.getByRole('button', { name: '预览差异' })).toBeVisible()
+
+  // 缺口闭环：状态、关联资料、复测三列齐备，闭环说明可见
+  const gaps = page.getByRole('heading', { name: /内容缺口榜/ })
+  await expect(gaps).toBeVisible()
+  const gapSection = page.locator('section', { has: gaps })
+  await expect(gapSection.getByRole('columnheader', { name: '状态' })).toBeVisible()
+  await expect(gapSection.getByRole('columnheader', { name: '关联资料' })).toBeVisible()
+  await expect(gapSection.getByRole('columnheader', { name: '复测' })).toBeVisible()
+  await expect(gapSection.getByText('能引用作答才自动标记为已解决', { exact: false })).toBeVisible()
+})

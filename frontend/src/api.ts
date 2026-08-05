@@ -1,5 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
-import type { AdminAuditLog, AdminContentGap, AdminDiagnosticDetail, AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, ChatMessagePair, Conversation, ConversationDetail, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
+import type { AdminAuditLog, AdminContentGap, AdminContentGapReplay, AdminContentGapResolution, AdminDiagnosticDetail,
+  AdminKnowledgeChunkPage, AdminKnowledgeDiffPreview, AdminKnowledgeDocument, AdminKnowledgeDocumentDetail,
+  AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, ChatMessagePair, Conversation, ConversationDetail, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
   FeedbackReason, KnowledgeSearchResult, MessageFeedback, ReportPdf, RobotModel, ServiceReport, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
 
@@ -372,4 +374,37 @@ export const adminApi = {
   diagnosticDetail: async (id: EntityId) => payload<AdminDiagnosticDetail>((await http.get(`/admin/diagnostics/${id}`)).data),
   reportDetail: async (id: EntityId) => payload<AdminServiceReportDetail>((await http.get(`/admin/reports/${id}`)).data),
   auditLogs: async (limit = 20) => listPayload<AdminAuditLog>((await http.get('/admin/audit-logs', { params: { limit } })).data),
+
+  // 知识库后台
+  knowledgeDocuments: async (params: { model_code?: string; status?: string } = {}) =>
+    listPayload<AdminKnowledgeDocument>((await http.get('/admin/knowledge/documents', { params })).data),
+  knowledgeDocument: async (id: EntityId) =>
+    payload<AdminKnowledgeDocumentDetail>((await http.get(`/admin/knowledge/documents/${id}`)).data),
+  knowledgeChunks: async (id: EntityId, params: { offset?: number; limit?: number; page_number?: number } = {}) =>
+    payload<AdminKnowledgeChunkPage>((await http.get(`/admin/knowledge/documents/${id}/chunks`, { params })).data),
+  updateKnowledgeDocument: async (id: EntityId, body: { status?: string; title?: string }) =>
+    payload<AdminKnowledgeDocument>((await http.patch(`/admin/knowledge/documents/${id}`, body)).data),
+  deleteKnowledgeDocument: async (id: EntityId) => {
+    await http.delete(`/admin/knowledge/documents/${id}`)
+  },
+  reindexKnowledgeDocument: async (id: EntityId) =>
+    payload<AdminKnowledgeDocumentDetail>((await http.post(`/admin/knowledge/documents/${id}/reindex`)).data),
+  rollbackKnowledgeDocument: async (id: EntityId, version: number) =>
+    payload<AdminKnowledgeDocumentDetail>((await http.post(`/admin/knowledge/documents/${id}/rollback`, { version })).data),
+  previewKnowledgeUpload: async (form: FormData) =>
+    payload<AdminKnowledgeDiffPreview>((await http.post('/admin/knowledge/preview', form)).data),
+  // 原件下载走 blob：这是二进制原文，不能当 JSON 解析
+  downloadKnowledgeFile: async (id: EntityId) =>
+    (await http.get(`/admin/knowledge/documents/${id}/file`, { responseType: 'blob' })).data as Blob,
+
+  // 内容缺口闭环
+  updateContentGap: async (body: {
+    robot_model_id: EntityId
+    query_normalized: string
+    status?: string
+    linked_document_id?: EntityId
+    note?: string
+  }) => payload<AdminContentGapResolution>((await http.patch('/admin/content-gaps', body)).data),
+  replayContentGap: async (body: { robot_model_id: EntityId; query_normalized: string; auto_resolve?: boolean }) =>
+    payload<AdminContentGapReplay>((await http.post('/admin/content-gaps/replay', body)).data),
 }

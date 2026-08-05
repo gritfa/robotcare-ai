@@ -7,15 +7,35 @@ an aggregated ``router`` that includes them all, so app.main only needs
 
 from fastapi import APIRouter
 
-from . import admin, auth, catalog, conversations, devices, diagnostics, knowledge
+from . import (
+    admin,
+    auth,
+    catalog,
+    conversations,
+    devices,
+    diagnostics,
+    knowledge,
+    knowledge_admin,
+)
 
 router = APIRouter()
 router.include_router(auth.router)
 router.include_router(knowledge.router)
 router.include_router(catalog.router)
 router.include_router(admin.router)
+router.include_router(knowledge_admin.router)
 router.include_router(devices.router)
 router.include_router(diagnostics.router)
 router.include_router(conversations.router)
 
-__all__ = ["router", "admin", "auth", "catalog", "conversations", "devices", "diagnostics", "knowledge"]
+__all__ = [
+    "router",
+    "admin",
+    "auth",
+    "catalog",
+    "conversations",
+    "devices",
+    "diagnostics",
+    "knowledge",
+    "knowledge_admin",
+]

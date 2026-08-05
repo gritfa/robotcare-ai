@@ -262,7 +262,10 @@ def _prepare_turn(
         robot_model = db.get(RobotModel, conversation.robot_model_id)
         threshold_version = db.scalar(
             select(KnowledgeDocument.sha256)
-            .where(KnowledgeDocument.robot_model_id == conversation.robot_model_id)
+            .where(
+                KnowledgeDocument.robot_model_id == conversation.robot_model_id,
+                KnowledgeDocument.status == "active",
+            )
             .order_by(KnowledgeDocument.id.desc())
             .limit(1)
         )

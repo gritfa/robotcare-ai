@@ -17,7 +17,12 @@ from sqlalchemy import Float, bindparam, case, delete, distinct, func, select
 from sqlalchemy.orm import Session
 
 from .db_types import EMBEDDING_DIMENSION, normalize_embedding
-from .models import KnowledgeChunk, KnowledgeDocument, RobotModel
+from .models import (
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeDocumentVersion,
+    RobotModel,
+)
 from .observability import current_trace_id, emit_json_log
 
 EMBEDDING_MODEL = "text-embedding-v4"
@@ -270,6 +275,50 @@ def _embed_in_batches(provider: EmbeddingProvider, texts: Sequence[str]) -> list
     return vectors
 
 
+def _append_document_version(
+    db: Session,
+    *,
+    document: KnowledgeDocument,
+    chunk_count: int,
+    change_kind: str,
+    note: str | None,
+    actor_user_id: int | None,
+) -> KnowledgeDocumentVersion:
+    """追加一行版本历史，并保证版本号严格递增。
+
+    历史文档没有任何版本行、补录场景又可能与现有行撞号，所以版本号以
+    "已有最大版本 + 1" 为准，而不是盲信 document.version。
+    """
+
+    max_version = (
+        db.scalar(
+            select(func.max(KnowledgeDocumentVersion.version)).where(
+                KnowledgeDocumentVersion.document_id == document.id
+            )
+        )
+        or 0
+    )
+    if document.version is None or document.version <= max_version:
+        document.version = max_version + 1
+    entry = KnowledgeDocumentVersion(
+        document_id=document.id,
+        version=document.version,
+        sha256=document.sha256,
+        title=document.title,
+        source_url=document.source_url,
+        page_count=document.page_count,
+        chunk_count=chunk_count,
+        stored_filename=document.stored_filename,
+        file_size=document.file_size,
+        embedding_model=document.embedding_model or EMBEDDING_MODEL,
+        change_kind=change_kind,
+        note=note,
+        created_by=actor_user_id,
+    )
+    db.add(entry)
+    return entry
+
+
 def ingest_pdf(
     db: Session,
     *,
@@ -279,6 +328,12 @@ def ingest_pdf(
     provider: EmbeddingProvider,
     title: str | None = None,
     commit: bool = True,
+    stored_filename: str | None = None,
+    file_size: int | None = None,
+    actor_user_id: int | None = None,
+    change_kind: str = "upload",
+    note: str | None = None,
+    force: bool = False,
 ) -> IngestResult:
     path = Path(pdf_path)
     file_hash = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -288,10 +343,29 @@ def ingest_pdf(
             KnowledgeDocument.source_url == source_url,
         )
     )
-    if existing is not None and existing.sha256 == file_hash:
+    # force=True 用于重新向量化：内容没变但要重算向量（换 embedding 模型、
+    # 修复损坏向量），此时不能走"sha 相同即跳过"的快捷路径。
+    if existing is not None and existing.sha256 == file_hash and not force:
         count = db.scalar(
             select(func.count()).select_from(KnowledgeChunk).where(KnowledgeChunk.document_id == existing.id)
         )
+        # 内容没变但此前没留存档（存档层上线之前入库的文档）：补录原件，
+        # 这样它之后也能重建/回滚/下载，而不用等下一次内容变更。
+        if stored_filename and not existing.stored_filename:
+            existing.stored_filename = stored_filename
+            existing.file_size = file_size
+            _append_document_version(
+                db,
+                document=existing,
+                chunk_count=count or 0,
+                change_kind="upload",
+                note="补录原始文件存档（内容未变）",
+                actor_user_id=actor_user_id,
+            )
+            if commit:
+                db.commit()
+            else:
+                db.flush()
         return IngestResult(existing.id, created=False, changed=False, chunk_count=count or 0, sha256=file_hash)
 
     if db.scalar(select(RobotModel.id).where(RobotModel.id == robot_model_id)) is None:
@@ -312,6 +386,12 @@ def ingest_pdf(
                 source_url=source_url,
                 sha256=file_hash,
                 page_count=len(pages),
+                status="active",
+                version=1,
+                stored_filename=stored_filename,
+                file_size=file_size,
+                embedding_model=EMBEDDING_MODEL,
+                uploaded_by=actor_user_id,
             )
             db.add(document)
             db.flush()
@@ -321,6 +401,11 @@ def ingest_pdf(
             document.title = title or metadata_title or path.stem
             document.sha256 = file_hash
             document.page_count = len(pages)
+            document.version = (document.version or 1) + 1
+            document.embedding_model = EMBEDDING_MODEL
+            if stored_filename:
+                document.stored_filename = stored_filename
+                document.file_size = file_size
 
         db.add_all(
             [
@@ -333,6 +418,14 @@ def ingest_pdf(
                 )
                 for chunk, vector in zip(chunks, vectors, strict=True)
             ]
+        )
+        _append_document_version(
+            db,
+            document=document,
+            chunk_count=len(chunks),
+            change_kind=change_kind,
+            note=note,
+            actor_user_id=actor_user_id,
         )
         if commit:
             db.commit()
@@ -492,6 +585,9 @@ def postgres_search_statement(
         .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
         .where(
             KnowledgeDocument.robot_model_id == robot_model_id,
+            # 停用的文档不参与检索——这是"停用"的唯一生效点，
+            # 漏了这行整个开关就是摆设。
+            KnowledgeDocument.status == "active",
             KnowledgeChunk.embedding.is_not(None),
             distance <= 1.0 - min_score,
         )
@@ -535,10 +631,15 @@ def get_knowledge_health(
     for item in statuses:
         if item.model_code not in required:
             continue
+        # 健康度回答的是"这个型号现在能不能答"，所以只看启用中的文档：
+        # 全部停用等于答不了，不能因为库里还躺着记录就报 ready。
         sha256s = list(
             db.scalars(
                 select(KnowledgeDocument.sha256)
-                .where(KnowledgeDocument.robot_model_id == item.robot_model_id)
+                .where(
+                    KnowledgeDocument.robot_model_id == item.robot_model_id,
+                    KnowledgeDocument.status == "active",
+                )
                 .order_by(KnowledgeDocument.id)
             )
         )

@@ -7,12 +7,14 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
+from ..knowledge_admin_service import gap_query_hash, store_knowledge_file
 from ..knowledge_service import get_knowledge_status, ingest_pdf
 from ..models import (
     AuditLog,
+    ContentGapResolution,
     DiagnosticFlow,
     DiagnosticSession,
     GenerationRecord,
@@ -53,6 +55,17 @@ router = APIRouter(prefix="/api/v1")
 
 OPERATION_STATS_WINDOW_DAYS = 30
 MAX_KNOWLEDGE_PDF_BYTES = 30 * 1024 * 1024
+
+
+def _discard_new_archive(path: Path, created_by_this_request: bool) -> None:
+    """入库失败时清理存档，但只清理本次请求新建的那个文件。
+
+    存档按内容哈希命名，同一份 PDF 可能已被别的型号引用；
+    无条件删除会把别人的原件一起带走。
+    """
+
+    if created_by_this_request:
+        path.unlink(missing_ok=True)
 
 
 @router.get("/admin/overview", response_model=AdminOverviewRead)
@@ -132,13 +145,18 @@ def admin_content_gaps(
     rows = db.execute(
         select(
             KnowledgeGapEvent.query_normalized,
+            KnowledgeGapEvent.robot_model_id,
+            RobotModel.code.label("model_code"),
             func.count().label("event_count"),
             func.max(KnowledgeGapEvent.created_at).label("last_seen_at"),
-            func.array_agg(RobotModel.code.distinct()).label("model_codes"),
         )
         .join(RobotModel, RobotModel.id == KnowledgeGapEvent.robot_model_id)
         .where(KnowledgeGapEvent.created_at >= since)
-        .group_by(KnowledgeGapEvent.query_normalized)
+        .group_by(
+            KnowledgeGapEvent.query_normalized,
+            KnowledgeGapEvent.robot_model_id,
+            RobotModel.code,
+        )
         .order_by(
             func.count().desc(),
             func.max(KnowledgeGapEvent.created_at).desc(),
@@ -146,15 +164,45 @@ def admin_content_gaps(
         )
         .limit(limit)
     ).all()
-    return [
-        AdminContentGapRead(
-            query_normalized=row.query_normalized,
-            count=int(row.event_count),
-            model_codes=sorted(row.model_codes),
-            last_seen_at=row.last_seen_at,
+    if not rows:
+        return []
+
+    # 一次取回这批缺口的处理状态，避免逐条查库
+    hashes = [gap_query_hash(row.query_normalized) for row in rows]
+    resolutions = {
+        (item.robot_model_id, item.query_hash): item
+        for item in db.scalars(
+            select(ContentGapResolution)
+            .options(selectinload(ContentGapResolution.linked_document))
+            .where(ContentGapResolution.query_hash.in_(hashes))
+        ).all()
+    }
+    items: list[AdminContentGapRead] = []
+    for row in rows:
+        resolution = resolutions.get((row.robot_model_id, gap_query_hash(row.query_normalized)))
+        items.append(
+            AdminContentGapRead(
+                query_normalized=row.query_normalized,
+                count=int(row.event_count),
+                robot_model_id=row.robot_model_id,
+                model_code=row.model_code,
+                last_seen_at=row.last_seen_at,
+                status=resolution.status if resolution else "open",
+                linked_document_id=resolution.linked_document_id if resolution else None,
+                linked_document_title=(
+                    resolution.linked_document.title
+                    if resolution and resolution.linked_document
+                    else None
+                ),
+                replay_status=resolution.replay_status if resolution else None,
+                replay_citation_count=resolution.replay_citation_count if resolution else None,
+                replay_answer_excerpt=resolution.replay_answer_excerpt if resolution else None,
+                replay_checked_at=resolution.replay_checked_at if resolution else None,
+                resolved_at=resolution.resolved_at if resolution else None,
+                note=resolution.note if resolution else None,
+            )
         )
-        for row in rows
-    ]
+    return items
 
 
 @router.get("/admin/models", response_model=list[AdminModelRead])
@@ -238,9 +286,10 @@ def admin_knowledge_upload(
         raise HTTPException(status_code=415, detail="Uploaded file is not a PDF")
 
     title = Path(file.filename).stem if file.filename else None
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as handle:
-        handle.write(content)
-        pdf_path = Path(handle.name)
+    # 先把原件存档再入库：没有原件，重新向量化/版本回滚/下载原件三件事全都做不了。
+    storage_dir = Path(request.app.state.knowledge_dir)
+    stored_filename, file_size, file_created = store_knowledge_file(storage_dir, content)
+    pdf_path = storage_dir / stored_filename
     try:
         # ingest 与审计写入同一事务：任何一步失败整体回滚，不留半条记录。
         result = ingest_pdf(
@@ -251,6 +300,10 @@ def admin_knowledge_upload(
             provider=request.app.state.embedding_provider,
             title=title or None,
             commit=False,
+            stored_filename=stored_filename,
+            file_size=file_size,
+            actor_user_id=admin.id,
+            change_kind="upload",
         )
         db.add(
             AuditLog(
@@ -270,9 +323,11 @@ def admin_knowledge_upload(
         db.commit()
     except ValueError as exc:
         db.rollback()
+        _discard_new_archive(pdf_path, file_created)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         db.rollback()
+        _discard_new_archive(pdf_path, file_created)
         emit_json_log(
             logging.ERROR,
             "admin_knowledge_upload_failed",
@@ -281,8 +336,6 @@ def admin_knowledge_upload(
             error_type=type(exc).__name__,
         )
         raise HTTPException(status_code=503, detail="Embedding service unavailable") from exc
-    finally:
-        pdf_path.unlink(missing_ok=True)
     emit_json_log(
         logging.INFO,
         "admin_knowledge_uploaded",

@@ -62,8 +62,9 @@ def _is_expired(value: datetime, now: datetime) -> bool:
 
 
 def _opaque_digest(settings: Settings, namespace: str, value: str) -> str:
+    # 登录失败计数等不落明文 IP 的摘要，与 JWT 签名密钥解耦（见 config.py）
     return hmac.new(
-        settings.jwt_secret.encode("utf-8"),
+        settings.effective_rate_limit_hmac_secret.encode("utf-8"),
         f"{namespace}:{value}".encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()

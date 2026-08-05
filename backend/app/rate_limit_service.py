@@ -38,8 +38,9 @@ def utcnow() -> datetime:
 
 
 def _digest(settings: Settings, namespace: str, value: str) -> str:
+    # 独立密钥：轮换它只清掉当前限流窗口，不会把所有用户踢下线
     return hmac.new(
-        settings.jwt_secret.encode("utf-8"),
+        settings.effective_rate_limit_hmac_secret.encode("utf-8"),
         f"{namespace}:{value}".encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -15,7 +16,12 @@ from .generation_service import (
 )
 from .knowledge_service import DashScopeEmbeddingProvider, EmbeddingProvider
 from .migration_guard import ensure_database_at_head
-from .observability import install_observability, readiness_status, request_trace_id
+from .observability import (
+    emit_json_log,
+    install_observability,
+    readiness_status,
+    request_trace_id,
+)
 from .rate_limit_service import KnowledgeSearchCache
 from .seed import seed_database
 
@@ -50,6 +56,7 @@ def create_app(
     application.state.embedding_provider = embedding_provider or DashScopeEmbeddingProvider(
         settings.dashscope_api_key,
         settings.dashscope_base_url,
+        timeout_policy=getattr(settings, "embedding_timeout_policy", None),
     )
     application.state.knowledge_search_cache = KnowledgeSearchCache(
         settings.knowledge_search_cache_ttl_seconds
@@ -69,7 +76,20 @@ def create_app(
     # 知识原件存档目录：重新向量化、版本回滚、下载原件都依赖它
     application.state.knowledge_dir = Path(knowledge_dir or settings.knowledge_dir).resolve()
     application.state.knowledge_dir.mkdir(parents=True, exist_ok=True)
-    application.state.report_filename_secret = settings.jwt_secret
+    application.state.report_filename_secret = settings.effective_report_filename_secret
+    # 仍在复用 JWT 密钥的用途要说出来：否则运维轮换 JWT secret 时会意外
+    # 清空限流计数并让已发出的报告链接全部 404，而事前毫无提示
+    if settings.reused_jwt_secret_purposes:
+        emit_json_log(
+            logging.WARNING,
+            "secret_reuse_detected",
+            purposes=settings.reused_jwt_secret_purposes,
+            hint=(
+                "set ROBOTCARE_RATE_LIMIT_HMAC_SECRET / ROBOTCARE_REPORT_FILENAME_SECRET "
+                "so rotating the JWT secret does not invalidate rate-limit counters "
+                "or previously issued report links"
+            ),
+        )
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,

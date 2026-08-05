@@ -17,6 +17,13 @@ from sqlalchemy import Float, bindparam, case, delete, distinct, func, select
 from sqlalchemy.orm import Session
 
 from .db_types import EMBEDDING_DIMENSION, normalize_embedding
+from .llm_transport import (
+    LLMTransportError,
+    TimeoutPolicy,
+    call_with_budget,
+    is_retryable_exception,
+    is_retryable_status,
+)
 from .models import (
     KnowledgeChunk,
     KnowledgeDocument,
@@ -27,6 +34,12 @@ from .observability import current_trace_id, emit_json_log
 
 EMBEDDING_MODEL = "text-embedding-v4"
 EMBEDDING_BATCH_SIZE = 10
+
+# 未显式注入配置时的兜底预算（CLI、脚本等旁路入口）；请求路径走
+# settings.embedding_timeout_policy。embedding 是短请求，预算远小于生成。
+DEFAULT_EMBEDDING_TIMEOUT_POLICY = TimeoutPolicy(
+    connect_seconds=5.0, read_seconds=20.0, budget_seconds=30.0, max_attempts=2
+)
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 80
 
@@ -75,16 +88,30 @@ class HashingNgramEmbeddingProvider:
 class DashScopeEmbeddingProvider:
     """DashScope TextEmbedding v4 adapter with the product's fixed settings."""
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        timeout_policy: TimeoutPolicy | None = None,
+    ) -> None:
         self.api_key = api_key
         self.base_url = (base_url or "").strip().rstrip("/") or None
+        self.timeout_policy = timeout_policy or DEFAULT_EMBEDDING_TIMEOUT_POLICY
 
     def _embed(self, texts: Sequence[str], text_type: str) -> list[list[float]]:
         if not texts:
             return []
         if len(texts) > EMBEDDING_BATCH_SIZE:
             raise ValueError(f"DashScope embedding batch cannot exceed {EMBEDDING_BATCH_SIZE}")
+        return call_with_budget(
+            lambda read_timeout: self._embed_once(texts, text_type, read_timeout),
+            self.timeout_policy,
+            op_name="embedding.dashscope",
+        )
 
+    def _embed_once(
+        self, texts: Sequence[str], text_type: str, read_timeout: float
+    ) -> list[list[float]]:
         import dashscope
 
         if self.base_url:
@@ -95,6 +122,8 @@ class DashScopeEmbeddingProvider:
             "input": list(texts),
             "dimension": EMBEDDING_DIMENSION,
             "text_type": text_type,
+            # SDK 默认 300s，不显式传等于没有超时（2026-08-05 上线体检）
+            "request_timeout": (self.timeout_policy.connect_seconds, read_timeout),
         }
         if self.api_key:
             kwargs["api_key"] = self.api_key
@@ -114,7 +143,11 @@ class DashScopeEmbeddingProvider:
                 error_type=type(exc).__name__,
                 duration_ms=round((perf_counter() - started_at) * 1000, 3),
             )
-            raise RuntimeError("DashScope embedding request failed") from exc
+            # 超时/连接类异常标记为可重试，交给 call_with_budget 在预算内决定
+            raise LLMTransportError(
+                "DashScope embedding request failed",
+                retryable=is_retryable_exception(exc),
+            ) from exc
         if getattr(response, "status_code", None) != 200:
             emit_json_log(
                 logging.ERROR,
@@ -128,8 +161,13 @@ class DashScopeEmbeddingProvider:
                 provider_status=getattr(response, "status_code", None),
                 duration_ms=round((perf_counter() - started_at) * 1000, 3),
             )
+            status_code = getattr(response, "status_code", None)
             message = getattr(response, "message", "DashScope embedding request failed")
-            raise RuntimeError(str(message))
+            raise LLMTransportError(
+                str(message),
+                retryable=isinstance(status_code, int) and is_retryable_status(status_code),
+                status_code=status_code if isinstance(status_code, int) else None,
+            )
 
         output = getattr(response, "output", None)
         if output is None and isinstance(response, dict):

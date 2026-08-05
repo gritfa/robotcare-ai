@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import re
 from pathlib import Path
 
 import yaml
@@ -13,6 +15,43 @@ ROOT = Path(__file__).resolve().parents[1]
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def settings_field_names() -> list[str]:
+    """静态解析 Settings 的字段名（用 ast 而非 import，避免依赖后端运行时环境）。"""
+    tree = ast.parse((ROOT / "backend" / "app" / "config.py").read_text(encoding="utf-8"))
+    settings_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Settings"
+    )
+    return [
+        node.target.id
+        for node in settings_class.body
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+    ]
+
+
+def config_default(field: str) -> float:
+    """取 Settings 中某个数值字段的默认值（支持 Field(default=...) 与裸字面量）。"""
+    tree = ast.parse((ROOT / "backend" / "app" / "config.py").read_text(encoding="utf-8"))
+    settings_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Settings"
+    )
+    for node in settings_class.body:
+        if not (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)):
+            continue
+        if node.target.id != field or node.value is None:
+            continue
+        if isinstance(node.value, ast.Constant):
+            return float(node.value.value)
+        if isinstance(node.value, ast.Call):
+            for keyword in node.value.keywords:
+                if keyword.arg == "default" and isinstance(keyword.value, ast.Constant):
+                    return float(keyword.value.value)
+    raise AssertionError(f"Settings.{field} has no readable numeric default")
 
 
 def main() -> None:
@@ -123,6 +162,60 @@ def main() -> None:
             backend_env[name] == f"${{{name}:-{default}}}",
             f"business rate-limit setting missing: {name}",
         )
+    # 全量透传契约：Settings 里的每个配置项都必须在 Compose 中出现。
+    # 容器内没有 .env（根 .dockerignore 排掉了），漏一个就是"该配置在 Docker
+    # 部署下永久锁死为默认值"，且不会报任何错。2026-08-05 上线体检发现
+    # LLM_BACKEND / ALERT_WEBHOOK_URL 等 18 项处于这种静默失效状态，
+    # 而同类问题在 generation_service 注释里刚修过一次——所以改成全量断言，
+    # 让"新增配置项忘记透传"在 CI 阶段就失败。
+    composed_env_names = set(backend_env)
+    untransmitted = [
+        f"ROBOTCARE_{name.upper()}"
+        for name in settings_field_names()
+        if f"ROBOTCARE_{name.upper()}" not in composed_env_names
+    ]
+    require(
+        not untransmitted,
+        "Compose must pass through every Settings field (container has no .env); "
+        f"missing: {', '.join(untransmitted)}",
+    )
+
+    # 模板必须覆盖全部配置项，否则运维照着 .env.example 部署就会漏配
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    undocumented = [
+        f"ROBOTCARE_{name.upper()}"
+        for name in settings_field_names()
+        if f"ROBOTCARE_{name.upper()}" not in env_example
+    ]
+    require(
+        not undocumented,
+        f".env.example must document every Settings field; missing: {', '.join(undocumented)}",
+    )
+
+    # 真密钥文件不得对同机其他用户可读（2026-08-05 体检：0644 明文含真 key）
+    env_file = ROOT / ".env"
+    if env_file.exists():
+        mode = env_file.stat().st_mode & 0o077
+        require(
+            mode == 0,
+            f".env holds live secrets and must not be group/world readable "
+            f"(found mode {oct(env_file.stat().st_mode & 0o777)}, expected 0600)",
+        )
+
+    # 外部模型总预算必须小于反向代理的读超时，否则用户已收到 504、
+    # 后端仍在跑并照常计费（2026-08-05 体检：旧值 180s vs 反代 60s）
+    nginx_conf = (ROOT / "frontend" / "nginx.conf").read_text(encoding="utf-8")
+    proxy_read_timeout = re.search(r"proxy_read_timeout\s+(\d+)s", nginx_conf)
+    require(proxy_read_timeout is not None, "Nginx proxy_read_timeout must be pinned")
+    proxy_seconds = float(proxy_read_timeout.group(1))
+    for field in ("llm_budget_seconds", "embedding_budget_seconds"):
+        require(
+            config_default(field) < proxy_seconds,
+            f"Settings.{field} default must stay below Nginx proxy_read_timeout "
+            f"({proxy_seconds:g}s), otherwise the client gets a 504 while the "
+            "backend keeps burning tokens",
+        )
+
     require(
         "127.0.0.1:${BACKEND_PORT:-8000}:8000" in backend["ports"],
         "backend must bind to host loopback instead of a public interface",

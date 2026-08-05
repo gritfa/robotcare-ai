@@ -1,0 +1,180 @@
+"""外部大模型调用的传输层：超时预算 + 有限重试。
+
+背景（2026-08-05 上线前体检）：生成与 embedding 调用此前完全没有超时约束——
+OpenAI-compat 侧写死 180s、DashScope SDK 默认 300s，而 Nginx 的
+proxy_read_timeout 只有 60s。后果是用户 60s 就收到 504，后端却还在跑并照常
+计费；叠加单进程 uvicorn，几个 hang 住的请求就能把整个服务拖死。
+
+本模块的三条口径：
+
+1. **总预算优先于单次超时。** 重试不得把总耗时推过预算，否则"加了重试"
+   等于把可用性做得更差——用户早已收到 504，重试只是在给账单添砖加瓦。
+   每次尝试的 read 超时都会被压到剩余预算之内。
+2. **只重试传输层可恢复错误**（连接失败、超时、429、5xx）。4xx 一律不重试：
+   鉴权错、参数错重试多少次结果都一样，只是多烧一次钱。
+3. **预算不足以完成一次有意义的重试时直接放弃**，不发注定超时的请求。
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from dataclasses import dataclass
+from typing import Callable, TypeVar
+
+from .observability import current_trace_id, emit_json_log
+
+
+T = TypeVar("T")
+
+# 低于这个剩余预算就不再重试：连接加首字节都未必够，发出去多半是白烧一次钱
+DEFAULT_MIN_RETRY_SECONDS = 8.0
+# 重试前的退避，也计入总预算
+RETRY_BACKOFF_SECONDS = 0.5
+
+# 传输层可恢复错误的类型名标记。用类型名而不是 import 具体库，
+# 是为了让本模块同时覆盖 httpx（生成）与 requests（DashScope SDK 内部）
+# 两套异常体系，且不为了分类去硬依赖 SDK 的内部实现。
+_RETRYABLE_EXCEPTION_MARKERS = (
+    "timeout",
+    "connect",
+    "connection",
+    "remoteprotocol",
+    "remotedisconnected",
+    "chunkedencoding",
+    "readerror",
+    "writeerror",
+    "networkerror",
+    "protocolerror",
+)
+
+
+@dataclass(frozen=True)
+class TimeoutPolicy:
+    """一次外部模型调用的时间预算。
+
+    connect_seconds/read_seconds 是单次尝试的超时；budget_seconds 是含重试与
+    退避在内的总上限，必须小于反向代理的 proxy_read_timeout，否则用户侧早已
+    504、后端还在空转。
+    """
+
+    connect_seconds: float
+    read_seconds: float
+    budget_seconds: float
+    max_attempts: int = 2
+    min_retry_seconds: float = DEFAULT_MIN_RETRY_SECONDS
+
+    def __post_init__(self) -> None:
+        if self.connect_seconds <= 0 or self.read_seconds <= 0:
+            raise ValueError("timeout values must be positive")
+        if self.budget_seconds < self.connect_seconds:
+            raise ValueError("budget must cover at least one connect attempt")
+        if self.max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+
+
+class LLMTransportError(RuntimeError):
+    """外部模型调用失败。retryable 表示"再试一次有可能成功"。"""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+        self.status_code = status_code
+
+
+class LLMBudgetExceededError(LLMTransportError):
+    """总预算耗尽。单独成类，便于 API 层给出"稍后再试"而不是"服务故障"。"""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, retryable=False)
+
+
+def is_retryable_status(status_code: int) -> bool:
+    """429 与 5xx 可重试；其余 4xx 是调用方自己的问题，重试无意义。"""
+    return status_code == 429 or status_code >= 500
+
+
+def is_retryable_exception(exc: BaseException) -> bool:
+    """按异常类型名判断是否为传输层可恢复错误。
+
+    显式声明的 LLMTransportError 以自身标记为准；其余按类型名匹配，
+    覆盖 httpx 与 requests 两套体系。未知异常一律视为不可重试——
+    宁可少试一次，也不要把逻辑错误反复放大成双倍账单。
+    """
+    if isinstance(exc, LLMTransportError):
+        return exc.retryable
+    name = type(exc).__name__.lower()
+    return any(marker in name for marker in _RETRYABLE_EXCEPTION_MARKERS)
+
+
+def call_with_budget(
+    operation: Callable[[float], T],
+    policy: TimeoutPolicy,
+    *,
+    op_name: str,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> T:
+    """在总预算内执行 operation，必要时重试。
+
+    operation 接受本次尝试允许的 read 超时秒数（已按剩余预算压缩），
+    返回结果或抛异常。
+    """
+    deadline = monotonic() + policy.budget_seconds
+    last_error: BaseException | None = None
+
+    for attempt in range(1, policy.max_attempts + 1):
+        remaining = deadline - monotonic()
+        if remaining <= policy.connect_seconds:
+            break
+        read_timeout = min(policy.read_seconds, remaining - policy.connect_seconds)
+        started_at = monotonic()
+        try:
+            return operation(read_timeout)
+        except BaseException as exc:  # noqa: BLE001 - 分类后按需重抛
+            last_error = exc
+            retryable = is_retryable_exception(exc)
+            elapsed_ms = round((monotonic() - started_at) * 1000, 3)
+            remaining_after = deadline - monotonic()
+            will_retry = (
+                retryable
+                and attempt < policy.max_attempts
+                and remaining_after - RETRY_BACKOFF_SECONDS >= policy.min_retry_seconds
+            )
+            emit_json_log(
+                logging.WARNING if will_retry else logging.ERROR,
+                "llm_transport_attempt",
+                trace_id=current_trace_id(),
+                op_name=op_name,
+                attempt=attempt,
+                max_attempts=policy.max_attempts,
+                outcome="retrying" if will_retry else "failed",
+                retryable=retryable,
+                error_type=type(exc).__name__,
+                status_code=getattr(exc, "status_code", None),
+                duration_ms=elapsed_ms,
+                remaining_budget_ms=round(max(remaining_after, 0) * 1000, 3),
+            )
+            if not will_retry:
+                raise
+            sleep(RETRY_BACKOFF_SECONDS)
+
+    # 预算耗尽（或首轮就没有可用预算）而没有成功结果
+    message = f"{op_name} exhausted its {policy.budget_seconds:g}s budget"
+    emit_json_log(
+        logging.ERROR,
+        "llm_transport_attempt",
+        trace_id=current_trace_id(),
+        op_name=op_name,
+        attempt=policy.max_attempts,
+        max_attempts=policy.max_attempts,
+        outcome="budget_exhausted",
+        error_type=type(last_error).__name__ if last_error else None,
+    )
+    raise LLMBudgetExceededError(message) from last_error

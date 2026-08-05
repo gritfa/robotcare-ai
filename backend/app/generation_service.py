@@ -24,6 +24,12 @@ from typing import Protocol
 from sqlalchemy.orm import Session
 
 from .knowledge_service import EmbeddingProvider, SearchResult, search_knowledge
+from .llm_transport import (
+    LLMTransportError,
+    TimeoutPolicy,
+    call_with_budget,
+    is_retryable_status,
+)
 from .models import GenerationRecord
 from .observability import current_trace_id, emit_json_log
 from .safety import detect_unsafe_generated_answer
@@ -31,6 +37,12 @@ from .safety import detect_unsafe_generated_answer
 PROMPT_VERSION = "answer-v5"
 REFUSE_TOKEN = "REFUSE"
 MAX_SNIPPETS = 5
+
+# 未显式注入配置时的兜底预算（脚本、评测等旁路入口）。默认值与 Settings 一致，
+# 且必须小于反代 proxy_read_timeout；正式请求路径走 settings.llm_timeout_policy。
+DEFAULT_GENERATION_TIMEOUT_POLICY = TimeoutPolicy(
+    connect_seconds=5.0, read_seconds=40.0, budget_seconds=50.0, max_attempts=2
+)
 
 # v2（2026-08-04）：LLM 裁判评测实锤 11/34 条语义越界（docs/evidence/llm_judge_faithfulness.json），
 # 两大模式针对性加约束：补片段没有的因果/机制解释；把其他故障条目的步骤挪用到当前问题
@@ -96,12 +108,28 @@ class GenerationProvider(Protocol):
 class DashScopeGenerationProvider:
     """DashScope（通义千问）文本生成适配器。"""
 
-    def __init__(self, api_key: str | None, model: str = "qwen-plus", base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None,
+        model: str = "qwen-plus",
+        base_url: str | None = None,
+        timeout_policy: TimeoutPolicy | None = None,
+    ) -> None:
         self.api_key = api_key
         self.model_name = model
         self.base_url = (base_url or "").strip().rstrip("/") or None
+        self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
 
     def generate(self, *, system: str, prompt: str) -> str:
+        return call_with_budget(
+            lambda read_timeout: self._generate_once(
+                system=system, prompt=prompt, read_timeout=read_timeout
+            ),
+            self.timeout_policy,
+            op_name="generation.dashscope",
+        )
+
+    def _generate_once(self, *, system: str, prompt: str, read_timeout: float) -> str:
         import dashscope
 
         if self.base_url:
@@ -114,13 +142,21 @@ class DashScopeGenerationProvider:
             ],
             "result_format": "message",
             "temperature": 0.1,
+            # SDK 默认 300s（common/constants.py DEFAULT_REQUEST_TIMEOUT_SECONDS），
+            # 远超反代的 60s，不显式传等于没有超时
+            "request_timeout": (self.timeout_policy.connect_seconds, read_timeout),
         }
         if self.api_key:
             kwargs["api_key"] = self.api_key
         response = dashscope.Generation.call(**kwargs)
-        if getattr(response, "status_code", None) != 200:
+        status_code = getattr(response, "status_code", None)
+        if status_code != 200:
             message = getattr(response, "message", "DashScope generation request failed")
-            raise RuntimeError(str(message))
+            raise LLMTransportError(
+                str(message),
+                retryable=isinstance(status_code, int) and is_retryable_status(status_code),
+                status_code=status_code if isinstance(status_code, int) else None,
+            )
         output = getattr(response, "output", None)
         if output is None and isinstance(response, dict):
             output = response.get("output")
@@ -138,7 +174,12 @@ class OpenAICompatGenerationProvider:
     """
 
     def __init__(
-        self, api_key: str | None, model: str, base_url: str, max_tokens: int = 4096
+        self,
+        api_key: str | None,
+        model: str,
+        base_url: str,
+        max_tokens: int = 4096,
+        timeout_policy: TimeoutPolicy | None = None,
     ) -> None:
         self.api_key = api_key
         self.model_name = model
@@ -146,8 +187,18 @@ class OpenAICompatGenerationProvider:
         # 推理型模型思维链计入 max_tokens，4096 会被长任务耗尽致 content 为空
         # （2026-08-04 LLM 裁判评测 8/34 条 finish_reason=length 实锤），按调用方需要放大
         self.max_tokens = max_tokens
+        self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
 
     def generate(self, *, system: str, prompt: str) -> str:
+        return call_with_budget(
+            lambda read_timeout: self._generate_once(
+                system=system, prompt=prompt, read_timeout=read_timeout
+            ),
+            self.timeout_policy,
+            op_name="generation.openai_compat",
+        )
+
+    def _generate_once(self, *, system: str, prompt: str, read_timeout: float) -> str:
         import httpx
 
         headers = {"Content-Type": "application/json"}
@@ -165,12 +216,18 @@ class OpenAICompatGenerationProvider:
                 "temperature": 0.1,
                 "max_tokens": self.max_tokens,
             },
-            timeout=180.0,
+            # 旧值写死 180s，超过反代 60s：用户收 504 后这里还在跑并照常计费
+            timeout=httpx.Timeout(
+                read_timeout,
+                connect=self.timeout_policy.connect_seconds,
+            ),
         )
         if response.status_code != 200:
-            raise RuntimeError(
+            raise LLMTransportError(
                 f"OpenAI-compat generation failed: HTTP {response.status_code} "
-                f"{response.text[:200]}"
+                f"{response.text[:200]}",
+                retryable=is_retryable_status(response.status_code),
+                status_code=response.status_code,
             )
         payload = response.json()
         try:
@@ -192,12 +249,21 @@ def build_generation_provider(settings) -> "GenerationProvider":
     config 校验保证 openai-compat 必有 base_url；此前 main.py 写死 DashScope，
     llm_backend 配置形同虚设（2026-08-04 老板发现的接入缺口）。
     """
+    # 评测脚本等旁路入口可能传入简易 settings 对象；取不到就用模块默认预算，
+    # 但绝不退回"无超时"
+    policy = getattr(settings, "llm_timeout_policy", None) or DEFAULT_GENERATION_TIMEOUT_POLICY
     if settings.llm_backend == "openai-compat":
         return OpenAICompatGenerationProvider(
-            settings.llm_api_key, settings.generation_model, settings.llm_base_url
+            settings.llm_api_key,
+            settings.generation_model,
+            settings.llm_base_url,
+            timeout_policy=policy,
         )
     return DashScopeGenerationProvider(
-        settings.dashscope_api_key, settings.generation_model, settings.dashscope_base_url
+        settings.dashscope_api_key,
+        settings.generation_model,
+        settings.dashscope_base_url,
+        timeout_policy=policy,
     )
 
 

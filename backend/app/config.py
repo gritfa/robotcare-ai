@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://robotcare:robotcare@localhost:5432/robotcare"
     environment: str = "development"
     jwt_secret: str = DEFAULT_DEVELOPMENT_JWT_SECRET
+    # jwt_secret 此前被复用为三种用途（JWT 签名 / 限流键 HMAC / 报告文件名派生），
+    # 轮换它会同时踢掉所有会话、清零限流计数、让已发出的报告链接全部失效。
+    # 拆成独立密钥；未配置时回退 jwt_secret 以兼容既有部署，
+    # 回退状态会在启动时告警（main.py），不静默。
+    rate_limit_hmac_secret: str | None = None
+    report_filename_secret: str | None = None
     registration_mode: Literal["open", "invite", "closed"] = "open"
     registration_invite_secret: str | None = None
     access_token_minutes: int = Field(default=60, ge=1, le=1440)
@@ -72,6 +78,18 @@ class Settings(BaseSettings):
     llm_backend: str = "dashscope"  # dashscope | openai-compat
     llm_api_key: str | None = None
     llm_base_url: str | None = None
+    # 外部模型超时预算。默认值必须小于 frontend/nginx.conf 的 proxy_read_timeout
+    # （当前 60s），否则用户已收到 504、后端还在跑并照常计费；
+    # 该约束由 scripts/verify_deployment_config.py 静态断言守住。
+    llm_connect_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0)
+    llm_read_timeout_seconds: float = Field(default=40.0, ge=5.0, le=600.0)
+    llm_budget_seconds: float = Field(default=50.0, ge=5.0, le=600.0)
+    llm_max_attempts: int = Field(default=2, ge=1, le=4)
+    # embedding 是短请求（一批文本向量化），预算远小于生成
+    embedding_connect_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0)
+    embedding_read_timeout_seconds: float = Field(default=20.0, ge=5.0, le=600.0)
+    embedding_budget_seconds: float = Field(default=30.0, ge=5.0, le=600.0)
+    embedding_max_attempts: int = Field(default=2, ge=1, le=4)
     knowledge_min_score: float = Field(default=0.25, ge=0, le=1)
     knowledge_min_score_overrides: str = "{}"
     auto_create_schema: bool = False
@@ -85,6 +103,17 @@ class Settings(BaseSettings):
         if self.llm_backend == "openai-compat" and not (self.llm_base_url or "").strip():
             raise ValueError(
                 "ROBOTCARE_LLM_BASE_URL is required when ROBOTCARE_LLM_BACKEND=openai-compat"
+            )
+        # 预算必须容得下连接加一段可用的读取，否则每次调用都在预算耗尽处失败
+        if self.llm_budget_seconds < self.llm_connect_timeout_seconds + 5:
+            raise ValueError(
+                "ROBOTCARE_LLM_BUDGET_SECONDS must exceed "
+                "ROBOTCARE_LLM_CONNECT_TIMEOUT_SECONDS by at least 5 seconds"
+            )
+        if self.embedding_budget_seconds < self.embedding_connect_timeout_seconds + 5:
+            raise ValueError(
+                "ROBOTCARE_EMBEDDING_BUDGET_SECONDS must exceed "
+                "ROBOTCARE_EMBEDDING_CONNECT_TIMEOUT_SECONDS by at least 5 seconds"
             )
         try:
             self.trusted_proxy_networks
@@ -156,6 +185,48 @@ class Settings(BaseSettings):
         if model_code in overrides:
             return float(overrides[model_code])
         return self.knowledge_min_score
+
+    @property
+    def effective_rate_limit_hmac_secret(self) -> str:
+        """限流键 HMAC 用的密钥。轮换它只影响当前限流窗口，不踢用户下线。"""
+        return (self.rate_limit_hmac_secret or "").strip() or self.jwt_secret
+
+    @property
+    def effective_report_filename_secret(self) -> str:
+        """报告文件名派生用的密钥。轮换它会让旧报告链接失效，故必须独立于 JWT。"""
+        return (self.report_filename_secret or "").strip() or self.jwt_secret
+
+    @property
+    def reused_jwt_secret_purposes(self) -> list[str]:
+        """仍在复用 JWT 密钥的用途清单，供启动告警使用。"""
+        purposes = []
+        if not (self.rate_limit_hmac_secret or "").strip():
+            purposes.append("rate_limit_hmac")
+        if not (self.report_filename_secret or "").strip():
+            purposes.append("report_filename")
+        return purposes
+
+    @property
+    def llm_timeout_policy(self):
+        from .llm_transport import TimeoutPolicy
+
+        return TimeoutPolicy(
+            connect_seconds=self.llm_connect_timeout_seconds,
+            read_seconds=self.llm_read_timeout_seconds,
+            budget_seconds=self.llm_budget_seconds,
+            max_attempts=self.llm_max_attempts,
+        )
+
+    @property
+    def embedding_timeout_policy(self):
+        from .llm_transport import TimeoutPolicy
+
+        return TimeoutPolicy(
+            connect_seconds=self.embedding_connect_timeout_seconds,
+            read_seconds=self.embedding_read_timeout_seconds,
+            budget_seconds=self.embedding_budget_seconds,
+            max_attempts=self.embedding_max_attempts,
+        )
 
     @property
     def cors_origin_list(self) -> list[str]:

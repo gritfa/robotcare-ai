@@ -11,6 +11,9 @@ export interface DiagnosticOption {
   title: string
   status?: 'draft' | 'published' | 'retired'
 }
+// 建议问题：source 说明这条从哪来——history=真实问过且答得上来，
+// flow=该型号有已发布诊断流程，fallback=通用兜底
+export interface SuggestedQuestion { text: string; source: 'history' | 'flow' | 'fallback' }
 export type DiagnosticStatus = 'collecting' | 'in_progress' | 'resolved' | 'unresolved' | 'report_ready' | 'cancelled'
 export interface DiagnosticStep { id: EntityId; position: number; title: string; instruction: string; source_label: string; safety_note?: string; options?: string[] }
 export interface StepExecution { id?: EntityId; outcome: 'resolved'|'not_resolved'; step: DiagnosticStep; created_at?: string }

@@ -14,6 +14,13 @@ export interface ChatStreamHandlers {
   onUserMessage?: (message: ChatMessage) => void
   onStage?: (stage: string) => void
   onDelta?: (text: string) => void
+  /**
+   * 服务端要求丢弃此前已下发的全部增量。
+   * 真流式下，成句即下发；若最终全文校验判定为拒答（或答案被改写），
+   * 已经到过屏幕上的文本必须撤回——留着它，用户会把一段没通过校验的
+   * 文本当成正式答案。
+   */
+  onDiscard?: (reason: string) => void
   /** 用户点"停止生成"用的中断信号 */
   signal?: AbortSignal
 }
@@ -116,6 +123,7 @@ export async function streamChatMessage(
     if (event === 'user_message') handlers.onUserMessage?.(data as ChatMessage)
     else if (event === 'stage') handlers.onStage?.((data as { stage: string }).stage)
     else if (event === 'delta') handlers.onDelta?.((data as { text: string }).text)
+    else if (event === 'discard') handlers.onDiscard?.((data as { reason?: string }).reason || '')
     else if (event === 'assistant_message') assistantMessage = data as ChatMessage
     else if (event === 'error') streamError = data as { message?: string }
   })

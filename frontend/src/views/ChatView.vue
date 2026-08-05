@@ -8,7 +8,7 @@ import { refusalPresentation } from '../answerDisplay'
 import { resolveComposerKey } from '../composerKeys'
 import { OFFICIAL_SUPPORT_NAME, OFFICIAL_SUPPORT_URL, supportHandoffHint } from '../supportChannels'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
-import type { AnswerCitation, ChatMessage, Conversation, Device, FeedbackReason, MessageActionCode, QuickAction, RobotModel } from '../types'
+import type { AnswerCitation, ChatMessage, Conversation, Device, FeedbackReason, MessageActionCode, QuickAction, RobotModel, SuggestedQuestion } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,10 +28,18 @@ const draft = ref('')
 const composing = ref(false)
 const streaming = ref(false)
 const streamingText = ref('')
+// 真实阶段文案：后端现在发 retrieving/retrieved/generating 三个点
+const streamStage = ref('')
+const STAGE_LABELS: Record<string, string> = {
+  retrieving: '正在检索该型号资料…',
+  retrieved: '资料已就位，正在组织回答…',
+  generating: '正在生成回答…',
+}
+const stageLabel = computed(() => STAGE_LABELS[streamStage.value] || '正在处理…')
 const safetyError = ref<ApiErrorInfo | null>(null)
 
-// 停止生成：中断信号；服务端在下发 delta 前已把校验通过的回答落库，
-// 所以"停止"只停渲染，之后重新拉详情就能拿到那条已持久化的消息
+// 停止生成：中断信号。改真流式后增量是边生成边下发的，落库在全文校验之后，
+// 所以中断＝这一轮整体回滚，不能再声称"回答已保存"
 const abortController = ref<AbortController | null>(null)
 // 发送失败时暂存原文，供"重试"一键重发（输入框内容同时保留）
 const failedContent = ref('')
@@ -41,13 +49,12 @@ const evidenceVisible = ref(false)
 // 每条回答的反馈状态：id → helpful，用于按钮高亮，避免重复点击看不出效果
 const feedbackGiven = ref<Record<string, boolean>>({})
 
-const SUGGESTED_QUESTIONS = [
-  '无法启动怎么办？',
-  '为什么回不了充电座？',
-  '如何重新配网？',
-  '主刷卡住怎么清理？',
-  '如何生成售后报告？',
-]
+// 建议问题此前是写死的 5 条，不分型号，且只在"已建会话且为空"时才显示——
+// 首次进聊天页只有一句"选择或新建一个会话"，冷启动没有任何抓手。
+// 现在按型号从后端取（真实问过且答得上来 > 有诊断流程 > 通用兜底），
+// 并且在还没建会话时也显示，点击即自动建会话并发问。
+const suggestions = ref<SuggestedQuestion[]>([])
+const suggestionsLoading = ref(false)
 
 const dialogVisible = ref(false)
 const dialogSelection = ref('')
@@ -75,6 +82,8 @@ onMounted(async () => {
     conversations.value = conversationList
     devices.value = deviceList
     models.value = modelList
+    // 首屏就要有抓手：不等用户建会话
+    await loadSuggestions(suggestionModelId.value)
   } catch (error) {
     ElMessage.error(apiError(error, '会话列表加载失败，请稍后重试'))
   } finally {
@@ -128,9 +137,7 @@ function selectionModelId(selection: string): number | null {
   return null
 }
 
-async function createConversation() {
-  const robotModelId = selectionModelId(dialogSelection.value)
-  if (!robotModelId) return
+async function createConversationFor(robotModelId: number): Promise<boolean> {
   creating.value = true
   try {
     const conversation = await conversationApi.create(robotModelId)
@@ -141,11 +148,19 @@ async function createConversation() {
     messages.value = []
     safetyError.value = null
     await router.push({ name: 'chat', params: { id: String(conversation.id) } })
+    return true
   } catch (error) {
     ElMessage.error(apiError(error, '创建会话失败，请稍后重试'))
+    return false
   } finally {
     creating.value = false
   }
+}
+
+async function createConversation() {
+  const robotModelId = selectionModelId(dialogSelection.value)
+  if (!robotModelId) return
+  await createConversationFor(robotModelId)
 }
 
 async function send() {
@@ -157,6 +172,7 @@ async function send() {
   failedContent.value = ''
   streaming.value = true
   streamingText.value = ''
+  streamStage.value = ''
   const controller = new AbortController()
   abortController.value = controller
   // 乐观展示用户消息；服务端 user_message 事件到达后以真实记录替换
@@ -171,9 +187,20 @@ async function send() {
       onUserMessage: (message) => {
         messages.value = messages.value.map(item => (item.id === optimistic.id ? message : item))
       },
+      onStage: (stage) => {
+        // 真实阶段：检索中 → 检索完成 → 生成中。此前后端只有一个阶段点、
+        // 前端还没接，用户全程只看到一句不变的"正在检索…"
+        streamStage.value = stage
+      },
       onDelta: async (text) => {
         streamingText.value += text
         await scrollToBottom()
+      },
+      onDiscard: () => {
+        // 服务端判定已下发内容不能作数（拒答或答案被改写）——立刻清屏，
+        // 绝不让一段没通过校验的文本留在用户眼前
+        streamingText.value = ''
+        streamStage.value = ''
       },
       signal: controller.signal,
     })
@@ -182,11 +209,14 @@ async function send() {
     await scrollToBottom()
   } catch (error) {
     if (error instanceof ChatStreamAborted) {
-      // 中断只停渲染：回答早在下发前就通过校验并落库了，重新拉详情把它取回来，
-      // 假装这轮没发生反而会让用户以为内容丢了
+      // 改真流式后，回答不再"下发前就已落库"——增量是边生成边发的，
+      // 落库发生在全文校验通过之后。中断意味着这一轮整体回滚（含用户消息），
+      // 所以按服务端的真实状态重新拉详情，并把提问放回输入框，
+      // 不能再宣称"已保存在会话里"（那会让用户以为刷新还能找到）。
       streaming.value = false
       await reloadActiveConversation()
-      ElMessage.info('已停止生成，本次回答已保存在会话里')
+      draft.value = content
+      ElMessage.info('已停止生成，这一轮未保存；提问已放回输入框')
       return
     }
     // 失败的轮次不落库：移除乐观消息（可能已被服务端 user_message 替换）并还原输入
@@ -206,6 +236,7 @@ async function send() {
   } finally {
     streaming.value = false
     streamingText.value = ''
+    streamStage.value = ''
     abortController.value = null
   }
 }
@@ -232,7 +263,40 @@ async function reloadActiveConversation() {
   }
 }
 
-function askSuggested(question: string) {
+// 建议问题面向的型号：有会话就跟着会话走，没会话就用用户第一台设备的型号，
+// 再没有就用第一个可选型号——冷启动时也要给得出建议。
+const suggestionModelId = computed<number | null>(() => {
+  const conversation = activeConversation.value
+  if (conversation) return Number(conversation.robot_model_id)
+  if (devices.value.length) return Number(devices.value[0].robot_model_id)
+  if (modelOptions.value.length) return Number(modelOptions.value[0].id)
+  return null
+})
+
+async function loadSuggestions(modelId: number | null) {
+  if (!modelId) { suggestions.value = []; return }
+  suggestionsLoading.value = true
+  try {
+    suggestions.value = await modelApi.suggestedQuestions(modelId)
+  } catch {
+    // 建议问题是锦上添花，取不到就安静降级，不要用报错打断用户
+    suggestions.value = []
+  } finally {
+    suggestionsLoading.value = false
+  }
+}
+
+watch(suggestionModelId, (modelId) => { void loadSuggestions(modelId) }, { immediate: false })
+
+async function askSuggested(question: string) {
+  // 还没有会话时先建一个：用户点建议问题的意图就是"我要问这个"，
+  // 不应该再把他弹回"请先新建会话"的对话框
+  if (!activeId.value) {
+    const modelId = suggestionModelId.value
+    if (!modelId) { openCreateDialog(); return }
+    const created = await createConversationFor(modelId)
+    if (!created) return
+  }
   draft.value = question
   void send()
 }
@@ -530,15 +594,15 @@ async function scrollToBottom() {
             <div v-if="!messages.length && !streaming" class="chat-placeholder">
               <el-icon><ChatDotRound /></el-icon>
               <p>描述“想完成的操作 + 当前现象 + 已尝试步骤”，回答会附资料页码；追问时无需重复背景。</p>
-              <div class="suggested">
-                <span class="suggested-label">试试这些常见问题：</span>
+              <div v-if="suggestions.length" class="suggested">
+                <span class="suggested-label">试试这些常见问题（{{ activeModelCode }}）：</span>
                 <el-button
-                  v-for="question in SUGGESTED_QUESTIONS"
-                  :key="question"
+                  v-for="question in suggestions"
+                  :key="question.text"
                   size="small"
                   round
-                  @click="askSuggested(question)"
-                >{{ question }}</el-button>
+                  @click="askSuggested(question.text)"
+                >{{ question.text }}</el-button>
               </div>
             </div>
             <template v-for="message in messages" :key="message.id">
@@ -644,7 +708,7 @@ async function scrollToBottom() {
             <div v-if="streaming" class="bubble-row">
               <div class="bubble assistant-bubble streaming-bubble">
                 <p v-if="streamingText">{{ streamingText }}<span class="cursor">▍</span></p>
-                <p v-else class="thinking">正在检索资料并生成回答…</p>
+                <p v-else class="thinking">{{ stageLabel }}</p>
               </div>
             </div>
           </div>
@@ -690,10 +754,23 @@ async function scrollToBottom() {
           <p class="chat-note">回答只依据已收录资料生成，不代表官方诊断；涉及冒烟、异味、电池鼓包等危险情况请立即联系官方售后。</p>
         </template>
 
+        <!-- 冷启动空态：此前只有一句"选择或新建一个会话"，用户无从下手。
+             现在直接把该型号"问了会有结果"的问题摆出来，点一下自动建会话并发问。 -->
         <div v-else class="chat-placeholder standalone">
           <el-icon><ChatDotRound /></el-icon>
-          <h3>选择或新建一个会话</h3>
+          <h3>直接问，或先新建一个会话</h3>
           <p>会话与设备型号绑定，回答严格限定在该型号的已收录资料内。</p>
+          <div v-if="suggestions.length" class="suggested">
+            <span class="suggested-label">这些问题现在就能答：</span>
+            <el-button
+              v-for="question in suggestions"
+              :key="question.text"
+              size="small"
+              round
+              :loading="creating"
+              @click="askSuggested(question.text)"
+            >{{ question.text }}</el-button>
+          </div>
           <el-button class="brand-button" type="primary" :icon="Plus" @click="openCreateDialog">新会话</el-button>
         </div>
       </section>

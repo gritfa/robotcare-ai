@@ -13,4 +13,21 @@ async function submit(){ if(!await formRef.value?.validate()) return; loading.va
 <template><div class="auth-page"><section class="auth-intro"><div class="brand"><span>R</span>RobotCare AI</div><div class="intro-copy"><p class="eyebrow">SAFE · TRACEABLE · HELPFUL</p><h1>让每一次故障排查<br/>都有依据、有边界。</h1><p>针对指定海尔扫地机器人型号，提供基于官方资料的分步安全排查；无法解决时，自动整理售后诊断报告。</p><ul><li>型号级知识检索与来源引用</li><li>一次一个步骤，过程可随时恢复</li><li>仅提供非拆机、低风险操作</li></ul></div><small>独立第三方工具，不代表海尔官方。</small></section><section class="auth-form"><div class="form-card"><p class="eyebrow">WELCOME BACK</p><h2>登录你的账户</h2><p class="muted">继续管理设备和诊断记录</p><el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="large" @keyup.enter="submit"><el-form-item label="邮箱" prop="email"><el-input v-model="form.email" placeholder="name@example.com" :prefix-icon="Message" /></el-form-item><el-form-item label="密码" prop="password"><el-input v-model="form.password" type="password" show-password placeholder="请输入密码" :prefix-icon="Lock" /></el-form-item><el-button class="brand-button" type="primary" size="large" :loading="loading" @click="submit">登录</el-button></el-form><p class="switch">还没有账户？<router-link to="/register">立即注册</router-link></p></div></section></div></template>
 <style scoped>
 .auth-page{min-height:100vh;display:grid;grid-template-columns:46% 54%;background:#fff}.auth-intro{background:linear-gradient(150deg,#0d3328 0%,#086047 100%);color:#fff;padding:48px 64px;display:flex;flex-direction:column;position:relative;overflow:hidden}.auth-intro:after{content:'';position:absolute;width:460px;height:460px;border:1px solid rgba(255,255,255,.1);border-radius:50%;right:-190px;bottom:-160px;box-shadow:0 0 0 80px rgba(255,255,255,.025),0 0 0 160px rgba(255,255,255,.018)}.brand{font-size:19px;font-weight:750;display:flex;gap:10px;align-items:center}.brand span{display:grid;place-items:center;width:34px;height:34px;background:#fff;color:#087f5b;border-radius:10px}.intro-copy{margin:auto 0;max-width:500px;position:relative;z-index:1}.intro-copy .eyebrow{color:#73d5b3}.intro-copy h1{font-size:43px;line-height:1.22;letter-spacing:-1.5px;margin:18px 0 24px}.intro-copy>p:not(.eyebrow){font-size:16px;line-height:1.9;color:#c5ddd5}.intro-copy ul{list-style:none;padding:18px 0 0;margin:0;display:grid;gap:14px;color:#e0efea}.intro-copy li:before{content:'✓';display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:rgba(101,218,176,.18);color:#7ce0bd;margin-right:10px}.auth-intro>small{color:#94b8ac;position:relative;z-index:1}.auth-form{display:grid;place-items:center;padding:50px}.form-card{width:390px}.form-card h2{font-size:29px;margin:13px 0 7px}.muted{color:var(--muted);margin:0 0 32px}.el-form-item{margin-bottom:22px}.brand-button{width:100%;margin-top:7px}.switch{text-align:center;color:var(--muted);font-size:14px;margin-top:24px}.switch a{color:var(--brand);font-weight:700}
+/* 移动端：46%/54% 双列在窄屏会把品牌栏挤成一列竖排文字，
+   表单卡片 390px 定宽也会溢出（2026-08-05 390px 实测）。改单列，
+   品牌区收成顶部条幅，表单占满宽度。 */
+@media (max-width: 860px) {
+  .auth-page{grid-template-columns:1fr;min-height:100dvh}
+  .auth-intro{padding:26px 20px 30px}
+  .auth-intro:after{display:none}
+  .intro-copy{margin:20px 0 0;max-width:none}
+  .intro-copy h1{font-size:26px;letter-spacing:-.6px;margin:12px 0 14px}
+  .intro-copy>p:not(.eyebrow){font-size:14px;line-height:1.75}
+  .intro-copy ul{display:none}
+  .auth-intro>small{margin-top:18px;font-size:11px}
+  .auth-form{padding:28px 18px 44px}
+  .form-card{width:100%;max-width:390px}
+  .form-card h2{font-size:23px}
+  .muted{margin:0 0 22px}
+}
 </style>

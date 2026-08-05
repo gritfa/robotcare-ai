@@ -15,8 +15,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Protocol
@@ -105,6 +107,78 @@ class GenerationProvider(Protocol):
     def generate(self, *, system: str, prompt: str) -> str: ...
 
 
+class StreamingGenerationProvider(GenerationProvider, Protocol):
+    """支持增量输出的生成后端。
+
+    不是所有后端都支持（测试桩、离线评测就不支持），所以调用方必须先用
+    supports_streaming() 判断，取不到流式能力时回退整段生成——绝不能因为
+    "想要流式"就让不支持的后端走上一条没测过的路径。
+    """
+
+    def generate_stream(self, *, system: str, prompt: str) -> Iterator[str]: ...
+
+
+def supports_streaming(provider: GenerationProvider) -> bool:
+    return callable(getattr(provider, "generate_stream", None))
+
+
+# 句末边界：只有成句才过安全闸门。逐 token 检测没有意义——
+# "拆开外壳"这四个字在到齐之前，任何检测都判不出危险。
+_SENTENCE_BOUNDARY = re.compile(r"[。！？!?；;\n]")
+
+
+class StreamSafetyGate:
+    """流式下发的安全闸门。
+
+    产品约束（本模块开头第 3~5 条）要求回答通过引用校验、REFUSE 标记检测和
+    输出侧危险操作检测之后才能给用户看。逐 token 直发会打开一个"未校验内容
+    已经在用户屏幕上"的窗口，对一个售后安全助手来说不可接受。
+
+    折中口径：
+    - 按句放行。累积到句末标点才检查、才下发。
+    - **末尾残句永远不放行**，留给全文校验——模型把 REFUSE 标记附在结尾
+      （2026-08-05 生产实测过）时，它绝不会被提前送出去。
+    - 任一句触发怀疑就**关闸**：后续内容一律不再流式下发，改由全文判定决定
+      是补齐还是撤回。关闸只是退化成非流式，不等于判定拒答——避免逐句检测
+      的误伤（安全警告类句子单独看容易被误判）直接变成用户可见的拒答。
+    """
+
+    def __init__(self, snippet_count: int) -> None:
+        self.snippet_count = snippet_count
+        self.buffer = ""
+        self.released = ""
+        self.closed = False
+
+    def _suspicious(self, text: str) -> bool:
+        if REFUSE_TOKEN in text:
+            return True
+        indexes = {int(match) for match in _CITATION_PATTERN.findall(text)}
+        if any(index < 1 or index > self.snippet_count for index in indexes):
+            return True
+        return detect_unsafe_generated_answer(text) is not None
+
+    def feed(self, chunk: str) -> str:
+        """吃进一段增量，返回本次可以安全下发的文本（可能为空）。"""
+        if self.closed:
+            return ""
+        self.buffer += chunk
+        boundaries = list(_SENTENCE_BOUNDARY.finditer(self.buffer))
+        if not boundaries:
+            return ""
+        cut = boundaries[-1].end()
+        candidate = self.buffer[:cut]
+        if not self.released and REFUSE_TOKEN in candidate.split("\n", 1)[0][:20]:
+            # 整体拒答的标记出现在开头，一个字都不该下发
+            self.closed = True
+            return ""
+        if self._suspicious(candidate):
+            self.closed = True
+            return ""
+        self.buffer = self.buffer[cut:]
+        self.released += candidate
+        return candidate
+
+
 class DashScopeGenerationProvider:
     """DashScope（通义千问）文本生成适配器。"""
 
@@ -128,6 +202,52 @@ class DashScopeGenerationProvider:
             self.timeout_policy,
             op_name="generation.dashscope",
         )
+
+    def generate_stream(self, *, system: str, prompt: str) -> Iterator[str]:
+        """增量输出。DashScope 的 incremental_output 直接给增量片段。
+
+        流式无法整体重试（已下发内容不能收回），所以这里只有一次尝试；
+        失败时由调用方决定回退整段生成还是报错。
+        """
+        import dashscope
+
+        if self.base_url:
+            dashscope.base_http_api_url = self.base_url
+        kwargs: dict[str, object] = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "result_format": "message",
+            "temperature": 0.1,
+            "stream": True,
+            "incremental_output": True,
+            "request_timeout": (
+                self.timeout_policy.connect_seconds,
+                self.timeout_policy.read_seconds,
+            ),
+        }
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
+        for response in dashscope.Generation.call(**kwargs):
+            status_code = getattr(response, "status_code", None)
+            if status_code != 200:
+                message = getattr(response, "message", "DashScope streaming failed")
+                raise LLMTransportError(
+                    str(message),
+                    retryable=False,  # 已经开始下发，不能重试
+                    status_code=status_code if isinstance(status_code, int) else None,
+                )
+            output = getattr(response, "output", None)
+            if output is None and isinstance(response, dict):
+                output = response.get("output")
+            try:
+                piece = output["choices"][0]["message"]["content"]
+            except (TypeError, KeyError, IndexError):
+                continue
+            if piece:
+                yield piece
 
     def _generate_once(self, *, system: str, prompt: str, read_timeout: float) -> str:
         import dashscope
@@ -197,6 +317,53 @@ class OpenAICompatGenerationProvider:
             self.timeout_policy,
             op_name="generation.openai_compat",
         )
+
+    def generate_stream(self, *, system: str, prompt: str) -> Iterator[str]:
+        """OpenAI 兼容 SSE 增量输出。只取 content，忽略 reasoning_content。"""
+        import httpx
+
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/chat/completions",
+            headers=headers,
+            json={
+                "model": self.model_name,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.1,
+                "max_tokens": self.max_tokens,
+                "stream": True,
+            },
+            timeout=httpx.Timeout(
+                self.timeout_policy.read_seconds,
+                connect=self.timeout_policy.connect_seconds,
+            ),
+        ) as response:
+            if response.status_code != 200:
+                response.read()
+                raise LLMTransportError(
+                    f"OpenAI-compat streaming failed: HTTP {response.status_code}",
+                    retryable=False,  # 已经开始下发，不能重试
+                    status_code=response.status_code,
+                )
+            for line in response.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[len("data:") :].strip()
+                if not data or data == "[DONE]":
+                    continue
+                try:
+                    delta = json.loads(data)["choices"][0]["delta"]
+                except (ValueError, KeyError, IndexError):
+                    continue
+                piece = delta.get("content")
+                if piece:
+                    yield piece
 
     def _generate_once(self, *, system: str, prompt: str, read_timeout: float) -> str:
         import httpx
@@ -293,6 +460,9 @@ class AnswerResult:
     citations: list[AnswerCitation] = field(default_factory=list)
     refusal_reason: str | None = None
     record_id: int | None = None
+    # 流式期间已经通过安全闸门送到用户屏幕上的文本。调用方据此决定
+    # 补发剩余部分（answered）还是让前端撤回（refused）。
+    streamed_text: str = ""
 
 
 def _snippet_block(results: list[SearchResult]) -> str:
@@ -394,7 +564,7 @@ def _retrieval_query(query: str, history: list[dict] | None) -> str:
     return f"{last_user[:200]} {query}"[:500]
 
 
-def generate_answer(
+def answer_events(
     db: Session,
     *,
     user_id: int | None,
@@ -406,9 +576,25 @@ def generate_answer(
     min_score: float = 0.25,
     commit: bool = True,
     history: list[dict] | None = None,
-) -> AnswerResult:
+    streaming: bool = False,
+) -> Iterator[tuple[str, str]]:
+    """检索增强作答，以事件流的形式产出过程、以返回值产出结果。
+
+    产出的事件：
+    - ("stage", retrieving | retrieved | generating)：真实阶段，让前端不再
+      只显示一句不变的"正在检索…"。
+    - ("delta", 文本)：增量正文。**只有通过 StreamSafetyGate 的成句才会产出**，
+      末尾残句一律留到全文校验之后，由调用方补发。
+
+    用生成器而不是回调，是因为回调没法把事件"当场"送出 SSE——攒进列表等函数
+    返回再发，首字延迟依旧等于完整生成延迟，等于没做流式。用生成器委托则
+    既不需要后台线程，也不会让 Session 跨线程。
+
+    最终结果通过 StopIteration.value 返回；同步调用方用 generate_answer()。
+    """
     started_at = perf_counter()
     top_k = max(1, min(top_k, MAX_SNIPPETS))
+    yield ("stage", "retrieving")
     results = search_knowledge(
         db,
         robot_model_id=robot_model_id,
@@ -417,6 +603,9 @@ def generate_answer(
         min_score=min_score,
         provider=embedding_provider,
     )
+    yield ("stage", "retrieved")
+
+    gate: StreamSafetyGate | None = None
 
     def refuse(reason: str, *, answer: str | None = None, snippet_count: int = len(results)) -> AnswerResult:
         record = _persist(
@@ -435,7 +624,11 @@ def generate_answer(
             commit=commit,
         )
         return AnswerResult(
-            status="refused", answer=None, refusal_reason=reason, record_id=record.id
+            status="refused",
+            answer=None,
+            refusal_reason=reason,
+            record_id=record.id,
+            streamed_text=gate.released if gate else "",
         )
 
     if not results:
@@ -450,7 +643,20 @@ def generate_answer(
         f"{history_section}用户型号问题：{query}\n\n可用资料片段：\n{_snippet_block(results)}\n\n"
         "请依据上述片段回答；片段不足以回答时只输出 REFUSE。"
     )
-    raw_answer = generation_provider.generate(system=SYSTEM_PROMPT, prompt=prompt).strip()
+    yield ("stage", "generating")
+
+    if streaming and supports_streaming(generation_provider):
+        # 真流式：成句即过闸下发。首字延迟不再等于完整生成延迟。
+        gate = StreamSafetyGate(snippet_count=len(results))
+        pieces: list[str] = []
+        for piece in generation_provider.generate_stream(system=SYSTEM_PROMPT, prompt=prompt):
+            pieces.append(piece)
+            releasable = gate.feed(piece)
+            if releasable:
+                yield ("delta", releasable)
+        raw_answer = "".join(pieces).strip()
+    else:
+        raw_answer = generation_provider.generate(system=SYSTEM_PROMPT, prompt=prompt).strip()
 
     if not raw_answer or REFUSE_TOKEN in raw_answer.split("\n", 1)[0][:20]:
         return refuse("model_refused")
@@ -495,5 +701,25 @@ def generate_answer(
         commit=commit,
     )
     return AnswerResult(
-        status="answered", answer=raw_answer, citations=citations, record_id=record.id
+        status="answered",
+        answer=raw_answer,
+        citations=citations,
+        record_id=record.id,
+        # 已下发部分可能与最终答案有差异（末尾 REFUSE 标记被剥离等），
+        # 调用方按前缀关系补发剩余，不重复下发
+        streamed_text=gate.released if gate else "",
     )
+
+
+def generate_answer(db: Session, **kwargs) -> AnswerResult:
+    """同步作答：消费掉过程事件，只要最终结果。
+
+    非流式调用方（同步接口、评测脚本、CLI）沿用这个入口，行为与改造前一致。
+    """
+    kwargs.pop("streaming", None)
+    events = answer_events(db, **kwargs)
+    while True:
+        try:
+            next(events)
+        except StopIteration as stop:
+            return stop.value

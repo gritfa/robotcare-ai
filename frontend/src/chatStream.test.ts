@@ -72,6 +72,38 @@ describe('streamChatMessage', () => {
     expect(result).toEqual(ASSISTANT_MESSAGE)
   })
 
+  it('派发三段真实阶段，前端不再只显示一句不变的文案', async () => {
+    const body = sse('user_message', USER_MESSAGE)
+      + sse('stage', { stage: 'retrieving' })
+      + sse('stage', { stage: 'retrieved' })
+      + sse('stage', { stage: 'generating' })
+      + sse('delta', { text: ASSISTANT_MESSAGE.content })
+      + sse('assistant_message', ASSISTANT_MESSAGE)
+      + sse('done', {})
+    const stages: string[] = []
+    await streamChatMessage(7, '吸力变小了怎么办', {
+      onStage: (stage) => stages.push(stage),
+    }, async () => streamResponse(body, 5))
+    expect(stages).toEqual(['retrieving', 'retrieved', 'generating'])
+  })
+
+  it('discard 事件要求丢弃已下发增量——没通过校验的文本不能留在屏幕上', async () => {
+    const body = sse('user_message', USER_MESSAGE)
+      + sse('stage', { stage: 'generating' })
+      + sse('delta', { text: '这段最终没通过校验。' })
+      + sse('discard', { reason: 'refused_after_stream' })
+      + sse('assistant_message', ASSISTANT_MESSAGE)
+      + sse('done', {})
+    const deltas: string[] = []
+    const discards: string[] = []
+    await streamChatMessage(7, '吸力变小了怎么办', {
+      onDelta: (text) => deltas.push(text),
+      onDiscard: (reason) => discards.push(reason),
+    }, async () => streamResponse(body, 5))
+    expect(deltas).toEqual(['这段最终没通过校验。'])
+    expect(discards).toEqual(['refused_after_stream'])
+  })
+
   it('error 事件转成用户可读异常', async () => {
     const body = sse('user_message', USER_MESSAGE)
       + sse('stage', { stage: 'generating' })

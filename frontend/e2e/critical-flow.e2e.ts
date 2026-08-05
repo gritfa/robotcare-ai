@@ -17,7 +17,8 @@ function uniqueEmail(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`
 }
 
-async function register(page: Page, email: string) {
+async function register(page: Page, email: string, options: { expectSidebarProfile?: boolean } = {}) {
+  const { expectSidebarProfile = true } = options
   await page.goto('/register')
   await page.getByPlaceholder('如何称呼你').fill('Edge 测试用户')
   await page.getByPlaceholder('name@example.com').fill(email)
@@ -27,7 +28,15 @@ async function register(page: Page, email: string) {
   await page.getByPlaceholder('请输入管理员提供的邀请码').fill(inviteCode)
   await page.getByRole('button', { name: '注册并开始使用' }).click()
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByText(email)).toBeVisible()
+  // 邮箱显示在侧栏 profile 里；手机视口下侧栏收进抽屉，此断言不适用
+  if (expectSidebarProfile) await expect(page.getByText(email)).toBeVisible()
+}
+
+function sidebarLeft(page: Page) {
+  return page.evaluate(() => {
+    const sidebar = document.querySelector('.sidebar')
+    return sidebar ? Math.round(sidebar.getBoundingClientRect().left) : NaN
+  })
 }
 
 async function logout(page: Page) {
@@ -251,8 +260,13 @@ test('聊天交互：Enter 发送、闲聊不走检索、报告指令给出前�
 
   // 当前设备用昵称展示，型号作为副标题——普通用户记不住 JH69U1
   await expect(page.getByText('当前设备：客厅扫地机器人')).toBeVisible()
-  // 新会话给推荐问题，而不是只有一段使用说明
-  await expect(page.getByRole('button', { name: '如何重新配网？' })).toBeVisible()
+  // 新会话给推荐问题，而不是只有一段使用说明。
+  // 推荐问题现在按型号动态生成（真实问过且答得上来 > 有诊断流程 > 通用兜底），
+  // 所以断言"有可点的推荐问题"，而不是某句写死的文案。
+  const suggested = page.locator('.suggested el-button, .suggested button')
+  await expect(suggested.first()).toBeVisible()
+  expect(await suggested.count()).toBeGreaterThan(0)
+  expect((await suggested.first().innerText()).trim()).not.toBe('')
 
   const composer = page.locator('.composer textarea')
 
@@ -350,4 +364,38 @@ test('管理员知识库后台：文档管理面板可用、缺口闭环入口�
   await expect(gapSection.getByRole('columnheader', { name: '关联资料' })).toBeVisible()
   await expect(gapSection.getByRole('columnheader', { name: '复测' })).toBeVisible()
   await expect(gapSection.getByText('能引用作答才自动标记为已解决', { exact: false })).toBeVisible()
+})
+
+// 手机视口专测。全站此前被 styles.css 的 body{min-width:1100px} 强撑到 1100px，
+// 各组件里写好的 650~1000px 断点永远触发不到——扫地机坏了的人手里拿的就是手机。
+// 这条守住三件事：不出现横向溢出、侧栏默认不占屏、抽屉能开且跳转后自动收起。
+test.describe('手机视口（390px）', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('手机上无横向溢出，侧栏收进抽屉且跳转后自动收起', async ({ page }) => {
+    await register(page, uniqueEmail('mobile'), { expectSidebarProfile: false })
+
+    for (const path of ['/', '/chat', '/guides', '/diagnostics/new', '/history', '/devices']) {
+      await page.goto(path)
+      await expect(page).toHaveURL(new RegExp(`${path.replace(/\//g, '\\/')}$`))
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      )
+      expect(overflow, `${path} 在 390px 视口不应出现横向溢出`).toBeLessThanOrEqual(1)
+    }
+
+    await page.goto('/chat')
+    const toggle = page.getByRole('button', { name: '打开导航菜单' })
+    await expect(toggle).toBeVisible()
+    // 默认收起：侧栏整体移出视口左侧
+    expect(await sidebarLeft(page)).toBeLessThan(0)
+
+    await toggle.click()
+    await expect.poll(() => sidebarLeft(page)).toBe(0)
+
+    // 点导航跳转后必须自动收起，否则用户落在新页面却仍被遮罩挡住
+    await page.locator('.sidebar nav a').filter({ hasText: '使用指导' }).click()
+    await expect(page).toHaveURL(/\/guides$/)
+    await expect.poll(() => sidebarLeft(page)).toBeLessThan(0)
+  })
 })

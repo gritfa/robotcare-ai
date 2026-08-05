@@ -5,7 +5,11 @@
   --line: #dfe8e4; --surface: #fff; --soft: #edf7f3; --warning: #f59f00;
 }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 1100px; background: #f4f7f6; }
+/* 2026-08-05：此处原有 min-width:1100px。它把 body 强撑到 1100px，
+   导致 ChatView / DiagnosticStartView / GuidesView 里写好的 650~1000px
+   响应式断点永远触发不到——手机上侧栏吃掉 2/3 屏、输入框看不见。
+   扫地机坏了的人手里拿的就是手机，这是产品的第一道门槛。 */
+body { margin: 0; background: #f4f7f6; }
 a { color: inherit; text-decoration: none; }
 .page { padding: 30px 36px 56px; max-width: 1440px; width: 100%; margin: 0 auto; }
 .page-head { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:24px; }
@@ -16,4 +20,12 @@ a { color: inherit; text-decoration: none; }
 .brand-button.el-button--primary { --el-button-bg-color:var(--brand); --el-button-border-color:var(--brand); --el-button-hover-bg-color:var(--brand-dark); --el-button-hover-border-color:var(--brand-dark); }
 .eyebrow { color:var(--brand); font-size:12px; letter-spacing:1.5px; font-weight:750; text-transform:uppercase; }
 .status-dot { width:8px; height:8px; border-radius:50%; background:#20c997; display:inline-block; margin-right:7px; }
-@media (max-width: 1100px) { body { min-width: 960px; } .page { padding:24px; } }
+@media (max-width: 1100px) { .page { padding:24px; } }
+@media (max-width: 640px) {
+  .page { padding:16px 14px 40px; }
+  .page-head { flex-direction:column; gap:12px; margin-bottom:18px; }
+  .page-head h1 { font-size:22px; }
+  .empty { padding:32px 18px; }
+  /* 宽表格在窄屏必须能横向滚动，否则整页被撑出横向滚动条 */
+  .el-table { max-width:100%; }
+}

@@ -301,6 +301,12 @@ class DiagnosticOptionRead(BaseModel):
     title: str
 
 
+class SuggestedQuestionRead(BaseModel):
+    text: str
+    # history=真实问过且答得上来 / flow=有已发布诊断流程 / fallback=通用兜底
+    source: str
+
+
 class DeviceCreate(BaseModel):
     robot_model_id: int
     nickname: str = Field(min_length=1, max_length=100)

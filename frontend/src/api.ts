@@ -2,7 +2,7 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type { AdminAuditLog, AdminContentGap, AdminContentGapReplay, AdminContentGapResolution, AdminDiagnosticDetail,
   AdminKnowledgeChunkPage, AdminKnowledgeDiffPreview, AdminKnowledgeDocument, AdminKnowledgeDocumentDetail,
   AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, ChatMessagePair, Conversation, ConversationDetail, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
-  FeedbackReason, KnowledgeSearchResult, MessageFeedback, ReportPdf, RobotModel, ServiceReport, User } from './types'
+  FeedbackReason, KnowledgeSearchResult, MessageFeedback, ReportPdf, RobotModel, ServiceReport, SuggestedQuestion, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
 
 export { TOKEN_KEY } from './authSession'
@@ -311,6 +311,7 @@ export const authApi = {
 export const modelApi = {
   list: async () => listPayload<RobotModel>((await http.get('/models')).data),
   diagnosticOptions: async (modelId: EntityId) => listPayload<DiagnosticOption>((await http.get(`/models/${modelId}/diagnostic-options`)).data),
+  suggestedQuestions: async (modelId: EntityId) => listPayload<SuggestedQuestion>((await http.get(`/models/${modelId}/suggested-questions`)).data),
 }
 export const deviceApi = {
   list: async () => listPayload<Device>((await http.get('/devices')).data),

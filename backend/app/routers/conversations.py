@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..config import get_settings
-from ..generation_service import generate_answer
+from ..generation_service import answer_events, generate_answer
 from ..chat_actions import (
     answer_quick_actions,
     resolve_diagnostic_request,
@@ -314,6 +314,47 @@ def _generate_turn_answer(
         raise
 
 
+def _generate_turn_events(
+    db: Session,
+    request: Request,
+    conversation: Conversation,
+    content: str,
+    history: list[dict],
+    min_score: float,
+    user: User,
+):
+    """流式变体：产出阶段/增量事件，返回值为最终 AnswerResult。
+
+    失败处理与 _generate_turn_answer 完全一致（回滚 + 结构化日志 + 重抛），
+    两条路径的事务语义不能有差异。
+    """
+    try:
+        return (
+            yield from answer_events(
+                db,
+                user_id=user.id,
+                robot_model_id=conversation.robot_model_id,
+                query=content,
+                embedding_provider=request.app.state.embedding_provider,
+                generation_provider=request.app.state.generation_provider,
+                history=history,
+                min_score=min_score,
+                commit=False,
+                streaming=True,
+            )
+        )
+    except RuntimeError as exc:
+        db.rollback()
+        emit_json_log(
+            logging.ERROR,
+            "chat_answer_failed",
+            trace_id=request_trace_id(request),
+            conversation_id=conversation.id,
+            error_type=type(exc).__name__,
+        )
+        raise
+
+
 def _routed_reply(
     db: Session, conversation: Conversation, decision: RoutingDecision, user: User
 ) -> tuple[str, list[dict[str, object]]]:
@@ -497,11 +538,24 @@ def post_message_stream(
             yield _sse("assistant_message", _message_read(routed).model_dump(mode="json"))
             yield _sse("done", {})
             return
-        yield _sse("stage", {"stage": "generating"})
+        # 真流式：把 answer_events 的过程事件直接转成 SSE 当场下发。
+        # 首字延迟不再等于完整生成延迟；阶段事件也从"只有 generating 一个点"
+        # 变成 retrieving → retrieved → generating 的真实进度。
+        events = _generate_turn_events(
+            db, request, conversation, payload.content, history, min_score, user
+        )
+        result = None
         try:
-            result = _generate_turn_answer(
-                db, request, conversation, payload.content, history, min_score, user
-            )
+            while True:
+                try:
+                    kind, value = next(events)
+                except StopIteration as stop:
+                    result = stop.value
+                    break
+                if kind == "stage":
+                    yield _sse("stage", {"stage": value})
+                elif kind == "delta":
+                    yield _sse("delta", {"text": value})
         except RuntimeError:
             # 用户消息随事务一并回滚，与同步端点 503 的语义保持一致
             yield _sse(
@@ -512,12 +566,27 @@ def post_message_stream(
         assistant_message = _commit_turn(
             db, conversation, user_message, _assistant_message_for(conversation, result, decision)
         )
+        streamed = result.streamed_text
         if result.status == "answered":
-            for start in range(0, len(assistant_message.content), STREAM_CHUNK_CHARS):
-                yield _sse(
-                    "delta",
-                    {"text": assistant_message.content[start : start + STREAM_CHUNK_CHARS]},
-                )
+            final_text = assistant_message.content
+            if streamed and final_text.startswith(streamed):
+                # 常规情况：补发闸门留在手里的尾段（含末尾残句）
+                remainder = final_text[len(streamed) :]
+                if remainder:
+                    yield _sse("delta", {"text": remainder})
+            elif streamed:
+                # 已下发内容不是最终答案的前缀（闸门关过、或末尾标记被剥离后
+                # 文本发生偏移）——让前端丢弃重来，绝不把两段拼出一个假答案
+                yield _sse("discard", {"reason": "answer_revised"})
+                for start in range(0, len(final_text), STREAM_CHUNK_CHARS):
+                    yield _sse("delta", {"text": final_text[start : start + STREAM_CHUNK_CHARS]})
+            else:
+                for start in range(0, len(final_text), STREAM_CHUNK_CHARS):
+                    yield _sse("delta", {"text": final_text[start : start + STREAM_CHUNK_CHARS]})
+        elif streamed:
+            # 最终判定为拒答，但已经有内容到过用户屏幕：必须明确撤回。
+            # 留着不管，用户会把半截未通过校验的文本当成答案。
+            yield _sse("discard", {"reason": "refused_after_stream"})
         yield _sse(
             "assistant_message", _message_read(assistant_message).model_dump(mode="json")
         )

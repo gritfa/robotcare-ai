@@ -209,6 +209,10 @@ class AnswerCitation:
     page_number: int
     score: float
     document_sha256: str
+    # 证据可核验所需：不带原文的引用只是个不可查证的角标，用户无法判断
+    # "第 15 页"到底支持不支持这句话（2026-08-05 老板提的核验缺口）
+    snippet: str = ""
+    document_title: str = ""
 
 
 @dataclass(frozen=True)
@@ -399,6 +403,8 @@ def generate_answer(
             page_number=results[index - 1].page_number,
             score=results[index - 1].score,
             document_sha256=results[index - 1].document_sha256,
+            snippet=results[index - 1].content,
+            document_title=results[index - 1].document_title,
         )
         for index in cited_indexes
     ]

@@ -435,3 +435,138 @@ def test_stream_generation_failure_emits_error_event_and_rolls_back(client, monk
         f"/api/v1/conversations/{conversation_id}", headers=auth(token)
     ).json()
     assert detail["messages"] == []
+
+
+def test_capability_question_answers_as_assistant_not_manual_dump(client, monkeypatch):
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "你能做什么"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    assistant = resp.json()["assistant_message"]
+    assert assistant["intent"] == "capability"
+    assert "RC-S200" in assistant["content"], "能力介绍要落到当前型号"
+    assert provider.prompts == []
+    assert [a["code"] for a in assistant["quick_actions"]] == [
+        "start_diagnostic",
+        "contact_support",
+    ]
+
+
+def test_report_request_without_diagnostic_explains_prerequisite(client, monkeypatch):
+    # 普通用户不知道"聊天不能直接生成报告"，要告诉他缺什么、下一步点哪
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "生成报告"},
+        headers=auth(token),
+    )
+    assistant = resp.json()["assistant_message"]
+    assert assistant["action_code"] == "generate_report"
+    assert "分步" in assistant["content"]
+    assert [a["code"] for a in assistant["quick_actions"]] == ["start_diagnostic"]
+
+
+def test_knowledge_answer_carries_snippet_evidence_and_next_steps(client, monkeypatch):
+    # 引用必须可核验：只给"第 15 页"用户无法判断这句话到底有没有依据
+    model_id, provider, token = _setup(client, ["先清空尘盒并清理滤网 [1]。"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+    citation = resp.json()["assistant_message"]["citations"][0]
+    assert citation["snippet"], "引用必须带检索到的原文片段"
+    assert citation["document_title"]
+    assert citation["source_url"] and citation["page_number"] >= 1
+    quick = [a["code"] for a in resp.json()["assistant_message"]["quick_actions"]]
+    assert quick == ["start_diagnostic", "mark_resolved", "contact_support"]
+
+
+def test_refused_answer_puts_official_support_first(client, monkeypatch):
+    # 答不上来时用户最需要的是别的出口，而不是再问一遍
+    model_id, provider, token = _setup(client, ["REFUSE"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+    quick = [a["code"] for a in resp.json()["assistant_message"]["quick_actions"]]
+    assert quick[0] == "contact_support"
+
+
+def test_conversation_rename_resolve_search_and_delete(client, monkeypatch):
+    model_id, provider, token = _setup(client, ["先清空尘盒 [1]。"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+
+    renamed = client.patch(
+        f"/api/v1/conversations/{conversation_id}",
+        json={"title": "客厅机器吸力问题", "resolved": True},
+        headers=auth(token),
+    ).json()
+    assert renamed["title"] == "客厅机器吸力问题" and renamed["resolved"] is True
+
+    # 搜索命中标题
+    assert [c["id"] for c in client.get(
+        "/api/v1/conversations", params={"search": "客厅"}, headers=auth(token)
+    ).json()] == [conversation_id]
+    # 也命中消息正文（用户记得的往往是问过什么，不是标题）
+    assert [c["id"] for c in client.get(
+        "/api/v1/conversations", params={"search": "吸力变小"}, headers=auth(token)
+    ).json()] == [conversation_id]
+    assert client.get(
+        "/api/v1/conversations", params={"search": "不存在的词"}, headers=auth(token)
+    ).json() == []
+
+    assert client.delete(
+        f"/api/v1/conversations/{conversation_id}", headers=auth(token)
+    ).status_code == 204
+    assert client.get("/api/v1/conversations", headers=auth(token)).json() == []
+    assert client.get(
+        f"/api/v1/conversations/{conversation_id}", headers=auth(token)
+    ).status_code == 404
+
+
+def test_message_feedback_records_reason_and_is_overwritable(client, monkeypatch):
+    model_id, provider, token = _setup(client, ["先清空尘盒 [1]。"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    body = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    ).json()
+    assistant_id = body["assistant_message"]["id"]
+    user_id = body["user_message"]["id"]
+
+    bad = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/{assistant_id}/feedback",
+        json={"helpful": False, "reason": "wrong_citation"},
+        headers=auth(token),
+    ).json()
+    assert bad == {"message_id": assistant_id, "helpful": False, "reason": "wrong_citation"}
+
+    # 改主意按覆盖处理，且"有帮助"不该挂着上一次的差评原因
+    good = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/{assistant_id}/feedback",
+        json={"helpful": True},
+        headers=auth(token),
+    ).json()
+    assert good["helpful"] is True and good["reason"] is None
+
+    # 给自己的提问打分没有意义，放开只会污染统计
+    assert client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/{user_id}/feedback",
+        json={"helpful": True},
+        headers=auth(token),
+    ).status_code == 422

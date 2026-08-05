@@ -328,6 +328,9 @@ class AnswerCitationRead(BaseModel):
     page_number: int
     score: float
     document_sha256: str
+    # 证据抽屉要展示的原文与文档名；路由层上线前的历史消息没有这两项，给空串兜底
+    snippet: str = ""
+    document_title: str = ""
 
 
 class KnowledgeAnswerResponse(BaseModel):
@@ -349,7 +352,32 @@ class ConversationRead(BaseModel):
     robot_model_id: int
     robot_model_code: str
     title: str
+    resolved: bool | None = None
     updated_at: datetime
+
+
+class ConversationUpdateRequest(BaseModel):
+    """改标题与标记已解决共用一个 PATCH；两者都不传即无操作。"""
+
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    resolved: bool | None = None
+
+
+class MessageFeedbackRequest(BaseModel):
+    helpful: bool
+    # 原因固定枚举而非自由文本，才能在管理端按原因聚合出优化优先级
+    reason: (
+        Literal[
+            "off_topic", "unclear_steps", "wrong_citation", "wrong_model", "still_unresolved"
+        ]
+        | None
+    ) = None
+
+
+class MessageFeedbackRead(BaseModel):
+    message_id: int
+    helpful: bool
+    reason: str | None
 
 
 class ConversationMessageRead(BaseModel):
@@ -362,6 +390,8 @@ class ConversationMessageRead(BaseModel):
     # 历史消息（路由层上线前）两者为 None，前端按普通回答渲染。
     intent: str | None = None
     action_code: str | None = None
+    # 回答下方的快捷操作（系统建议的下一步），[{code,label,...}]
+    quick_actions: list[dict] = Field(default_factory=list)
     created_at: datetime
 
 

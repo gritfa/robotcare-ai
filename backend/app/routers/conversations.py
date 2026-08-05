@@ -11,17 +11,23 @@ from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..config import get_settings
 from ..generation_service import generate_answer
+from ..chat_actions import (
+    answer_quick_actions,
+    resolve_diagnostic_request,
+    resolve_report_request,
+)
 from ..message_router import RoutingDecision, classify_message
 from ..models import (
     Conversation,
     ConversationMessage,
     KnowledgeDocument,
+    MessageFeedback,
     RobotModel,
     User,
 )
@@ -36,6 +42,9 @@ from ..schemas import (
     ConversationDetailRead,
     ConversationMessageRead,
     ConversationRead,
+    ConversationUpdateRequest,
+    MessageFeedbackRead,
+    MessageFeedbackRequest,
 )
 from ..security import get_current_user
 
@@ -72,6 +81,7 @@ def _message_read(message: ConversationMessage) -> ConversationMessageRead:
         refusal_reason=message.refusal_reason,
         intent=message.intent,
         action_code=message.action_code,
+        quick_actions=message.quick_actions_json or [],
         created_at=message.created_at,
     )
 
@@ -100,26 +110,81 @@ def create_conversation(
 
 @router.get("", response_model=list[ConversationRead])
 def list_conversations(
+    search: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ConversationRead]:
-    rows = db.execute(
+    statement = (
         select(Conversation, RobotModel.code)
         .join(RobotModel, RobotModel.id == Conversation.robot_model_id)
         .where(Conversation.user_id == user.id)
-        .order_by(Conversation.updated_at.desc())
-        .limit(50)
-    ).all()
+    )
+    if search:
+        # 标题 + 消息正文一起搜：用户记得的往往是"我问过拖布"，而不是会话标题
+        keyword = f"%{search.strip()}%"
+        statement = statement.where(
+            or_(
+                Conversation.title.ilike(keyword),
+                Conversation.messages.any(ConversationMessage.content.ilike(keyword)),
+            )
+        )
+    rows = db.execute(statement.order_by(Conversation.updated_at.desc()).limit(50)).all()
     return [
         ConversationRead(
             id=c.id,
             robot_model_id=c.robot_model_id,
             robot_model_code=code,
             title=c.title,
+            resolved=c.resolved,
             updated_at=c.updated_at,
         )
         for c, code in rows
     ]
+
+
+@router.patch("/{conversation_id}", response_model=ConversationRead)
+def update_conversation(
+    conversation_id: int,
+    payload: ConversationUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ConversationRead:
+    """改标题 / 标记问题是否已解决。"""
+
+    conversation = _owned_conversation(db, conversation_id, user)
+    if payload.title is not None:
+        conversation.title = payload.title.strip()[:120]
+    if payload.resolved is not None:
+        conversation.resolved = payload.resolved
+    db.commit()
+    db.refresh(conversation)
+    robot_model = db.get(RobotModel, conversation.robot_model_id)
+    return ConversationRead(
+        id=conversation.id,
+        robot_model_id=conversation.robot_model_id,
+        robot_model_code=robot_model.code,
+        title=conversation.title,
+        resolved=conversation.resolved,
+        updated_at=conversation.updated_at,
+    )
+
+
+@router.delete("/{conversation_id}", status_code=204)
+def delete_conversation(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    """删除会话及其消息。
+
+    GenerationRecord 不随之删除：那是生成层的审计留痕（prompt 版本、片段 SHA、
+    拒答原因），用户删自己的聊天记录不该抹掉系统的可追溯性。消息表的
+    generation_record_id 是单向引用，删消息不影响留痕本身。
+    """
+
+    conversation = _owned_conversation(db, conversation_id, user)
+    db.delete(conversation)
+    db.commit()
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetailRead)
@@ -246,10 +311,43 @@ def _generate_turn_answer(
         raise
 
 
+def _routed_reply(
+    db: Session, conversation: Conversation, decision: RoutingDecision, user: User
+) -> tuple[str, list[dict[str, object]]]:
+    """把路由结论落成用户可见的文案与按钮。
+
+    产品操作要看当前诊断状态才知道该说什么（"生成报告"在没做过诊断和报告已就绪时
+    是两种完全不同的回答，见 chat_actions.py）；能力介绍要填当前型号。
+    """
+
+    if decision.action_code == "generate_report":
+        outcome = resolve_report_request(db, user=user, conversation=conversation)
+        return outcome.reply, outcome.quick_actions
+    if decision.action_code == "start_diagnostic":
+        outcome = resolve_diagnostic_request(db, user=user, conversation=conversation)
+        return outcome.reply, outcome.quick_actions
+
+    reply = decision.reply or ""
+    if decision.uses_model_placeholder:
+        robot_model = db.get(RobotModel, conversation.robot_model_id)
+        reply = reply.format(model_code=robot_model.code)
+    if decision.intent == "capability":
+        return reply, [
+            {"code": "start_diagnostic", "label": "开始分步诊断"},
+            {"code": "contact_support", "label": "联系官方售后"},
+        ]
+    if decision.action_code == "upload_image":
+        return reply, [{"code": "upload_image", "label": "去上传图片"}]
+    return reply, []
+
+
 def _routed_assistant_message(
-    conversation: Conversation, decision: RoutingDecision
+    conversation: Conversation,
+    decision: RoutingDecision,
+    reply: str,
+    quick_actions: list[dict[str, object]],
 ) -> ConversationMessage:
-    """闲聊/产品操作的直接回复：不检索、不调生成模型、不产生 GenerationRecord。
+    """闲聊/能力介绍/产品操作的直接回复：不检索、不调生成模型、不产生 GenerationRecord。
 
     这类消息没有引用，是因为它本来就不该有——引用是"依据说明书作答"的凭证，
     打招呼和点按钮都不是在作答，硬造引用才是失真。
@@ -258,10 +356,11 @@ def _routed_assistant_message(
     return ConversationMessage(
         conversation_id=conversation.id,
         role="assistant",
-        content=decision.reply,
+        content=reply,
         intent=decision.intent,
         routing_rule=decision.matched_rule,
         action_code=decision.action_code,
+        quick_actions_json=quick_actions,
     )
 
 
@@ -275,6 +374,7 @@ def _assistant_message_for(
             content=result.answer,
             intent=decision.intent,
             routing_rule=decision.matched_rule,
+            quick_actions_json=answer_quick_actions(refused=False),
             citations_json=[
                 {
                     "index": c.index,
@@ -282,6 +382,8 @@ def _assistant_message_for(
                     "page_number": c.page_number,
                     "score": c.score,
                     "document_sha256": c.document_sha256,
+                    "snippet": c.snippet,
+                    "document_title": c.document_title,
                 }
                 for c in result.citations
             ],
@@ -294,6 +396,7 @@ def _assistant_message_for(
         refusal_reason=result.refusal_reason,
         intent=decision.intent,
         routing_rule=decision.matched_rule,
+        quick_actions_json=answer_quick_actions(refused=True),
         generation_record_id=result.record_id,
     )
 
@@ -325,8 +428,12 @@ def post_message(
         db, request, conversation, payload.content, user
     )
     if not decision.needs_retrieval:
+        reply, quick_actions = _routed_reply(db, conversation, decision, user)
         assistant_message = _commit_turn(
-            db, conversation, user_message, _routed_assistant_message(conversation, decision)
+            db,
+            conversation,
+            user_message,
+            _routed_assistant_message(conversation, decision, reply, quick_actions),
         )
         return ChatMessageResponse(
             user_message=_message_read(user_message),
@@ -375,8 +482,12 @@ def post_message_stream(
         if not decision.needs_retrieval:
             # 闲聊/操作照样走 delta→assistant_message→done，前端只有一条渲染路径；
             # 区别只是没有 generating 阶段（本来就不调模型，不该显示"正在生成"）。
+            reply, quick_actions = _routed_reply(db, conversation, decision, user)
             routed = _commit_turn(
-                db, conversation, user_message, _routed_assistant_message(conversation, decision)
+                db,
+                conversation,
+                user_message,
+                _routed_assistant_message(conversation, decision, reply, quick_actions),
             )
             for start in range(0, len(routed.content), STREAM_CHUNK_CHARS):
                 yield _sse("delta", {"text": routed.content[start : start + STREAM_CHUNK_CHARS]})
@@ -413,4 +524,43 @@ def post_message_stream(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post(
+    "/{conversation_id}/messages/{message_id}/feedback", response_model=MessageFeedbackRead
+)
+def submit_message_feedback(
+    conversation_id: int,
+    message_id: int,
+    payload: MessageFeedbackRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MessageFeedbackRead:
+    """给单条回答打"有帮助/没帮助"，没帮助时带原因码。
+
+    只允许对 assistant 消息反馈——给自己的提问打分没有意义，放开只会污染统计。
+    同一条消息重复提交按覆盖处理（用户改主意是正常行为，不该报错）。
+    """
+
+    conversation = _owned_conversation(db, conversation_id, user)
+    message = db.get(ConversationMessage, message_id)
+    if message is None or message.conversation_id != conversation.id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message.role != "assistant":
+        raise HTTPException(status_code=422, detail="Only assistant messages accept feedback")
+
+    feedback = db.scalar(
+        select(MessageFeedback).where(MessageFeedback.message_id == message.id)
+    )
+    if feedback is None:
+        feedback = MessageFeedback(message_id=message.id, user_id=user.id, helpful=payload.helpful)
+        db.add(feedback)
+    feedback.helpful = payload.helpful
+    # "有帮助"不该挂着上一次的差评原因
+    feedback.reason = payload.reason if not payload.helpful else None
+    db.commit()
+    db.refresh(feedback)
+    return MessageFeedbackRead(
+        message_id=message.id, helpful=feedback.helpful, reason=feedback.reason
     )

@@ -471,13 +471,18 @@ class Conversation(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     robot_model_id: Mapped[int] = mapped_column(ForeignKey("robot_models.id"), index=True)
     title: Mapped[str] = mapped_column(String(120), default="")
+    # 用户自己标记的问题是否已解决：None=未表态。与诊断会话的 resolved 是两码事——
+    # 这条记的是"用户认为聊完解决了没有"，用于列表归档和运营侧的缺口统计。
+    resolved: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, index=True
     )
 
     messages: Mapped[list["ConversationMessage"]] = relationship(
-        back_populates="conversation", order_by="ConversationMessage.id"
+        back_populates="conversation",
+        order_by="ConversationMessage.id",
+        cascade="all, delete-orphan",
     )
 
 
@@ -506,6 +511,42 @@ class ConversationMessage(Base):
     intent: Mapped[str | None] = mapped_column(String(20), nullable=True)
     routing_rule: Mapped[str | None] = mapped_column(String(60), nullable=True)
     action_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # 回答下方的快捷操作（[{code,label}]）。与 action_code 的区别：
+    # action_code 是"用户明确要求做的事"，quick_actions 是"系统建议的下一步"。
+    quick_actions_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    feedback: Mapped["MessageFeedback | None"] = relationship(
+        back_populates="message", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class MessageFeedback(Base):
+    """单条回答的有用/没用反馈，"没用"时带原因码。
+
+    存在意义不是给用户一个出气口，而是把"哪类问题答不好"变成可统计的运营数据：
+    reason 是固定枚举而不是自由文本，才能在管理端按原因聚合出优化优先级。
+    每条消息只保留一份反馈（唯一约束），改主意就覆盖。
+    """
+
+    __tablename__ = "message_feedback"
+    __table_args__ = (
+        UniqueConstraint("message_id"),
+        CheckConstraint(
+            "reason IS NULL OR reason IN "
+            "('off_topic', 'unclear_steps', 'wrong_citation', 'wrong_model', 'still_unresolved')",
+            name="ck_message_feedback_reason",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("conversation_messages.id"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    helpful: Mapped[bool] = mapped_column(Boolean)
+    reason: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    message: Mapped[ConversationMessage] = relationship(back_populates="feedback")

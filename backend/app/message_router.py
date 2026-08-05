@@ -26,7 +26,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-MessageIntent = Literal["smalltalk", "action", "followup", "knowledge"]
+MessageIntent = Literal["smalltalk", "capability", "action", "followup", "knowledge"]
 ActionCode = Literal["start_diagnostic", "generate_report", "upload_image"]
 
 
@@ -46,6 +46,12 @@ class RoutingDecision:
     @property
     def needs_retrieval(self) -> bool:
         return self.intent in ("knowledge", "followup")
+
+    @property
+    def uses_model_placeholder(self) -> bool:
+        """回复文案里是否含 {model_code} 占位符，需要调用方按当前型号填充。"""
+
+        return bool(self.reply and "{model_code}" in self.reply)
 
     def metadata(self) -> dict[str, object]:
         return {
@@ -110,6 +116,27 @@ _FOLLOWUP_PATTERN = re.compile(
 )
 _FOLLOWUP_MAX_CHARS = 14
 
+# 能力介绍（"你能做什么""你是谁"）：此前会去检索说明书，返回一大段产品功能列表，
+# 读起来像搜索结果而不像客服自我介绍。这类问题问的是**助手的能力边界**，
+# 说明书里本来就没有答案，检索多少次都答不对。
+_CAPABILITY_PATTERN = re.compile(
+    r"^(请问)?(你|您|这个?(机器人|助手|客服|ai)|你们)?\s*"
+    r"(是谁|叫什么|能做什么|会做什么|能干什么|可以做什么|有什么功能|能帮我?做什么|"
+    r"怎么用|如何使用|使用说明|帮助|help|能干嘛|能干啥|可以干嘛|有啥用|干什么用的)"
+    r"[\s？?。.！!]*$"
+)
+
+CAPABILITY_REPLY = (
+    "我可以帮你：\n"
+    "1. 查询 {model_code} 的使用方法\n"
+    "2. 排查无法启动、回充、配网等常见问题\n"
+    "3. 引导你完成安全的分步检查\n"
+    "4. 问题未解决时整理售后报告\n\n"
+    "我的回答都依据官方说明书并标注页码；说明书里没有的内容我会直说，不会编。\n"
+    "我不提供拆机或内部维修指导——涉及这类情况我会建议你联系官方售后。\n\n"
+    "你现在遇到了什么问题？"
+)
+
 SMALLTALK_REPLY = (
     "你好，我是这台设备的售后知识助手。"
     "你可以直接描述遇到的问题（比如「拖布不转」「充不上电」），"
@@ -149,6 +176,11 @@ def classify_message(content: str, *, has_history: bool = False) -> RoutingDecis
     if not core:
         return RoutingDecision(
             intent="smalltalk", matched_rule="smalltalk.greeting_only", reply=SMALLTALK_REPLY
+        )
+
+    if _CAPABILITY_PATTERN.match(core):
+        return RoutingDecision(
+            intent="capability", matched_rule="capability.self_introduction", reply=CAPABILITY_REPLY
         )
 
     for rule_name, action_code, pattern in _ACTION_RULES:

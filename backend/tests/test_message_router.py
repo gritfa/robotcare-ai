@@ -95,3 +95,17 @@ def test_every_decision_carries_an_explainable_rule():
         ("吸力变小了", "knowledge.default"),
     ]:
         assert classify_message(content).matched_rule == expected
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["你能做什么", "你是谁", "你有什么功能", "怎么用", "能干嘛？", "help"],
+)
+def test_capability_questions_get_self_introduction_not_manual_search(content):
+    # "你能做什么"问的是助手的能力边界，说明书里本来就没有答案，
+    # 此前去检索会返回一大段产品功能列表，读起来像搜索结果不像客服
+    decision = classify_message(content)
+    assert decision.intent == "capability"
+    assert decision.needs_retrieval is False
+    assert decision.uses_model_placeholder, "能力介绍要按当前型号填充"
+    assert "不提供拆机" in (decision.reply or "")

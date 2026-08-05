@@ -6,7 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
@@ -15,12 +15,15 @@ from ..knowledge_service import get_knowledge_status, ingest_pdf
 from ..models import (
     AuditLog,
     ContentGapResolution,
+    Conversation,
+    ConversationMessage,
     DiagnosticFlow,
     DiagnosticSession,
     GenerationRecord,
     KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeGapEvent,
+    MessageFeedback,
     RobotModel,
     SafetyBlockEvent,
     ServiceReport,
@@ -32,6 +35,11 @@ from ..observability import emit_json_log, request_trace_id
 from ..schemas import (
     AdminAuditLogRead,
     AdminContentGapRead,
+    AdminConversationDetailRead,
+    AdminConversationMessageRead,
+    AdminConversationSummaryRead,
+    AdminFeedbackItemRead,
+    AdminFeedbackOverviewRead,
     AdminDiagnosticDetailRead,
     AdminDiagnosticSummary,
     AdminGenerationStatsRead,
@@ -44,12 +52,13 @@ from ..schemas import (
     AdminRobotModelSummary,
     AdminSafetyBlockDetailRead,
     AdminSafetyBlockRead,
+    AdminTokenCostRead,
     AdminServiceReportDetailRead,
     AdminUnresolvedReportRead,
     AdminUserSummary,
     KnowledgeStatusRead,
 )
-from ..security import require_admin
+from ..security import require_admin, require_knowledge_manage, require_operations_read
 from ._shared import audit_sensitive_admin_read, mask_email
 
 router = APIRouter(prefix="/api/v1")
@@ -71,7 +80,7 @@ def _discard_new_archive(path: Path, created_by_this_request: bool) -> None:
 
 @router.get("/admin/overview", response_model=AdminOverviewRead)
 def admin_overview(
-    db: Session = Depends(get_db), admin: User = Depends(require_admin)
+    db: Session = Depends(get_db), admin: User = Depends(require_operations_read)
 ) -> AdminOverviewRead:
     del admin
 
@@ -89,6 +98,28 @@ def admin_overview(
     ).all()
     refusal_by_reason = {
         reason: int(reason_count) for reason, reason_count in refusal_rows if reason
+    }
+    usage_row = db.execute(
+        select(
+            func.coalesce(func.sum(GenerationRecord.prompt_tokens), 0).label("prompt_tokens"),
+            func.coalesce(func.sum(GenerationRecord.completion_tokens), 0).label("completion_tokens"),
+            func.coalesce(func.sum(GenerationRecord.estimated_cost), 0).label("cost"),
+            func.count().label("total"),
+            func.sum(
+                case((GenerationRecord.prompt_tokens.isnot(None), 1), else_=0)
+            ).label("with_usage"),
+        ).where(GenerationRecord.created_at >= stats_since)
+    ).one()
+    cost_by_model = {
+        row.provider_model: float(row.cost or 0)
+        for row in db.execute(
+            select(
+                GenerationRecord.provider_model,
+                func.coalesce(func.sum(GenerationRecord.estimated_cost), 0).label("cost"),
+            )
+            .where(GenerationRecord.created_at >= stats_since)
+            .group_by(GenerationRecord.provider_model)
+        ).all()
     }
     return AdminOverviewRead(
         user_count=count(select(func.count()).select_from(User)),
@@ -124,6 +155,15 @@ def admin_overview(
             refused_count=sum(refusal_by_reason.values()),
             refusal_by_reason=refusal_by_reason,
         ),
+        token_cost=AdminTokenCostRead(
+            window_days=OPERATION_STATS_WINDOW_DAYS,
+            prompt_tokens=int(usage_row.prompt_tokens or 0),
+            completion_tokens=int(usage_row.completion_tokens or 0),
+            estimated_cost=float(usage_row.cost or 0),
+            records_with_usage=int(usage_row.with_usage or 0),
+            total_records=int(usage_row.total or 0),
+            by_model=cost_by_model,
+        ),
         content_gap_count=count(
             select(func.count())
             .select_from(KnowledgeGapEvent)
@@ -137,7 +177,7 @@ def admin_content_gaps(
     days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> list[AdminContentGapRead]:
     """内容缺口榜：按归一化查询聚合缺口事件；只返回运营聚合数据，不含用户信息。"""
 
@@ -208,7 +248,7 @@ def admin_content_gaps(
 
 @router.get("/admin/models", response_model=list[AdminModelRead])
 def admin_list_models(
-    db: Session = Depends(get_db), admin: User = Depends(require_admin)
+    db: Session = Depends(get_db), admin: User = Depends(require_operations_read)
 ) -> list[RobotModel]:
     del admin
     return list(db.scalars(select(RobotModel).order_by(RobotModel.code)))
@@ -335,7 +375,7 @@ def admin_update_model(
 
 @router.get("/admin/knowledge/status", response_model=list[KnowledgeStatusRead])
 def admin_knowledge_status(
-    db: Session = Depends(get_db), admin: User = Depends(require_admin)
+    db: Session = Depends(get_db), admin: User = Depends(require_operations_read)
 ) -> list[KnowledgeStatusRead]:
     del admin
     return [KnowledgeStatusRead(**item.__dict__) for item in get_knowledge_status(db)]
@@ -352,7 +392,7 @@ def admin_knowledge_upload(
     source_url: str = Form(min_length=1, max_length=2000),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_knowledge_manage),
 ) -> AdminKnowledgeUploadRead:
     """管理员上传 PDF 入知识库：魔数/大小/型号校验 → ingest → 审计，一个事务不留半条记录。"""
 
@@ -440,7 +480,7 @@ def admin_knowledge_upload(
 def admin_safety_blocks(
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> list[AdminSafetyBlockRead]:
     del admin
     rows = db.execute(
@@ -470,7 +510,7 @@ def admin_safety_block_detail(
     event_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> AdminSafetyBlockDetailRead:
     row = db.execute(
         select(SafetyBlockEvent, RobotModel.code)
@@ -507,7 +547,7 @@ def admin_safety_block_detail(
 def admin_unresolved_reports(
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> list[AdminUnresolvedReportRead]:
     del admin
     rows = db.execute(
@@ -553,7 +593,7 @@ def admin_report_detail(
     report_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> ServiceReport:
     report = db.get(ServiceReport, report_id)
     if report is None:
@@ -578,7 +618,7 @@ def admin_diagnostic_detail(
     diagnostic_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> DiagnosticSession:
     diagnostic = db.get(DiagnosticSession, diagnostic_id)
     if diagnostic is None:
@@ -603,7 +643,7 @@ def admin_diagnostic_detail(
 def admin_audit_logs(
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> list[AuditLog]:
     del admin
     return list(
@@ -612,4 +652,233 @@ def admin_audit_logs(
             .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
             .limit(limit)
         )
+    )
+
+
+@router.get("/admin/feedback", response_model=AdminFeedbackOverviewRead)
+def admin_feedback(
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=50, ge=1, le=200),
+    reason: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_operations_read),
+) -> AdminFeedbackOverviewRead:
+    """用户反馈的读取入口。
+
+    MessageFeedback 的 reason 枚举当初就是为"在管理端按原因聚合出优化优先级"
+    设计的（models.py 注释原话），但直到 2026-08-05 体检为止，admin.py /
+    knowledge_admin.py / AdminView.vue 一次都没引用过它——数据进了库，
+    运营却只能连 psql 才看得到。
+
+    这里给两层：按原因/型号的聚合（决定先修哪类问题），以及最近的差评明细
+    （能一路点到那次对话）。明细只带定位信息，不带用户身份。
+    """
+    del admin
+    since = utcnow() - timedelta(days=days)
+
+    totals = db.execute(
+        select(
+            func.count().label("total"),
+            func.sum(case((MessageFeedback.helpful.is_(True), 1), else_=0)).label("helpful"),
+        ).where(MessageFeedback.created_at >= since)
+    ).one()
+    total_count = int(totals.total or 0)
+    helpful_count = int(totals.helpful or 0)
+
+    reason_rows = db.execute(
+        select(MessageFeedback.reason, func.count().label("hits"))
+        .where(
+            MessageFeedback.created_at >= since,
+            MessageFeedback.helpful.is_(False),
+        )
+        .group_by(MessageFeedback.reason)
+        .order_by(func.count().desc())
+    ).all()
+
+    model_rows = db.execute(
+        select(
+            RobotModel.code,
+            func.count().label("hits"),
+        )
+        .select_from(MessageFeedback)
+        .join(ConversationMessage, ConversationMessage.id == MessageFeedback.message_id)
+        .join(Conversation, Conversation.id == ConversationMessage.conversation_id)
+        .join(RobotModel, RobotModel.id == Conversation.robot_model_id)
+        .where(
+            MessageFeedback.created_at >= since,
+            MessageFeedback.helpful.is_(False),
+        )
+        .group_by(RobotModel.code)
+        .order_by(func.count().desc())
+    ).all()
+
+    detail_statement = (
+        select(
+            MessageFeedback.id,
+            MessageFeedback.helpful,
+            MessageFeedback.reason,
+            MessageFeedback.created_at,
+            ConversationMessage.id.label("message_id"),
+            ConversationMessage.content.label("answer"),
+            ConversationMessage.refusal_reason,
+            Conversation.id.label("conversation_id"),
+            RobotModel.code.label("model_code"),
+        )
+        .select_from(MessageFeedback)
+        .join(ConversationMessage, ConversationMessage.id == MessageFeedback.message_id)
+        .join(Conversation, Conversation.id == ConversationMessage.conversation_id)
+        .join(RobotModel, RobotModel.id == Conversation.robot_model_id)
+        .where(MessageFeedback.created_at >= since, MessageFeedback.helpful.is_(False))
+        .order_by(MessageFeedback.created_at.desc())
+        .limit(limit)
+    )
+    if reason:
+        detail_statement = detail_statement.where(MessageFeedback.reason == reason)
+
+    items = [
+        AdminFeedbackItemRead(
+            id=row.id,
+            conversation_id=row.conversation_id,
+            message_id=row.message_id,
+            model_code=row.model_code,
+            helpful=row.helpful,
+            reason=row.reason,
+            refusal_reason=row.refusal_reason,
+            answer_excerpt=(row.answer or "")[:160],
+            created_at=row.created_at,
+        )
+        for row in db.execute(detail_statement).all()
+    ]
+
+    return AdminFeedbackOverviewRead(
+        window_days=days,
+        total_count=total_count,
+        helpful_count=helpful_count,
+        unhelpful_count=total_count - helpful_count,
+        by_reason={(row.reason or "unspecified"): int(row.hits) for row in reason_rows},
+        by_model={row.code: int(row.hits) for row in model_rows},
+        items=items,
+    )
+
+
+@router.get("/admin/conversations", response_model=list[AdminConversationSummaryRead])
+def admin_list_conversations(
+    search: str | None = Query(default=None, max_length=200),
+    model_code: str | None = Query(default=None, max_length=50),
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_operations_read),
+) -> list[AdminConversationSummaryRead]:
+    """按关键词/型号/时间检索会话。
+
+    客诉"机器人让我拆电池"时，此前后台**找不到那次对话**——conversations 路由
+    全部按 user.id 过滤且没有 admin 变体，只能连 psql 查（2026-08-05 体检）。
+
+    列表只返回定位信息与掩码邮箱；对话正文要点进详情才可见，且详情会写审计。
+    """
+    del admin
+    since = utcnow() - timedelta(days=days)
+    statement = (
+        select(
+            Conversation.id,
+            Conversation.title,
+            Conversation.resolved,
+            Conversation.updated_at,
+            RobotModel.code.label("model_code"),
+            User.email,
+            func.count(ConversationMessage.id).label("message_count"),
+        )
+        .select_from(Conversation)
+        .join(RobotModel, RobotModel.id == Conversation.robot_model_id)
+        .join(User, User.id == Conversation.user_id)
+        .outerjoin(ConversationMessage, ConversationMessage.conversation_id == Conversation.id)
+        .where(Conversation.updated_at >= since)
+        .group_by(
+            Conversation.id,
+            Conversation.title,
+            Conversation.resolved,
+            Conversation.updated_at,
+            RobotModel.code,
+            User.email,
+        )
+        .order_by(Conversation.updated_at.desc())
+        .limit(limit)
+    )
+    if model_code:
+        statement = statement.where(RobotModel.code == model_code)
+    if search:
+        # 标题与正文一起搜：投诉转述的往往是回答里的一句话，不是会话标题
+        keyword = f"%{search.strip()}%"
+        statement = statement.where(
+            or_(
+                Conversation.title.ilike(keyword),
+                Conversation.messages.any(ConversationMessage.content.ilike(keyword)),
+            )
+        )
+    return [
+        AdminConversationSummaryRead(
+            id=row.id,
+            title=row.title,
+            model_code=row.model_code,
+            user_email_masked=mask_email(row.email),
+            message_count=int(row.message_count or 0),
+            resolved=row.resolved,
+            updated_at=row.updated_at,
+        )
+        for row in db.execute(statement).all()
+    ]
+
+
+@router.get("/admin/conversations/{conversation_id}", response_model=AdminConversationDetailRead)
+def admin_conversation_detail(
+    conversation_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_operations_read),
+) -> AdminConversationDetailRead:
+    """只读查看一次完整对话。
+
+    管理员读他人对话必须留痕——沿用既有的 fail-closed 审计：审计写失败就不返回内容。
+    """
+    conversation = db.scalar(
+        select(Conversation)
+        .options(selectinload(Conversation.messages))
+        .where(Conversation.id == conversation_id)
+    )
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    robot_model = db.get(RobotModel, conversation.robot_model_id)
+    owner = db.get(User, conversation.user_id)
+
+    audit_sensitive_admin_read(
+        db,
+        request,
+        admin,
+        action="conversation.detail_read",
+        resource_type="conversation",
+        resource_id=conversation.id,
+        related_resource_ids={"user_id": conversation.user_id},
+    )
+    db.commit()
+
+    return AdminConversationDetailRead(
+        id=conversation.id,
+        title=conversation.title,
+        model_code=robot_model.code if robot_model else "",
+        user_email_masked=mask_email(owner.email if owner else ""),
+        resolved=conversation.resolved,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+        messages=[
+            AdminConversationMessageRead(
+                id=message.id,
+                role=message.role,
+                content=message.content,
+                refusal_reason=message.refusal_reason,
+                intent=message.intent,
+                created_at=message.created_at,
+            )
+            for message in conversation.messages
+        ],
     )

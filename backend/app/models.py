@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -28,7 +30,11 @@ def utcnow() -> datetime:
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
-        CheckConstraint("role IN ('user', 'admin')", name="ck_users_role"),
+        # 角色分级：viewer 只读运营数据，operator 可管知识库内容，
+        # admin 才有删除/回滚/型号增改等不可逆权限（2026-08-05 体检）
+        CheckConstraint(
+            "role IN ('user', 'viewer', 'operator', 'admin')", name="ck_users_role"
+        ),
         CheckConstraint("status IN ('active', 'disabled')", name="ck_users_status"),
     )
 
@@ -499,6 +505,13 @@ class GenerationRecord(Base):
     snippets_sha256: Mapped[str] = mapped_column(String(64))
     snippet_count: Mapped[int] = mapped_column(Integer)
     latency_ms: Mapped[float] = mapped_column(Float)
+    # token 用量与估算成本。可空而不是默认 0：存量记录与不返回 usage 的后端
+    # 本来就没有这个数，用 0 冒充会让成本统计凭空少算，比缺数更糟。
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_cost: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=12, scale=6), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

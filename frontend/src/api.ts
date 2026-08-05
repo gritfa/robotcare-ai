@@ -1,6 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type { AdminAuditLog, AdminContentGap, AdminContentGapReplay, AdminContentGapResolution, AdminDiagnosticDetail,
   AdminKnowledgeChunkPage, AdminKnowledgeDiffPreview, AdminKnowledgeDocument, AdminKnowledgeDocumentDetail,
+  AdminConversationDetail, AdminConversationSummary, AdminFeedbackOverview,
   AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, ChatMessagePair, Conversation, ConversationDetail, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
   FeedbackReason, KnowledgeSearchResult, MessageFeedback, ReportPdf, RobotModel, ServiceReport, SuggestedQuestion, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
@@ -377,6 +378,9 @@ export const adminApi = {
   models: async () => listPayload<AdminModel>((await http.get('/admin/models')).data),
   setModelActive: async (id: EntityId, active: boolean) => payload<AdminModel>((await http.patch(`/admin/models/${id}`, { active })).data),
   createModel: async (body: { code: string; name: string; brand: string }) => payload<AdminModel>((await http.post('/admin/models', body)).data),
+  feedback: async (params?: { days?: number; limit?: number; reason?: string }) => payload<AdminFeedbackOverview>((await http.get('/admin/feedback', { params })).data),
+  conversations: async (params?: { search?: string; model_code?: string; days?: number; limit?: number }) => listPayload<AdminConversationSummary>((await http.get('/admin/conversations', { params })).data),
+  conversationDetail: async (id: EntityId) => payload<AdminConversationDetail>((await http.get(`/admin/conversations/${id}`)).data),
   knowledgeStatus: async () => listPayload<KnowledgeModelStatus>((await http.get('/admin/knowledge/status')).data),
   contentGaps: async (days = 30, limit = 20) => listPayload<AdminContentGap>((await http.get('/admin/content-gaps', { params: { days, limit } })).data),
   uploadKnowledge: async (form: FormData) => payload<AdminKnowledgeUploadResult>((await http.post('/admin/knowledge/upload', form)).data),

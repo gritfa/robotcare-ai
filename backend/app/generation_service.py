@@ -19,6 +19,7 @@ import json
 import logging
 import re
 from collections.abc import Callable, Iterator
+from decimal import Decimal
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Protocol
@@ -118,6 +119,61 @@ class StreamingGenerationProvider(GenerationProvider, Protocol):
     def generate_stream(self, *, system: str, prompt: str) -> Iterator[str]: ...
 
 
+@dataclass(frozen=True)
+class TokenUsage:
+    """一次调用的 token 用量。
+
+    体检发现（2026-08-05）：provider 拿到响应后把 usage 段直接丢了，
+    GenerationRecord 只有 latency_ms——每月账单靠猜，也答不出
+    "哪个型号在烧钱"。取不到用量时保持 None，不要用 0 冒充。
+    """
+
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+
+
+def _usage_from_payload(payload: object) -> TokenUsage:
+    """从 provider 响应里抽 usage，字段名在各家之间有差异，逐个兜。"""
+    if not isinstance(payload, dict):
+        return TokenUsage()
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return TokenUsage()
+
+    def pick(*names: str) -> int | None:
+        for name in names:
+            value = usage.get(name)
+            if isinstance(value, int):
+                return value
+        return None
+
+    return TokenUsage(
+        prompt_tokens=pick("prompt_tokens", "input_tokens"),
+        completion_tokens=pick("completion_tokens", "output_tokens"),
+    )
+
+
+def estimate_cost(usage: TokenUsage, model: str, settings=None):
+    """按配置单价估算这次调用花了多少钱（元）。
+
+    取不到用量就返回 None——没有 usage 却记一个 0，会让成本看板
+    看起来"很省钱"，比没有数字更误导。
+    """
+    if usage.prompt_tokens is None and usage.completion_tokens is None:
+        return None
+    if settings is None:
+        from .config import get_settings
+
+        settings = get_settings()
+    prompt_price, completion_price = settings.token_price_per_million(model)
+    million = Decimal(1_000_000)
+    total = (
+        Decimal(usage.prompt_tokens or 0) * Decimal(str(prompt_price)) / million
+        + Decimal(usage.completion_tokens or 0) * Decimal(str(completion_price)) / million
+    )
+    return total.quantize(Decimal("0.000001"))
+
+
 def supports_streaming(provider: GenerationProvider) -> bool:
     return callable(getattr(provider, "generate_stream", None))
 
@@ -193,6 +249,8 @@ class DashScopeGenerationProvider:
         self.model_name = model
         self.base_url = (base_url or "").strip().rstrip("/") or None
         self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
+        # 最近一次调用的 token 用量，供调用方记账；取不到保持 None
+        self.last_usage: TokenUsage = TokenUsage()
 
     def generate(self, *, system: str, prompt: str) -> str:
         return call_with_budget(
@@ -230,6 +288,7 @@ class DashScopeGenerationProvider:
         }
         if self.api_key:
             kwargs["api_key"] = self.api_key
+        self.last_usage = TokenUsage()
         for response in dashscope.Generation.call(**kwargs):
             status_code = getattr(response, "status_code", None)
             if status_code != 200:
@@ -239,6 +298,14 @@ class DashScopeGenerationProvider:
                     retryable=False,  # 已经开始下发，不能重试
                     status_code=status_code if isinstance(status_code, int) else None,
                 )
+            # 用量通常只在末帧给全，每帧都覆盖即可拿到最终值
+            usage = _usage_from_payload(
+                response
+                if isinstance(response, dict)
+                else {"usage": getattr(response, "usage", None)}
+            )
+            if usage.prompt_tokens is not None or usage.completion_tokens is not None:
+                self.last_usage = usage
             output = getattr(response, "output", None)
             if output is None and isinstance(response, dict):
                 output = response.get("output")
@@ -277,6 +344,9 @@ class DashScopeGenerationProvider:
                 retryable=isinstance(status_code, int) and is_retryable_status(status_code),
                 status_code=status_code if isinstance(status_code, int) else None,
             )
+        self.last_usage = _usage_from_payload(
+            response if isinstance(response, dict) else {"usage": getattr(response, "usage", None)}
+        )
         output = getattr(response, "output", None)
         if output is None and isinstance(response, dict):
             output = response.get("output")
@@ -308,6 +378,7 @@ class OpenAICompatGenerationProvider:
         # （2026-08-04 LLM 裁判评测 8/34 条 finish_reason=length 实锤），按调用方需要放大
         self.max_tokens = max_tokens
         self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
+        self.last_usage: TokenUsage = TokenUsage()
 
     def generate(self, *, system: str, prompt: str) -> str:
         return call_with_budget(
@@ -325,6 +396,7 @@ class OpenAICompatGenerationProvider:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        self.last_usage = TokenUsage()
         with httpx.stream(
             "POST",
             f"{self.base_url}/chat/completions",
@@ -338,6 +410,8 @@ class OpenAICompatGenerationProvider:
                 "temperature": 0.1,
                 "max_tokens": self.max_tokens,
                 "stream": True,
+                # 不显式要，多数实现在流式下根本不返回 usage，成本就永远记不上
+                "stream_options": {"include_usage": True},
             },
             timeout=httpx.Timeout(
                 self.timeout_policy.read_seconds,
@@ -358,8 +432,15 @@ class OpenAICompatGenerationProvider:
                 if not data or data == "[DONE]":
                     continue
                 try:
-                    delta = json.loads(data)["choices"][0]["delta"]
-                except (ValueError, KeyError, IndexError):
+                    frame = json.loads(data)
+                except ValueError:
+                    continue
+                usage = _usage_from_payload(frame)
+                if usage.prompt_tokens is not None or usage.completion_tokens is not None:
+                    self.last_usage = usage
+                try:
+                    delta = frame["choices"][0]["delta"]
+                except (KeyError, IndexError, TypeError):
                     continue
                 piece = delta.get("content")
                 if piece:
@@ -397,6 +478,7 @@ class OpenAICompatGenerationProvider:
                 status_code=response.status_code,
             )
         payload = response.json()
+        self.last_usage = _usage_from_payload(payload)
         try:
             choice = payload["choices"][0]
             content = choice["message"]["content"]
@@ -496,6 +578,8 @@ def _persist(
     snippet_count: int,
     latency_ms: float,
     commit: bool,
+    usage: "TokenUsage | None" = None,
+    estimated_cost=None,
 ) -> GenerationRecord:
     record = GenerationRecord(
         user_id=user_id,
@@ -519,6 +603,9 @@ def _persist(
         snippets_sha256=snippets_sha256,
         snippet_count=snippet_count,
         latency_ms=round(latency_ms, 3),
+        prompt_tokens=usage.prompt_tokens if usage else None,
+        completion_tokens=usage.completion_tokens if usage else None,
+        estimated_cost=estimated_cost,
     )
     db.add(record)
     if commit:
@@ -537,6 +624,9 @@ def _persist(
         snippet_count=snippet_count,
         citation_count=len(citations),
         latency_ms=round(latency_ms, 3),
+        prompt_tokens=record.prompt_tokens,
+        completion_tokens=record.completion_tokens,
+        estimated_cost=float(estimated_cost) if estimated_cost is not None else None,
     )
     return record
 
@@ -608,6 +698,8 @@ def answer_events(
     gate: StreamSafetyGate | None = None
 
     def refuse(reason: str, *, answer: str | None = None, snippet_count: int = len(results)) -> AnswerResult:
+        # 拒答同样烧了 token（模型已经跑完），成本必须照记，否则账单对不上
+        refuse_usage = getattr(generation_provider, "last_usage", None)
         record = _persist(
             db,
             user_id=user_id,
@@ -622,6 +714,12 @@ def answer_events(
             snippet_count=snippet_count,
             latency_ms=(perf_counter() - started_at) * 1000,
             commit=commit,
+            usage=refuse_usage,
+            estimated_cost=(
+                estimate_cost(refuse_usage, generation_provider.model_name)
+                if refuse_usage
+                else None
+            ),
         )
         return AnswerResult(
             status="refused",
@@ -685,6 +783,7 @@ def answer_events(
         )
         for index in cited_indexes
     ]
+    answered_usage = getattr(generation_provider, "last_usage", None)
     record = _persist(
         db,
         user_id=user_id,
@@ -699,6 +798,12 @@ def answer_events(
         snippet_count=len(results),
         latency_ms=(perf_counter() - started_at) * 1000,
         commit=commit,
+        usage=answered_usage,
+        estimated_cost=(
+            estimate_cost(answered_usage, generation_provider.model_name)
+            if answered_usage
+            else None
+        ),
     )
     return AnswerResult(
         status="answered",

@@ -11,6 +11,7 @@ import {
   Plus,
   QuestionFilled,
   Refresh,
+  Search,
   Upload,
   User,
   Warning,
@@ -282,6 +283,43 @@ function detailText(value: Record<string, unknown>) {
   return entries.map(([key, item]) => `${key}: ${typeof item === 'object' ? JSON.stringify(item) : String(item)}`).join('；')
 }
 
+const feedbackReasonLabels: Record<string, string> = {
+  off_topic: '答非所问',
+  unclear_steps: '步骤不清楚',
+  wrong_citation: '引用不对',
+  wrong_model: '型号不对',
+  still_unresolved: '按做了仍没解决',
+  unspecified: '未选原因',
+}
+
+function feedbackReasonText(reason: string) {
+  return feedbackReasonLabels[reason] ?? reason
+}
+
+const conversationDialogVisible = ref(false)
+
+async function searchConversations() {
+  const result = await dashboard.loadConversations()
+  if (!result.ok && result.error) ElMessage.error(result.error)
+}
+
+async function openConversation(id: string | number) {
+  const result = await dashboard.openConversation(id)
+  if (result.ok) conversationDialogVisible.value = true
+  else if (result.error) ElMessage.error(result.error)
+}
+
+/** 从一条差评直接跳到那次对话——聚合数字要有落点才有用。 */
+async function openFeedbackConversation(conversationId: string | number) {
+  await openConversation(conversationId)
+}
+
+async function filterFeedback(reason: string) {
+  dashboard.feedbackReason.value = dashboard.feedbackReason.value === reason ? '' : reason
+  const result = await dashboard.loadFeedback()
+  if (!result.ok && result.error) ElMessage.error(result.error)
+}
+
 const createModelVisible = ref(false)
 const newModel = ref({ code: '', name: '', brand: '海尔' })
 
@@ -318,6 +356,8 @@ async function updateModel(model: AdminModel, value: string | number | boolean) 
 
 onMounted(async () => {
   await dashboard.load()
+  await dashboard.loadFeedback()
+  await dashboard.loadConversations()
   await console_.loadDocuments()
 })
 </script>
@@ -377,6 +417,114 @@ onMounted(async () => {
           <span v-else class="refusal-empty">近 30 天没有拒答记录。</span>
         </div>
       </section>
+
+      <!-- token 成本：此前 provider 的 usage 段被直接丢弃，账单只能靠猜 -->
+      <section class="panel section-panel cost-panel">
+        <div class="section-head">
+          <div>
+            <h2>模型用量与成本（近 {{ dashboard.overview.value.token_cost.window_days }} 天）</h2>
+            <p>
+              按配置单价估算。用量覆盖 {{ dashboard.overview.value.token_cost.records_with_usage }}
+              / {{ dashboard.overview.value.token_cost.total_records }} 次调用，
+              <strong v-if="dashboard.overview.value.token_cost.records_with_usage < dashboard.overview.value.token_cost.total_records">
+                未覆盖部分不计入，实际成本高于此处显示
+              </strong>
+              <span v-else>覆盖完整</span>。
+            </p>
+          </div>
+        </div>
+        <div class="cost-grid">
+          <div><b>{{ dashboard.overview.value.token_cost.prompt_tokens.toLocaleString() }}</b><small>输入 token</small></div>
+          <div><b>{{ dashboard.overview.value.token_cost.completion_tokens.toLocaleString() }}</b><small>输出 token</small></div>
+          <div><b>¥{{ dashboard.overview.value.token_cost.estimated_cost.toFixed(4) }}</b><small>估算成本</small></div>
+        </div>
+        <div v-if="Object.keys(dashboard.overview.value.token_cost.by_model).length" class="refusal-tags">
+          <el-tag v-for="(cost, model) in dashboard.overview.value.token_cost.by_model" :key="model" type="info" effect="plain">
+            {{ model }}：¥{{ cost.toFixed(4) }}
+          </el-tag>
+        </div>
+      </section>
+
+      <div class="two-column">
+        <!-- 反馈：reason 枚举本就是为按原因聚合设计的，此前全库没有读取入口 -->
+        <section class="panel section-panel">
+          <div class="section-head">
+            <div>
+              <h2>用户反馈（近 {{ dashboard.feedback.value?.window_days ?? 30 }} 天）</h2>
+              <p>点原因可筛选；点一条差评直接查看那次对话。</p>
+            </div>
+            <el-tag :type="(dashboard.feedback.value?.unhelpful_count ?? 0) > 0 ? 'danger' : 'success'" effect="plain">
+              有帮助 {{ dashboard.feedback.value?.helpful_count ?? 0 }} / 共 {{ dashboard.feedback.value?.total_count ?? 0 }}
+            </el-tag>
+          </div>
+          <div class="refusal-tags">
+            <el-tag
+              v-for="(count, reason) in dashboard.feedback.value?.by_reason || {}"
+              :key="reason"
+              class="clickable-tag"
+              :type="dashboard.feedbackReason.value === reason ? 'danger' : 'info'"
+              :effect="dashboard.feedbackReason.value === reason ? 'dark' : 'plain'"
+              @click="filterFeedback(String(reason))"
+            >{{ feedbackReasonText(String(reason)) }} · {{ count }}</el-tag>
+            <span v-if="!Object.keys(dashboard.feedback.value?.by_reason || {}).length" class="refusal-empty">
+              暂无差评反馈
+            </span>
+          </div>
+          <el-table
+            class="table-section"
+            :data="dashboard.feedback.value?.items || []"
+            v-loading="dashboard.feedbackLoading.value"
+            empty-text="暂无差评明细"
+          >
+            <el-table-column prop="model_code" label="型号" width="90" />
+            <el-table-column label="原因" width="120">
+              <template #default="{ row }">{{ feedbackReasonText(row.reason || 'unspecified') }}</template>
+            </el-table-column>
+            <el-table-column prop="answer_excerpt" label="回答摘要" min-width="200" show-overflow-tooltip />
+            <el-table-column label="操作" width="90" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openFeedbackConversation(row.conversation_id)">查看对话</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <!-- 会话检索：客诉"机器人让我拆电池"此前在后台根本找不到那次对话 -->
+        <section class="panel section-panel">
+          <div class="section-head">
+            <div>
+              <h2>会话检索</h2>
+              <p>按回答正文或标题搜索；打开对话会写入审计。</p>
+            </div>
+            <div class="section-actions">
+              <el-input
+                v-model="dashboard.conversationSearch.value"
+                size="small"
+                placeholder="搜回答里的一句话"
+                clearable
+                class="filter-select"
+                @keyup.enter="searchConversations"
+              />
+              <el-button size="small" :icon="Search" :loading="dashboard.conversationsLoading.value" @click="searchConversations">搜索</el-button>
+            </div>
+          </div>
+          <el-table
+            :data="dashboard.conversations.value"
+            v-loading="dashboard.conversationsLoading.value"
+            empty-text="没有匹配的会话"
+          >
+            <el-table-column prop="model_code" label="型号" width="90" />
+            <el-table-column prop="title" label="标题" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="user_email_masked" label="用户" width="140" />
+            <el-table-column prop="message_count" label="消息" width="70" align="center" />
+            <el-table-column label="操作" width="80" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openConversation(row.id)">查看</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+      </div>
 
       <div class="two-column">
         <section class="panel section-panel">
@@ -879,6 +1027,26 @@ onMounted(async () => {
       暂无可显示的管理员数据。
     </div>
 
+    <el-drawer v-model="conversationDialogVisible" title="对话内容（只读）" size="520px">
+      <div v-if="dashboard.selectedConversation.value" class="conversation-detail">
+        <p class="muted">
+          {{ dashboard.selectedConversation.value.model_code }} ·
+          {{ dashboard.selectedConversation.value.user_email_masked }} ·
+          查看行为已记入审计
+        </p>
+        <div
+          v-for="message in dashboard.selectedConversation.value.messages"
+          :key="message.id"
+          class="conversation-message"
+          :class="message.role"
+        >
+          <span class="role-tag">{{ message.role === 'user' ? '用户' : '助手' }}</span>
+          <p>{{ message.content }}</p>
+          <small v-if="message.refusal_reason" class="muted">拒答原因：{{ message.refusal_reason }}</small>
+        </div>
+      </div>
+    </el-drawer>
+
     <el-dialog v-model="createModelVisible" title="新增型号" width="440px">
       <el-form label-position="top">
         <el-form-item label="型号编码">
@@ -909,5 +1077,5 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.generation-stats{margin-bottom:18px}.refusal-tags{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.refusal-empty{color:var(--muted);font-size:12px}.upload-box{margin-top:16px;padding-top:14px;border-top:1px solid #edf1ef}.upload-box h3{margin:0;font-size:14px}.upload-box p{margin:6px 0 10px;color:var(--muted);font-size:12px;line-height:1.5}.upload-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.upload-model{width:140px;flex-shrink:0}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.sensitive-detail{line-height:1.7}.sensitive-detail pre{white-space:pre-wrap;word-break:break-word;padding:14px;background:#f7faf8;border-radius:8px;max-height:55vh;overflow:auto}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}.preview-alert{margin-top:10px}.preview-text{margin:4px 0 2px;font-size:12px;line-height:1.6}.preview-meta{margin:0;font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.section-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.section-head-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}.dialog-hint{margin:4px 0 0;font-size:12px;line-height:1.6;color:var(--muted)}.filter-select{width:130px}.archive-hint{margin-bottom:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.gap-loop-hint{margin:-6px 0 14px;padding:10px 12px;background:#f7faf8;border-radius:8px;color:var(--muted);font-size:12px;line-height:1.6}.linked-doc{font-size:12px}.gap-doc-select{width:100%}.replay-cell{display:flex;flex-direction:column;gap:3px}.replay-meta{font-size:11px;color:var(--muted)}.replay-excerpt{margin:2px 0 0;font-size:11px;color:#52635d;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.muted{color:var(--muted);font-size:12px}.doc-detail{padding:0 4px}.doc-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0 0 18px}.doc-meta div{display:flex;gap:8px;font-size:12px}.doc-meta dt{color:var(--muted);flex-shrink:0}.doc-meta dd{margin:0}.wrap{word-break:break-all}.doc-detail h4{margin:18px 0 10px;font-size:14px}.chunk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.chunk-controls{display:flex;align-items:center;gap:8px}.page-filter{width:110px}.chunk-range{font-size:11px;color:var(--muted)}.chunk-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}.chunk-list li{padding:12px;background:#f7faf8;border-radius:8px}.chunk-head-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}.chunk-index{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}.chunk-text{margin:0;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}.doc-meta{grid-template-columns:1fr}}
+.admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.generation-stats{margin-bottom:18px}.refusal-tags{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.refusal-empty{color:var(--muted);font-size:12px}.upload-box{margin-top:16px;padding-top:14px;border-top:1px solid #edf1ef}.upload-box h3{margin:0;font-size:14px}.upload-box p{margin:6px 0 10px;color:var(--muted);font-size:12px;line-height:1.5}.upload-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.upload-model{width:140px;flex-shrink:0}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.sensitive-detail{line-height:1.7}.sensitive-detail pre{white-space:pre-wrap;word-break:break-word;padding:14px;background:#f7faf8;border-radius:8px;max-height:55vh;overflow:auto}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}.preview-alert{margin-top:10px}.preview-text{margin:4px 0 2px;font-size:12px;line-height:1.6}.preview-meta{margin:0;font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.section-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.section-head-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}.cost-panel{margin-bottom:18px}.cost-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:14px}.cost-grid div{padding:14px 16px;background:#f7faf8;border-radius:10px}.cost-grid b{display:block;font-size:20px}.cost-grid small{display:block;margin-top:5px;color:var(--muted);font-size:12px}.clickable-tag{cursor:pointer}.conversation-detail{padding:0 4px}.conversation-message{margin-bottom:14px;padding:12px;border-radius:10px;background:#f7faf8}.conversation-message.user{background:#eef6f2}.conversation-message p{margin:6px 0 0;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word}.role-tag{font-size:11px;font-weight:700;color:var(--brand)}.dialog-hint{margin:4px 0 0;font-size:12px;line-height:1.6;color:var(--muted)}.filter-select{width:130px}.archive-hint{margin-bottom:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.gap-loop-hint{margin:-6px 0 14px;padding:10px 12px;background:#f7faf8;border-radius:8px;color:var(--muted);font-size:12px;line-height:1.6}.linked-doc{font-size:12px}.gap-doc-select{width:100%}.replay-cell{display:flex;flex-direction:column;gap:3px}.replay-meta{font-size:11px;color:var(--muted)}.replay-excerpt{margin:2px 0 0;font-size:11px;color:#52635d;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.muted{color:var(--muted);font-size:12px}.doc-detail{padding:0 4px}.doc-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0 0 18px}.doc-meta div{display:flex;gap:8px;font-size:12px}.doc-meta dt{color:var(--muted);flex-shrink:0}.doc-meta dd{margin:0}.wrap{word-break:break-all}.doc-detail h4{margin:18px 0 10px;font-size:14px}.chunk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.chunk-controls{display:flex;align-items:center;gap:8px}.page-filter{width:110px}.chunk-range{font-size:11px;color:var(--muted)}.chunk-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}.chunk-list li{padding:12px;background:#f7faf8;border-radius:8px}.chunk-head-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}.chunk-index{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}.chunk-text{margin:0;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}.doc-meta{grid-template-columns:1fr}}
 </style>

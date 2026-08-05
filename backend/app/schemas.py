@@ -75,6 +75,23 @@ class AdminGenerationStatsRead(BaseModel):
     refusal_by_reason: dict[str, int]
 
 
+class AdminTokenCostRead(BaseModel):
+    """近 N 天的 token 与成本。
+
+    体检发现：provider 拿到 usage 后直接丢弃，每月账单只能靠猜。
+    records_with_usage 单独给出来——它小于总调用数就说明有一部分后端
+    没返回用量，此时成本是**低估**的，不能当准确账单用。
+    """
+
+    window_days: int
+    prompt_tokens: int
+    completion_tokens: int
+    estimated_cost: float
+    records_with_usage: int
+    total_records: int
+    by_model: dict[str, float]
+
+
 class AdminOverviewRead(BaseModel):
     user_count: int
     active_model_count: int
@@ -85,6 +102,7 @@ class AdminOverviewRead(BaseModel):
     unresolved_diagnostic_count: int
     service_report_count: int
     generation_stats: AdminGenerationStatsRead
+    token_cost: AdminTokenCostRead
     content_gap_count: int
 
 
@@ -320,6 +338,68 @@ class DiagnosticOptionRead(BaseModel):
     issue_category_code: str
     issue_category_name: str
     title: str
+
+
+class AdminFeedbackItemRead(BaseModel):
+    """一条差评的定位信息。只带定位与摘要，不带用户身份。"""
+
+    id: int
+    conversation_id: int
+    message_id: int
+    model_code: str
+    helpful: bool
+    reason: str | None
+    refusal_reason: str | None
+    answer_excerpt: str
+    created_at: datetime
+
+
+class AdminFeedbackOverviewRead(BaseModel):
+    """反馈读取入口：聚合决定先修哪类问题，明细能一路点到那次对话。
+
+    reason 枚举本就是为"在管理端按原因聚合出优化优先级"设计的，
+    但直到 2026-08-05 体检为止全库没有任何读取入口。
+    """
+
+    window_days: int
+    total_count: int
+    helpful_count: int
+    unhelpful_count: int
+    by_reason: dict[str, int]
+    by_model: dict[str, int]
+    items: list[AdminFeedbackItemRead]
+
+
+class AdminConversationSummaryRead(BaseModel):
+    id: int
+    title: str
+    model_code: str
+    user_email_masked: str
+    message_count: int
+    resolved: bool | None
+    updated_at: datetime
+
+
+class AdminConversationMessageRead(BaseModel):
+    id: int
+    role: str
+    content: str
+    refusal_reason: str | None
+    intent: str | None
+    created_at: datetime
+
+
+class AdminConversationDetailRead(BaseModel):
+    """只读查看一次完整对话；读取行为本身会写审计（fail-closed）。"""
+
+    id: int
+    title: str
+    model_code: str
+    user_email_masked: str
+    resolved: bool | None
+    created_at: datetime
+    updated_at: datetime
+    messages: list[AdminConversationMessageRead]
 
 
 class RegistrationPolicyRead(BaseModel):

@@ -13,6 +13,10 @@ const overview: AdminOverview = {
   unresolved_diagnostic_count: 1,
   service_report_count: 5,
   generation_stats: { answered_count: 7, refused_count: 2, refusal_by_reason: { knowledge_gap: 2 } },
+  token_cost: {
+    window_days: 30, prompt_tokens: 1200, completion_tokens: 300, estimated_cost: 0.0012,
+    records_with_usage: 3, total_records: 4, by_model: { 'qwen-plus': 0.0012 },
+  },
   content_gap_count: 2,
 }
 
@@ -24,6 +28,24 @@ function createApi(overrides: Partial<AdminDashboardApi> = {}): AdminDashboardAp
     models: vi.fn().mockResolvedValue([model()]),
     setModelActive: vi.fn().mockImplementation(async (_id, active) => ({ ...model(), active })),
     createModel: vi.fn().mockImplementation(async (body) => ({ id: 99, ...body, active: true })),
+    feedback: vi.fn().mockResolvedValue({
+      window_days: 30, total_count: 3, helpful_count: 1, unhelpful_count: 2,
+      by_reason: { unclear_steps: 2 }, by_model: { JH69U1: 2 },
+      items: [{
+        id: 1, conversation_id: 7, message_id: 11, model_code: 'JH69U1', helpful: false,
+        reason: 'unclear_steps', refusal_reason: null, answer_excerpt: '按第 3 页操作',
+        created_at: '2026-08-05T00:00:00Z',
+      }],
+    }),
+    conversations: vi.fn().mockResolvedValue([{
+      id: 7, title: '回充失败', model_code: 'JH69U1', user_email_masked: 'c***@example.com',
+      message_count: 4, resolved: null, updated_at: '2026-08-05T00:00:00Z',
+    }]),
+    conversationDetail: vi.fn().mockResolvedValue({
+      id: 7, title: '回充失败', model_code: 'JH69U1', user_email_masked: 'c***@example.com',
+      resolved: null, created_at: '2026-08-05T00:00:00Z', updated_at: '2026-08-05T00:00:00Z',
+      messages: [{ id: 11, role: 'assistant', content: '按第 3 页操作 [1]。', refusal_reason: null, intent: null, created_at: '2026-08-05T00:00:00Z' }],
+    }),
     knowledgeStatus: vi.fn().mockResolvedValue([{ robot_model_id: 1, model_code: 'JH69U1', document_count: 1, chunk_count: 31, vector_count: 31 }]),
     contentGaps: vi.fn().mockResolvedValue([
       {
@@ -193,5 +215,40 @@ describe('createModel', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toBeTruthy()
     expect(dashboard.models.value).toHaveLength(1)
+  })
+})
+
+describe('反馈与会话检索', () => {
+  it('按原因筛选时把 reason 透传给接口', async () => {
+    const api = createApi()
+    const dashboard = useAdminDashboard(api)
+    dashboard.feedbackReason.value = 'unclear_steps'
+
+    await dashboard.loadFeedback()
+
+    expect(api.feedback).toHaveBeenCalledWith({ reason: 'unclear_steps' })
+    expect(dashboard.feedback.value?.by_reason.unclear_steps).toBe(2)
+  })
+
+  it('搜索关键词去空白后透传，空搜索不传参', async () => {
+    const api = createApi()
+    const dashboard = useAdminDashboard(api)
+
+    dashboard.conversationSearch.value = '  拆电池  '
+    await dashboard.loadConversations()
+    expect(api.conversations).toHaveBeenCalledWith({ search: '拆电池', model_code: undefined })
+
+    dashboard.conversationSearch.value = '   '
+    await dashboard.loadConversations()
+    expect(api.conversations).toHaveBeenLastCalledWith({ search: undefined, model_code: undefined })
+  })
+
+  it('打开对话拉取完整内容', async () => {
+    const dashboard = useAdminDashboard(createApi())
+
+    const result = await dashboard.openConversation(7)
+
+    expect(result.ok).toBe(true)
+    expect(dashboard.selectedConversation.value?.messages).toHaveLength(1)
   })
 })

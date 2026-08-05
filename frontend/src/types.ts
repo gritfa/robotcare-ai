@@ -14,6 +14,12 @@ export interface DiagnosticOption {
 // 建议问题：source 说明这条从哪来——history=真实问过且答得上来，
 // flow=该型号有已发布诊断流程，fallback=通用兜底
 export interface SuggestedQuestion { text: string; source: 'history' | 'flow' | 'fallback' }
+export interface AdminTokenCost { window_days: number; prompt_tokens: number; completion_tokens: number; estimated_cost: number; records_with_usage: number; total_records: number; by_model: Record<string, number> }
+export interface AdminFeedbackItem { id: EntityId; conversation_id: EntityId; message_id: EntityId; model_code: string; helpful: boolean; reason: string | null; refusal_reason: string | null; answer_excerpt: string; created_at: string }
+export interface AdminFeedbackOverview { window_days: number; total_count: number; helpful_count: number; unhelpful_count: number; by_reason: Record<string, number>; by_model: Record<string, number>; items: AdminFeedbackItem[] }
+export interface AdminConversationSummary { id: EntityId; title: string; model_code: string; user_email_masked: string; message_count: number; resolved: boolean | null; updated_at: string }
+export interface AdminConversationMessage { id: EntityId; role: string; content: string; refusal_reason: string | null; intent: string | null; created_at: string }
+export interface AdminConversationDetail { id: EntityId; title: string; model_code: string; user_email_masked: string; resolved: boolean | null; created_at: string; updated_at: string; messages: AdminConversationMessage[] }
 export type DiagnosticStatus = 'collecting' | 'in_progress' | 'resolved' | 'unresolved' | 'report_ready' | 'cancelled'
 export interface DiagnosticStep { id: EntityId; position: number; title: string; instruction: string; source_label: string; safety_note?: string; options?: string[] }
 export interface StepExecution { id?: EntityId; outcome: 'resolved'|'not_resolved'; step: DiagnosticStep; created_at?: string }
@@ -85,6 +91,7 @@ export interface AdminOverview {
   unresolved_diagnostic_count: number
   service_report_count: number
   generation_stats: AdminGenerationStats
+  token_cost: AdminTokenCost
   content_gap_count: number
 }
 

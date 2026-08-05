@@ -53,7 +53,7 @@ from ..schemas import (
     AdminKnowledgeDocumentVersionRead,
     AdminKnowledgeRollbackRequest,
 )
-from ..security import require_admin
+from ..security import require_admin, require_knowledge_manage, require_operations_read
 
 router = APIRouter(prefix="/api/v1")
 
@@ -132,7 +132,7 @@ def list_knowledge_documents(
     model_code: str | None = Query(default=None, max_length=50),
     status: str | None = Query(default=None, pattern="^(active|disabled)$"),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> list[AdminKnowledgeDocumentRead]:
     del admin
     statement = (
@@ -168,7 +168,7 @@ def get_knowledge_document(
     request: Request,
     document_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> AdminKnowledgeDocumentDetailRead:
     del admin
     document = db.scalar(
@@ -214,7 +214,7 @@ def list_knowledge_chunks(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> AdminKnowledgeChunkPage:
     """分页看分片：切分对不对、页码有没有错位，只能靠看真实分片来判断。"""
 
@@ -255,7 +255,7 @@ def download_knowledge_file(
     request: Request,
     document_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_operations_read),
 ) -> FileResponse:
     document = _load_document(db, document_id)
     path = resolve_stored_file(_knowledge_dir(request), document.stored_filename)
@@ -292,7 +292,7 @@ def update_knowledge_document(
     document_id: int,
     payload: AdminKnowledgeDocumentUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_knowledge_manage),
 ) -> AdminKnowledgeDocumentRead:
     document = _load_document(db, document_id)
     changes: dict[str, object] = {}
@@ -377,7 +377,7 @@ def reindex_knowledge_document(
     request: Request,
     document_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_knowledge_manage),
 ) -> AdminKnowledgeDocumentDetailRead:
     document = _load_document(db, document_id)
     try:
@@ -483,7 +483,7 @@ def preview_knowledge_upload(
     source_url: str = Form(min_length=1, max_length=2000),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_knowledge_manage),
 ) -> AdminKnowledgeDiffPreviewRead:
     """上传前看差异：只解析、不入库、不调用 embedding，也不落存档。"""
 
@@ -562,7 +562,7 @@ def update_content_gap(
     request: Request,
     payload: AdminContentGapUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_knowledge_manage),
 ) -> AdminContentGapResolutionRead:
     """关联文档 / 改状态 / 记备注。缺口本身没有主键，用 (型号, 归一化问题) 定位。"""
 
@@ -613,7 +613,7 @@ def replay_content_gap(
     request: Request,
     payload: AdminContentGapReplayRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_knowledge_manage),
 ) -> AdminContentGapReplayRead:
     """把原问题重新问一遍，用真实检索+生成的结果决定缺口是否真的补上了。"""
 

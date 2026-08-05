@@ -96,10 +96,55 @@ def get_current_user(
     return user
 
 
+# 角色分级（2026-08-05 体检）：此前只有 user/admin 两级，
+# 给运营看一眼看板 = 同时给了删知识库、回滚版本、读任意用户报告的权限。
+#
+# 判权按**能力**而不是角色名：新增角色时只改这张表，不必回头逐个路由改判断。
+ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
+    "user": frozenset(),
+    # 只读运营：看板、反馈、会话、缺口、审计
+    "viewer": frozenset({"read_operations"}),
+    # 内容运营：加上传/发布/重新向量化/改标题与状态，但不含删除与回滚
+    "operator": frozenset({"read_operations", "manage_knowledge"}),
+    # 全权：加删除、版本回滚、型号增改
+    "admin": frozenset({"read_operations", "manage_knowledge", "administer"}),
+}
+
+CAPABILITY_MESSAGES = {
+    "read_operations": "需要运营查看权限（viewer 及以上）",
+    "manage_knowledge": "需要知识库管理权限（operator 及以上）",
+    "administer": "需要管理员权限（admin）",
+}
+
+
+def has_capability(role: str, capability: str) -> bool:
+    return capability in ROLE_CAPABILITIES.get(role, frozenset())
+
+
+def require_capability(capability: str):
+    """按能力生成依赖。未知角色一律无权限（fail-closed）。"""
+
+    def dependency(user: User = Depends(get_current_user)) -> User:
+        if not has_capability(user.role, capability):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=CAPABILITY_MESSAGES.get(capability, "Administrator access required"),
+            )
+        return user
+
+    return dependency
+
+
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role != "admin":
+    """全权管理员。删除、回滚、型号增改等不可逆或影响面大的操作用它。"""
+    if not has_capability(user.role, "administer"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Administrator access required",
         )
     return user
+
+
+# 语义化别名，路由里读起来就知道这条要什么权限
+require_operations_read = require_capability("read_operations")
+require_knowledge_manage = require_capability("manage_knowledge")

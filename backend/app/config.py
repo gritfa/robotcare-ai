@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     embedding_read_timeout_seconds: float = Field(default=20.0, ge=5.0, le=600.0)
     embedding_budget_seconds: float = Field(default=30.0, ge=5.0, le=600.0)
     embedding_max_attempts: int = Field(default=2, ge=1, le=4)
+    # 每百万 token 单价（元）。默认按 qwen-plus 公开价填，换模型必须跟着改——
+    # 单价写死在代码里，换个模型账单就悄悄失真。
+    # 形如 {"qwen-plus": {"prompt": 0.8, "completion": 2.0}}，按模型名精确匹配。
+    llm_token_prices: str = "{}"
+    llm_default_prompt_price_per_million: float = Field(default=0.8, ge=0, le=10000)
+    llm_default_completion_price_per_million: float = Field(default=2.0, ge=0, le=10000)
     knowledge_min_score: float = Field(default=0.25, ge=0, le=1)
     knowledge_min_score_overrides: str = "{}"
     auto_create_schema: bool = False
@@ -114,6 +120,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "ROBOTCARE_EMBEDDING_BUDGET_SECONDS must exceed "
                 "ROBOTCARE_EMBEDDING_CONNECT_TIMEOUT_SECONDS by at least 5 seconds"
+            )
+        try:
+            token_prices = json.loads(self.llm_token_prices)
+        except json.JSONDecodeError as exc:
+            raise ValueError("ROBOTCARE_LLM_TOKEN_PRICES must be valid JSON") from exc
+        if not isinstance(token_prices, dict):
+            raise ValueError(
+                "ROBOTCARE_LLM_TOKEN_PRICES must map model names to "
+                '{"prompt": <price>, "completion": <price>} per million tokens'
             )
         try:
             self.trusted_proxy_networks
@@ -185,6 +200,27 @@ class Settings(BaseSettings):
         if model_code in overrides:
             return float(overrides[model_code])
         return self.knowledge_min_score
+
+    def token_price_per_million(self, model: str) -> tuple[float, float]:
+        """返回 (输入单价, 输出单价)，单位：元 / 百万 token。
+
+        找不到该模型的配置就用默认值——宁可按默认价估算，也不要因为没配价格
+        就把成本记成 0：一个恒为 0 的成本看板比没有看板更危险。
+        """
+        try:
+            prices = json.loads(self.llm_token_prices)
+        except json.JSONDecodeError:
+            prices = {}
+        entry = prices.get(model) if isinstance(prices, dict) else None
+        if isinstance(entry, dict):
+            return (
+                float(entry.get("prompt", self.llm_default_prompt_price_per_million)),
+                float(entry.get("completion", self.llm_default_completion_price_per_million)),
+            )
+        return (
+            self.llm_default_prompt_price_per_million,
+            self.llm_default_completion_price_per_million,
+        )
 
     @property
     def effective_rate_limit_hmac_secret(self) -> str:

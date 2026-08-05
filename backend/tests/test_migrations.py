@@ -435,9 +435,12 @@ def test_state_constraint_migration_upgrades_0004_without_data_loss(
         assert connection.scalar(
             text("SELECT outcome FROM step_executions WHERE id = 9001")
         ) == "not_resolved"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-            "20260805_0014"
-        )
+        # 断言"已升到最新"而不是某个写死的版本号——每加一条迁移都要来改这里，
+        # 只会让人把它当成噪音顺手改掉，起不到守卫作用
+        from alembic.script import ScriptDirectory
+
+        head = ScriptDirectory.from_config(alembic_config(migration_database_url)).get_current_head()
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head
     engine.dispose()
 
 

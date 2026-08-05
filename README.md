@@ -146,7 +146,9 @@ cd backend
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 
-API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260804_0011`：`0005` 增加数据库状态约束，`0006` 增加独立 IP 登录桶与可信代理配套，`0007` 增加 API/Embedding 配额表，`0008` 增加生成层留痕表 generation_records，`0009` 增加内容缺口事件表 knowledge_gap_events，`0010` 增加会话表 conversations/conversation_messages，`0011` 给诊断增加来源会话字段；`create_all()` 仅保留给显式开启的隔离测试。
+API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260805_0016`：`0005` 数据库状态约束，`0006` 独立 IP 登录桶与可信代理配套，`0007` API/Embedding 配额表，`0008` 生成层留痕表 generation_records，`0009` 内容缺口事件表 knowledge_gap_events，`0010` 会话表 conversations/conversation_messages，`0011` 诊断来源会话字段，`0012` 消息路由字段，`0013` 会话体验包（快捷操作、消息反馈），`0014` 知识库后台（文档生命周期、版本历史、缺口闭环），`0015` 生成记录的 token 用量与成本，`0016` 角色分级 viewer/operator；`create_all()` 仅保留给显式开启的隔离测试。
+
+> 这一行的 head 号历史上多次过期（体检时停在 `0011`，实际已到 `0014`）。以数据库里的 `alembic_version` 为准，本行仅供人读；启动守卫本身不依赖它。
 
 （历史记录，SQLite 时期，现已 PG 单方言）本地开发库曾备份为 `robotcare.db.pre-0007-20260722.bak` 并升级到 `0007`；当时的 4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留，`PRAGMA integrity_check=ok` 且无外键异常。
 
@@ -212,7 +214,40 @@ Remove-Item Env:ROBOTCARE_ADMIN_PASSWORD
 
 【已验证】当前管理范围包括运营计数、型号列表与启停、知识数量健康、安全阻断列表、未解决报告摘要和审计日志。列表只返回最小摘要；进入报告、诊断或安全阻断详情时才返回敏感正文，并在返回前写入管理员、资源、动作、时间和 trace ID，审计失败返回 503。型号停用后不再出现在公共型号列表中，不能新建设备或新开诊断，但历史诊断仍可读取。
 
-【计划】知识上传/重建/停用、诊断流程审核发布、评测运行与结果持久化不在当前管理员接口范围内。
+### Docker 部署下的账号运维
+
+全仓此前只有本机 venv + PowerShell 的写法，Docker 场景一次都没出现过（2026-08-05 体检）。
+容器内执行：
+
+```bash
+# 建管理员（密码只走进程环境变量，不落命令行历史）
+docker compose exec -e ROBOTCARE_ADMIN_PASSWORD='<8-128位强密码>' backend \
+  python -m app.admin_cli create --email admin@example.com
+
+# 管理员密码丢了——重置并吊销该账号全部会话
+docker compose exec -e ROBOTCARE_ADMIN_PASSWORD='<新密码>' backend \
+  python -m app.admin_cli reset-password --email admin@example.com
+
+# 调整角色：user | viewer（只读运营）| operator（+知识库内容）| admin（全权）
+docker compose exec backend python -m app.admin_cli set-role --email ops@example.com --role viewer
+```
+
+【已验证：生产栈】`reset-password` 重置后旧 access token 立即失效（401），新密码可登录；
+`set-role` 设为 viewer 后看板与反馈可读（200），删除文档与新建型号被拒（403）。
+
+### 角色与权限分级
+
+| 角色 | 能力 | 典型用途 |
+| --- | --- | --- |
+| `user` | 仅自己的设备、诊断、会话 | 终端用户 |
+| `viewer` | 看板、反馈、会话检索、缺口榜、审计日志（只读） | 运营看数据 |
+| `operator` | viewer + 知识上传/发布/重新向量化/改标题与状态/缺口处理 | 内容运营 |
+| `admin` | operator + 删除文档、版本回滚、型号增改 | 系统管理员 |
+
+判权按能力而不是角色名（`security.py: ROLE_CAPABILITIES`），加角色时只改这张表。
+删除与回滚这类不可逆操作始终留在 `admin`。
+
+【计划】诊断流程审核发布、评测运行与结果持久化不在当前管理员接口范围内。
 
 ## PostgreSQL / Docker 下一步验收
 

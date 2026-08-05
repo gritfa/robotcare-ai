@@ -1,13 +1,17 @@
 import axios from 'axios'
 import { computed, reactive, ref } from 'vue'
 import { adminApi, apiError } from './api'
-import type { AdminAuditLog, AdminContentGap, AdminDiagnosticDetail, AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, EntityId, KnowledgeModelStatus } from './types'
+import type {
+  AdminConversationDetail, AdminConversationSummary, AdminFeedbackOverview, AdminAuditLog, AdminContentGap, AdminDiagnosticDetail, AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, EntityId, KnowledgeModelStatus } from './types'
 
 export interface AdminDashboardApi {
   overview(): Promise<AdminOverview>
   models(): Promise<AdminModel[]>
   setModelActive(id: EntityId, active: boolean): Promise<AdminModel>
   createModel(payload: { code: string; name: string; brand: string }): Promise<AdminModel>
+  feedback(params?: { days?: number; limit?: number; reason?: string }): Promise<AdminFeedbackOverview>
+  conversations(params?: { search?: string; model_code?: string; days?: number; limit?: number }): Promise<AdminConversationSummary[]>
+  conversationDetail(id: EntityId): Promise<AdminConversationDetail>
   knowledgeStatus(): Promise<KnowledgeModelStatus[]>
   contentGaps(days?: number, limit?: number): Promise<AdminContentGap[]>
   uploadKnowledge(form: FormData): Promise<AdminKnowledgeUploadResult>
@@ -40,6 +44,10 @@ const emptyOverview = (): AdminOverview => ({
   unresolved_diagnostic_count: 0,
   service_report_count: 0,
   generation_stats: { answered_count: 0, refused_count: 0, refusal_by_reason: {} },
+  token_cost: {
+    window_days: 30, prompt_tokens: 0, completion_tokens: 0, estimated_cost: 0,
+    records_with_usage: 0, total_records: 0, by_model: {},
+  },
   content_gap_count: 0,
 })
 
@@ -139,6 +147,55 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     }
   }
 
+  // --- 反馈与会话检索（此前反馈只写不读、客诉查不到对话，只能连 psql）---
+  const feedback = ref<AdminFeedbackOverview | null>(null)
+  const feedbackReason = ref('')
+  const feedbackLoading = ref(false)
+
+  async function loadFeedback() {
+    feedbackLoading.value = true
+    try {
+      feedback.value = await api.feedback({
+        reason: feedbackReason.value || undefined,
+      })
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: adminErrorMessage(error, '反馈数据加载失败，请重试。') }
+    } finally {
+      feedbackLoading.value = false
+    }
+  }
+
+  const conversations = ref<AdminConversationSummary[]>([])
+  const conversationSearch = ref('')
+  const conversationModel = ref('')
+  const conversationsLoading = ref(false)
+  const selectedConversation = ref<AdminConversationDetail | null>(null)
+
+  async function loadConversations() {
+    conversationsLoading.value = true
+    try {
+      conversations.value = await api.conversations({
+        search: conversationSearch.value.trim() || undefined,
+        model_code: conversationModel.value || undefined,
+      })
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: adminErrorMessage(error, '会话检索失败，请重试。') }
+    } finally {
+      conversationsLoading.value = false
+    }
+  }
+
+  async function openConversation(id: EntityId) {
+    try {
+      selectedConversation.value = await api.conversationDetail(id)
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: adminErrorMessage(error, '对话内容加载失败，请重试。') }
+    }
+  }
+
   function isModelUpdating(id: EntityId) {
     return updatingModelIds.has(id)
   }
@@ -208,6 +265,17 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     setModelActive,
     createModel,
     creatingModel,
+    feedback,
+    feedbackReason,
+    feedbackLoading,
+    loadFeedback,
+    conversations,
+    conversationSearch,
+    conversationModel,
+    conversationsLoading,
+    selectedConversation,
+    loadConversations,
+    openConversation,
     isModelUpdating,
     uploadingKnowledge,
     uploadKnowledge,

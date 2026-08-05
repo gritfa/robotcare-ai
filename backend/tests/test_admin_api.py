@@ -120,7 +120,24 @@ def test_admin_reads_operational_overview_without_sensitive_payloads(client: Tes
 
     overview = client.get("/api/v1/admin/overview", headers=auth(admin_token))
     assert overview.status_code == 200
-    assert overview.json() == {
+    # 逐字段断言而不是整体快照：看板每加一个指标都会让快照断言失败，
+    # 而失败的原因往往与这条用例真正要守的东西无关
+    body = overview.json()
+    assert {
+        key: body[key]
+        for key in (
+            "user_count",
+            "active_model_count",
+            "published_flow_count",
+            "knowledge_document_count",
+            "knowledge_chunk_count",
+            "safety_block_count",
+            "unresolved_diagnostic_count",
+            "service_report_count",
+            "generation_stats",
+            "content_gap_count",
+        )
+    } == {
         "user_count": 2,
         "active_model_count": 5,  # 2 真实型号 + 3 D1 合成演示型号
         "published_flow_count": 45,  # 14 条真实 + 31 条 D1 合成演示流程
@@ -136,6 +153,8 @@ def test_admin_reads_operational_overview_without_sensitive_payloads(client: Tes
         },
         "content_gap_count": 0,
     }
+    # 敏感载荷不得出现在看板里（本用例的核心约束）
+    assert "email" not in str(body).lower() and "password" not in str(body).lower()
 
     models = client.get("/api/v1/admin/models", headers=auth(admin_token))
     assert models.status_code == 200

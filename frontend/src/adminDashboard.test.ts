@@ -23,6 +23,7 @@ function createApi(overrides: Partial<AdminDashboardApi> = {}): AdminDashboardAp
     overview: vi.fn().mockResolvedValue(overview),
     models: vi.fn().mockResolvedValue([model()]),
     setModelActive: vi.fn().mockImplementation(async (_id, active) => ({ ...model(), active })),
+    createModel: vi.fn().mockImplementation(async (body) => ({ id: 99, ...body, active: true })),
     knowledgeStatus: vi.fn().mockResolvedValue([{ robot_model_id: 1, model_code: 'JH69U1', document_count: 1, chunk_count: 31, vector_count: 31 }]),
     contentGaps: vi.fn().mockResolvedValue([
       {
@@ -164,5 +165,33 @@ describe('admin dashboard state', () => {
     expect(dashboard.selectedSafetyBlock.value?.reason).toBe('检测到高风险')
     expect(dashboard.selectedDiagnostic.value?.issue_description).toBe('机器人无法回充')
     expect(dashboard.selectedReport.value?.content).toBe('完整售后报告')
+  })
+})
+
+describe('createModel', () => {
+  it('创建成功后立刻并入列表并按型号码排序，无需重新拉取', async () => {
+    const dashboard = useAdminDashboard(createApi())
+    await dashboard.load()
+
+    const result = await dashboard.createModel({ code: 'AA-01', name: '新接入型号', brand: '首如' })
+
+    expect(result.ok).toBe(true)
+    expect(dashboard.models.value.map((item) => item.code)).toEqual(['AA-01', 'JH69U1'])
+    expect(dashboard.overview.value.active_model_count).toBe(2)
+  })
+
+  it('重复型号码报错时不污染列表', async () => {
+    const conflict = Object.assign(new Error('conflict'), {
+      isAxiosError: true,
+      response: { status: 409, data: { detail: 'Robot model code already exists' } },
+    }) as AxiosError
+    const dashboard = useAdminDashboard(createApi({ createModel: vi.fn().mockRejectedValue(conflict) }))
+    await dashboard.load()
+
+    const result = await dashboard.createModel({ code: 'JH69U1', name: '重复型号', brand: '海尔' })
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBeTruthy()
+    expect(dashboard.models.value).toHaveLength(1)
   })
 })

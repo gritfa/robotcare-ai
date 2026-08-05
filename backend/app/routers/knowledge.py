@@ -1,9 +1,12 @@
 """/knowledge/* routes: search, answer, status, health."""
 
+import io
 import logging
 from time import perf_counter
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pypdf import PdfReader, PdfWriter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,6 +14,7 @@ from ..alerting import send_alert
 from ..config import get_settings
 from ..database import get_db
 from ..generation_service import generate_answer
+from ..knowledge_admin_service import resolve_stored_file
 from ..knowledge_service import get_knowledge_health, get_knowledge_status, search_knowledge
 from ..models import KnowledgeDocument, KnowledgeGapEvent, RobotModel, User
 from ..observability import emit_json_log, request_trace_id
@@ -418,4 +422,80 @@ def knowledge_health(
         embedding_configured=embedding_configured,
         models=[KnowledgeModelHealthRead(**item.__dict__) for item in model_health],
         probe=probe_result,
+    )
+
+
+@router.get("/knowledge/citations/{document_sha256}/pages/{page_number}")
+def read_citation_page(
+    document_sha256: str,
+    page_number: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """取出引用命中的**那一页**原件。
+
+    体检发现（2026-08-05）：证据抽屉里点"打开说明书原页"跳的是官方外链，
+    而海尔那份是 27MB 的整本 PDF——等于让手机用户下完整本书自己翻到第 15 页。
+    引用不可核验，"每条回答都标注资料页码"这个卖点就只剩一个角标。
+
+    用 sha256 而不是 document_id 定位：引用记录里本来就有 sha256（含历史数据），
+    不必为了这个接口改动已落库的 citations_json 结构。
+
+    权限：登录用户即可读，但只限 active 型号下的 active 文档——
+    这和他们本来就能检索到的内容范围完全一致，不放大可见面。
+    """
+    settings = get_settings()
+    # 抽页要读原件并重新编码，成本与一次检索相当，沿用检索的限流口径
+    enforce_business_rate_limit(
+        db, request, action="knowledge_search", user_id=user.id, settings=settings
+    )
+    if page_number < 1:
+        raise HTTPException(status_code=422, detail="Page number starts at 1")
+
+    document = db.scalar(
+        select(KnowledgeDocument)
+        .join(RobotModel, RobotModel.id == KnowledgeDocument.robot_model_id)
+        .where(
+            KnowledgeDocument.sha256 == document_sha256.lower(),
+            KnowledgeDocument.status == "active",
+            RobotModel.active.is_(True),
+        )
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail="Cited document not found")
+
+    path = resolve_stored_file(
+        getattr(request.app.state, "knowledge_dir", ""), document.stored_filename
+    )
+    if path is None:
+        # 存档功能上线前入库的老文档没有原件，前端据此回退到外链
+        raise HTTPException(
+            status_code=404, detail="该资料没有留存原件，请改用来源链接查看"
+        )
+
+    reader = PdfReader(str(path))
+    if page_number > len(reader.pages):
+        raise HTTPException(status_code=404, detail="Cited page is out of range")
+    writer = PdfWriter()
+    writer.add_page(reader.pages[page_number - 1])
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    buffer.seek(0)
+    emit_json_log(
+        logging.INFO,
+        "citation_page_read",
+        trace_id=request_trace_id(request),
+        user_id=user.id,
+        robot_model_id=document.robot_model_id,
+        page_number=page_number,
+    )
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            # inline：用户要的是"看一眼这页"，不是下载一个文件
+            "Content-Disposition": f'inline; filename="page-{page_number}.pdf"',
+            "Cache-Control": "private, max-age=300",
+        },
     )

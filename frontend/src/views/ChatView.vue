@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChatDotRound, CopyDocument, Delete, Edit, FirstAidKit, Plus, Promotion, Refresh, Search, VideoPause } from '@element-plus/icons-vue'
-import { apiError, conversationApi, deviceApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
+import { apiError, conversationApi, deviceApi, knowledgeApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import { ChatStreamAborted, streamChatMessage } from '../chatStream'
 import { refusalPresentation } from '../answerDisplay'
 import { resolveComposerKey } from '../composerKeys'
@@ -374,6 +374,12 @@ function openEvidence(citation: AnswerCitation) {
   evidenceVisible.value = true
 }
 
+/** 外链补上页锚点：多数 PDF 阅读器认 #page=N，能直接落到那一页。 */
+function sourceUrlWithPage(url: string, page?: number | null) {
+  if (!page || page < 1 || url.includes('#')) return url
+  return `${url}#page=${page}`
+}
+
 function openSourcePage() {
   const url = evidence.value?.source_url
   if (!url) return
@@ -382,7 +388,34 @@ function openSourcePage() {
     ElMessage.info('这份资料是本地演示数据，没有可跳转的在线原页')
     return
   }
-  window.open(url, '_blank', 'noopener')
+  window.open(sourceUrlWithPage(url, evidence.value?.page_number), '_blank', 'noopener')
+}
+
+const citationPageLoading = ref(false)
+
+/**
+ * 只打开引用命中的那一页。
+ * 官方外链常是几十 MB 的整本 PDF（海尔那份 27MB），在手机上等于不可核验。
+ * 取不到单页（老文档没有存档原件）时回退到外链，不把用户卡死在这一步。
+ */
+async function openCitedPage() {
+  const citation = evidence.value
+  if (!citation || citationPageLoading.value) return
+  const page = citation.page_number
+  if (!citation.document_sha256 || !page) { openSourcePage(); return }
+  citationPageLoading.value = true
+  try {
+    const blob = await knowledgeApi.citationPage(citation.document_sha256, page)
+    const objectUrl = URL.createObjectURL(blob)
+    window.open(objectUrl, '_blank', 'noopener')
+    // 交给浏览器打开后释放；立即 revoke 会让新标签页拿不到内容
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  } catch {
+    ElMessage.info('这份资料没有留存原件，已为你打开来源链接')
+    openSourcePage()
+  } finally {
+    citationPageLoading.value = false
+  }
 }
 
 // ---- 会话管理 ----
@@ -822,9 +855,19 @@ async function scrollToBottom() {
             这条引用产生于原文留痕上线之前，只保留了页码。请点下方链接核对说明书原页。
           </p>
         </div>
-        <el-button type="primary" plain :disabled="!evidence.source_url" @click="openSourcePage">
-          打开说明书原页
-        </el-button>
+        <!-- 优先只打开命中的那一页：外链常是几十 MB 整本 PDF，手机上根本核对不了 -->
+        <div class="evidence-actions">
+          <el-button
+            v-if="evidence.page_number"
+            class="brand-button"
+            type="primary"
+            :loading="citationPageLoading"
+            @click="openCitedPage"
+          >只看第 {{ evidence.page_number }} 页</el-button>
+          <el-button plain :disabled="!evidence.source_url" @click="openSourcePage">
+            打开完整说明书
+          </el-button>
+        </div>
         <p class="evidence-url">{{ evidence.source_url }}</p>
       </div>
     </el-drawer>
@@ -878,7 +921,7 @@ async function scrollToBottom() {
 .evidence-snippet{background:#f6faf8;border:1px solid #e0ebe5;border-radius:10px;padding:12px;margin-bottom:16px}
 .evidence-snippet p{margin:8px 0 0;line-height:1.7;white-space:pre-wrap}
 .evidence-missing{color:var(--muted,#8a9a92)}
-.evidence-url{margin-top:10px;font-size:12px;color:var(--muted,#8a9a92);word-break:break-all}
+.evidence-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}.evidence-url{margin-top:10px;font-size:12px;color:var(--muted,#8a9a92);word-break:break-all}
 .refusal-alert{max-width:78%}
 .streaming-bubble .thinking{color:var(--muted)}
 .cursor{animation:blink 1s step-start infinite;color:var(--brand)}

@@ -7,7 +7,11 @@ from app.config import Settings
 
 PASSWORD = "StrongPass123"
 VALID_INVITE_SECRET = "7cYp9N2mK4qR8vTx"
-DENIED_DETAIL = "Registration is not available"
+# 拒绝文案必须是中文且能指出下一步该做什么（2026-08-05 体检：
+# 此前两种情况都返回英文 "Registration is not available"，前端原样显示，
+# 而表单上写着"开放环境可留空"，用户既不知错在哪也不知去哪要码）
+INVITE_DENIED_DETAIL = "邀请码不正确或已失效。本站点当前为邀请制注册，请向管理员索取有效邀请码后重试。"
+CLOSED_DENIED_DETAIL = "当前站点未开放注册，请联系管理员为你开通账号。"
 
 
 def _settings(mode: str, invite_secret: str | None = None) -> Settings:
@@ -69,7 +73,7 @@ def test_invite_registration_rejects_missing_or_wrong_code_without_reason(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == DENIED_DETAIL
+    assert response.json()["detail"] == INVITE_DENIED_DETAIL
 
 
 def test_closed_registration_returns_generic_forbidden(client, monkeypatch):
@@ -82,7 +86,7 @@ def test_closed_registration_returns_generic_forbidden(client, monkeypatch):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == DENIED_DETAIL
+    assert response.json()["detail"] == CLOSED_DENIED_DETAIL
 
 
 def test_invite_code_request_length_is_bounded(client, monkeypatch):

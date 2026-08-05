@@ -379,6 +379,8 @@ def load_demo_data(
 
     admin = users["demo.admin@example.com"]
     for index, action in enumerate(
+        # 与下面的 resource_type 元组和 diagnostics 列表按下标一一对应，
+        # 增删这里必须同步改那两处（2026-08-05 加型号动作时踩过）
         ("robot_model.active_set", "safety_block.detail_read", "diagnostic.detail_read", "service_report.detail_read")
     ):
         db.add(

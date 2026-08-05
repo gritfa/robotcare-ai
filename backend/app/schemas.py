@@ -44,8 +44,29 @@ class AdminModelRead(ModelRead):
     active: bool
 
 
+class AdminModelCreate(BaseModel):
+    """后台建型号。
+
+    此前型号只能改仓库里的 knowledge/diagnostic_flows.json 再重建镜像，
+    "售后主管接入自家型号"这个核心场景等于一次发版动作（2026-08-05 体检）。
+    """
+
+    # 型号码进 URL 与检索缓存键，限制成大小写字母/数字/短横线，避免歧义与转义问题
+    code: str = Field(min_length=2, max_length=50, pattern=r"^[A-Za-z0-9][A-Za-z0-9\-_]*$")
+    name: str = Field(min_length=1, max_length=100)
+    brand: str = Field(default="海尔", min_length=1, max_length=50)
+
+
 class AdminModelUpdate(BaseModel):
-    active: bool
+    """改型号。三个字段都可选，只改传了的那个。
+
+    code 不可改：它是知识文档、会话、诊断记录的对外标识，改了会让
+    已发出的报告和引用对不上号——要换编码就新建一个型号。
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    brand: str | None = Field(default=None, min_length=1, max_length=50)
+    active: bool | None = None
 
 
 class AdminGenerationStatsRead(BaseModel):
@@ -299,6 +320,14 @@ class DiagnosticOptionRead(BaseModel):
     issue_category_code: str
     issue_category_name: str
     title: str
+
+
+class RegistrationPolicyRead(BaseModel):
+    """注册页据此渲染表单提示。只暴露模式，绝不暴露邀请码本身。"""
+
+    mode: Literal["open", "invite", "closed"]
+    invite_required: bool
+    open: bool
 
 
 class SuggestedQuestionRead(BaseModel):

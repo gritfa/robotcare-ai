@@ -24,7 +24,13 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import User
 from ..rate_limit_service import enforce_registration_rate_limit
-from ..schemas import LoginRequest, RegisterRequest, TokenResponse, UserRead
+from ..schemas import (
+    LoginRequest,
+    RegisterRequest,
+    RegistrationPolicyRead,
+    TokenResponse,
+    UserRead,
+)
 from ..security import (
     DUMMY_PASSWORD_HASH,
     decode_access_token,
@@ -35,6 +41,17 @@ from ..security import (
 from ._shared import enforce_registration_policy, token_response
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.get("/auth/registration-policy", response_model=RegistrationPolicyRead)
+def registration_policy() -> RegistrationPolicyRead:
+    """当前注册模式，供注册页如实渲染表单。
+
+    此前表单固定写"试用邀请码（开放环境可留空）"，而生产默认是邀请制——
+    用户照着提示留空，收到的却是一句英文拒绝。只回模式，不回邀请码本身。
+    """
+    mode = get_settings().registration_mode
+    return RegistrationPolicyRead(mode=mode, invite_required=mode == "invite", open=mode == "open")
 
 
 @router.post("/auth/register", response_model=TokenResponse, status_code=201)

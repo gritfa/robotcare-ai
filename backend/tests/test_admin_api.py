@@ -310,11 +310,15 @@ def test_model_activation_changes_public_availability_and_writes_audit(client: T
     assert audit["action"] == "robot_model.active_set"
     assert audit["resource_type"] == "robot_model"
     assert audit["resource_id"] == str(target_model_id)
-    assert audit["details_json"] == {
-        "code": "JH69U1",
-        "previous_active": True,
-        "active": False,
-    }
+    # 既有契约字段必须原样保留（审计记录会被历史消费方读），
+    # 型号后台改名/改品牌后又补了完整的前后值快照
+    details = audit["details_json"]
+    assert details["code"] == "JH69U1"
+    assert details["previous_active"] is True
+    assert details["active"] is False
+    assert details["previous"]["active"] is True
+    assert details["current"]["active"] is False
+    assert details["previous"]["name"] == details["current"]["name"]
     assert "password" not in str(audit).lower()
     assert "token" not in str(audit).lower()
 

@@ -351,6 +351,13 @@ export const conversationApi = {
   sendMessage: async (id: EntityId, content: string) => payload<ChatMessagePair>((await http.post(`/conversations/${id}/messages`, { content })).data),
 }
 
+export interface RegistrationPolicy { mode: 'open' | 'invite' | 'closed'; invite_required: boolean; open: boolean }
+
+export const registrationApi = {
+  /** 注册页据此渲染提示：生产默认邀请制，表单却写着"开放环境可留空"是自相矛盾。 */
+  policy: async () => payload<RegistrationPolicy>((await http.get('/auth/registration-policy')).data),
+}
+
 export const knowledgeApi = {
   search: async (body: { robot_model_id: number; query: string; top_k?: number }) => {
     const response = await http.post('/knowledge/search', body)
@@ -360,12 +367,16 @@ export const knowledgeApi = {
     payload<KnowledgeAnswer>((await http.post('/knowledge/answer', body)).data),
   health: async (probe = false) => payload<KnowledgeHealth>((await http.get('/knowledge/health', { params: probe ? { probe: true } : undefined, timeout: probe ? 60000 : undefined })).data),
   status: async () => listPayload<KnowledgeModelStatus>((await http.get('/knowledge/status')).data),
+  /** 只取引用命中的那一页原件；官方外链常常是几十 MB 的整本 PDF。 */
+  citationPage: async (sha256: string, page: number) =>
+    (await http.get(`/knowledge/citations/${sha256}/pages/${page}`, { responseType: 'blob' })).data as Blob,
 }
 
 export const adminApi = {
   overview: async () => payload<AdminOverview>((await http.get('/admin/overview')).data),
   models: async () => listPayload<AdminModel>((await http.get('/admin/models')).data),
   setModelActive: async (id: EntityId, active: boolean) => payload<AdminModel>((await http.patch(`/admin/models/${id}`, { active })).data),
+  createModel: async (body: { code: string; name: string; brand: string }) => payload<AdminModel>((await http.post('/admin/models', body)).data),
   knowledgeStatus: async () => listPayload<KnowledgeModelStatus>((await http.get('/admin/knowledge/status')).data),
   contentGaps: async (days = 30, limit = 20) => listPayload<AdminContentGap>((await http.get('/admin/content-gaps', { params: { days, limit } })).data),
   uploadKnowledge: async (form: FormData) => payload<AdminKnowledgeUploadResult>((await http.post('/admin/knowledge/upload', form)).data),

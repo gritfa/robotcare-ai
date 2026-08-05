@@ -37,6 +37,7 @@ from ..schemas import (
     AdminGenerationStatsRead,
     AdminKnowledgeUploadRead,
     AdminModelRead,
+    AdminModelCreate,
     AdminModelUpdate,
     AdminOverviewRead,
     AdminReportSummary,
@@ -213,6 +214,57 @@ def admin_list_models(
     return list(db.scalars(select(RobotModel).order_by(RobotModel.code)))
 
 
+@router.post("/admin/models", response_model=AdminModelRead, status_code=201)
+def admin_create_model(
+    payload: AdminModelCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> RobotModel:
+    """后台建型号。
+
+    此前型号只能来自 knowledge/diagnostic_flows.json 的同步（flow_catalog.py），
+    而该目录是 COPY 进镜像的——加一个型号＝改仓库 + 重 build + 重 deploy。
+    对"售后主管接入自家型号"这个核心场景来说，那是个发版动作，不是运营动作。
+
+    注意：同步逻辑只在 code 不存在时创建型号，所以这里手工建的型号不会被
+    后续 seed 覆盖（由 test_manual_model_survives_catalog_sync 守住）。
+    """
+    code = payload.code.strip()
+    existing = db.scalar(select(RobotModel).where(RobotModel.code == code))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Robot model code already exists")
+    robot_model = RobotModel(
+        code=code, name=payload.name.strip(), brand=payload.brand.strip(), active=True
+    )
+    db.add(robot_model)
+    db.flush()
+    db.add(
+        AuditLog(
+            actor_user_id=admin.id,
+            action="robot_model.created",
+            resource_type="robot_model",
+            resource_id=str(robot_model.id),
+            details_json={
+                "code": robot_model.code,
+                "name": robot_model.name,
+                "brand": robot_model.brand,
+            },
+        )
+    )
+    db.commit()
+    db.refresh(robot_model)
+    emit_json_log(
+        logging.INFO,
+        "admin_model_created",
+        trace_id=request_trace_id(request),
+        actor_user_id=admin.id,
+        robot_model_id=robot_model.id,
+        code=robot_model.code,
+    )
+    return robot_model
+
+
 @router.patch("/admin/models/{model_id}", response_model=AdminModelRead)
 def admin_update_model(
     model_id: int,
@@ -221,21 +273,49 @@ def admin_update_model(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ) -> RobotModel:
+    """改型号名称/品牌/启用状态。
+
+    没有硬删除接口：型号被知识文档、用户设备、诊断流程、生成记录、会话等
+    七张表引用，硬删要么被外键挡下，要么连带毁掉历史留痕。停用（active=False）
+    就是这里的删除语义——用户端下拉框立刻看不到它，已有历史保持可查。
+    """
     robot_model = db.get(RobotModel, model_id)
     if robot_model is None:
         raise HTTPException(status_code=404, detail="Robot model not found")
+    previous = {
+        "name": robot_model.name,
+        "brand": robot_model.brand,
+        "active": robot_model.active,
+    }
     previous_active = robot_model.active
-    robot_model.active = payload.active
+    if payload.name is not None:
+        robot_model.name = payload.name.strip()
+    if payload.brand is not None:
+        robot_model.brand = payload.brand.strip()
+    if payload.active is not None:
+        robot_model.active = payload.active
+    # 动作名按实际变化选：只动 active 时沿用历史动作名，避免既有审计记录
+    # 与新记录语义分叉；改了名称/品牌才记 updated
+    only_active_changed = payload.name is None and payload.brand is None
     db.add(
         AuditLog(
             actor_user_id=admin.id,
-            action="robot_model.active_set",
+            action="robot_model.active_set" if only_active_changed else "robot_model.updated",
             resource_type="robot_model",
             resource_id=str(robot_model.id),
+            # 审计要能回答"当时改了什么"，所以前后值都记。
+            # previous_active/active 是既有契约，保留不动，新字段只做增量——
+            # 审计记录一旦被消费方依赖，换结构就是破坏历史。
             details_json={
                 "code": robot_model.code,
-                "previous_active": previous_active,
-                "active": payload.active,
+                "previous_active": previous["active"],
+                "active": robot_model.active,
+                "previous": previous,
+                "current": {
+                    "name": robot_model.name,
+                    "brand": robot_model.brand,
+                    "active": robot_model.active,
+                },
             },
         )
     )
@@ -243,7 +323,7 @@ def admin_update_model(
     db.refresh(robot_model)
     emit_json_log(
         logging.INFO,
-        "admin_model_status_changed",
+        "admin_model_updated",
         trace_id=request_trace_id(request),
         actor_user_id=admin.id,
         robot_model_id=robot_model.id,

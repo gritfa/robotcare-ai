@@ -8,6 +8,7 @@ import {
   DataAnalysis,
   Document,
   Files,
+  Plus,
   QuestionFilled,
   Refresh,
   Upload,
@@ -281,6 +282,31 @@ function detailText(value: Record<string, unknown>) {
   return entries.map(([key, item]) => `${key}: ${typeof item === 'object' ? JSON.stringify(item) : String(item)}`).join('；')
 }
 
+const createModelVisible = ref(false)
+const newModel = ref({ code: '', name: '', brand: '海尔' })
+
+function openCreateModel() {
+  newModel.value = { code: '', name: '', brand: '海尔' }
+  createModelVisible.value = true
+}
+
+async function submitCreateModel() {
+  const code = newModel.value.code.trim()
+  const name = newModel.value.name.trim()
+  const brand = newModel.value.brand.trim() || '海尔'
+  if (!code || !name) {
+    ElMessage.warning('型号编码与名称都要填')
+    return
+  }
+  const result = await dashboard.createModel({ code, name, brand })
+  if (result.ok) {
+    createModelVisible.value = false
+    ElMessage.success(`型号 ${code} 已创建，用户端立即可选；下一步给它上传说明书`)
+  } else if (result.error) {
+    ElMessage.error(result.error)
+  }
+}
+
 async function updateModel(model: AdminModel, value: string | number | boolean) {
   const result = await dashboard.setModelActive(model, Boolean(value))
   if (result.ok) {
@@ -356,10 +382,19 @@ onMounted(async () => {
         <section class="panel section-panel">
           <div class="section-head">
             <div>
-              <h2>型号启停</h2>
-              <p>停用后不再面向新诊断开放；历史数据仍由后端保留。</p>
+              <h2>型号管理</h2>
+              <p>新增型号立即对用户可见，无需重建镜像；停用后不再面向新诊断开放，历史数据仍保留。</p>
             </div>
-            <el-tag type="info">{{ dashboard.models.value.length }} 个型号</el-tag>
+            <div class="section-head-actions">
+              <el-tag type="info">{{ dashboard.models.value.length }} 个型号</el-tag>
+              <el-button
+                class="brand-button"
+                type="primary"
+                size="small"
+                :icon="Plus"
+                @click="openCreateModel"
+              >新增型号</el-button>
+            </div>
           </div>
           <el-table :data="dashboard.models.value" empty-text="暂无型号数据">
             <el-table-column prop="code" label="型号" width="120" />
@@ -843,9 +878,36 @@ onMounted(async () => {
     <div v-else-if="!dashboard.loading.value && !dashboard.loadError.value" class="panel empty">
       暂无可显示的管理员数据。
     </div>
+
+    <el-dialog v-model="createModelVisible" title="新增型号" width="440px">
+      <el-form label-position="top">
+        <el-form-item label="型号编码">
+          <el-input v-model="newModel.code" placeholder="如 SR-X1；仅字母数字与 - _，创建后不可改" />
+        </el-form-item>
+        <el-form-item label="型号名称">
+          <el-input v-model="newModel.name" placeholder="如 首如 X1 扫拖一体机" />
+        </el-form-item>
+        <el-form-item label="品牌">
+          <el-input v-model="newModel.brand" placeholder="如 首如" />
+        </el-form-item>
+      </el-form>
+      <p class="dialog-hint">
+        编码是知识文档与已发出报告的对外标识，创建后不可修改；要换编码请另建型号。
+        建好后在下方「知识库上传」给它上传说明书，才能开始作答。
+      </p>
+      <template #footer>
+        <el-button @click="createModelVisible = false">取消</el-button>
+        <el-button
+          class="brand-button"
+          type="primary"
+          :loading="dashboard.creatingModel.value"
+          @click="submitCreateModel"
+        >创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.generation-stats{margin-bottom:18px}.refusal-tags{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.refusal-empty{color:var(--muted);font-size:12px}.upload-box{margin-top:16px;padding-top:14px;border-top:1px solid #edf1ef}.upload-box h3{margin:0;font-size:14px}.upload-box p{margin:6px 0 10px;color:var(--muted);font-size:12px;line-height:1.5}.upload-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.upload-model{width:140px;flex-shrink:0}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.sensitive-detail{line-height:1.7}.sensitive-detail pre{white-space:pre-wrap;word-break:break-word;padding:14px;background:#f7faf8;border-radius:8px;max-height:55vh;overflow:auto}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}.preview-alert{margin-top:10px}.preview-text{margin:4px 0 2px;font-size:12px;line-height:1.6}.preview-meta{margin:0;font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.section-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.filter-select{width:130px}.archive-hint{margin-bottom:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.gap-loop-hint{margin:-6px 0 14px;padding:10px 12px;background:#f7faf8;border-radius:8px;color:var(--muted);font-size:12px;line-height:1.6}.linked-doc{font-size:12px}.gap-doc-select{width:100%}.replay-cell{display:flex;flex-direction:column;gap:3px}.replay-meta{font-size:11px;color:var(--muted)}.replay-excerpt{margin:2px 0 0;font-size:11px;color:#52635d;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.muted{color:var(--muted);font-size:12px}.doc-detail{padding:0 4px}.doc-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0 0 18px}.doc-meta div{display:flex;gap:8px;font-size:12px}.doc-meta dt{color:var(--muted);flex-shrink:0}.doc-meta dd{margin:0}.wrap{word-break:break-all}.doc-detail h4{margin:18px 0 10px;font-size:14px}.chunk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.chunk-controls{display:flex;align-items:center;gap:8px}.page-filter{width:110px}.chunk-range{font-size:11px;color:var(--muted)}.chunk-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}.chunk-list li{padding:12px;background:#f7faf8;border-radius:8px}.chunk-head-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}.chunk-index{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}.chunk-text{margin:0;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}.doc-meta{grid-template-columns:1fr}}
+.admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.generation-stats{margin-bottom:18px}.refusal-tags{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.refusal-empty{color:var(--muted);font-size:12px}.upload-box{margin-top:16px;padding-top:14px;border-top:1px solid #edf1ef}.upload-box h3{margin:0;font-size:14px}.upload-box p{margin:6px 0 10px;color:var(--muted);font-size:12px;line-height:1.5}.upload-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.upload-model{width:140px;flex-shrink:0}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.sensitive-detail{line-height:1.7}.sensitive-detail pre{white-space:pre-wrap;word-break:break-word;padding:14px;background:#f7faf8;border-radius:8px;max-height:55vh;overflow:auto}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}.preview-alert{margin-top:10px}.preview-text{margin:4px 0 2px;font-size:12px;line-height:1.6}.preview-meta{margin:0;font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.section-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.section-head-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}.dialog-hint{margin:4px 0 0;font-size:12px;line-height:1.6;color:var(--muted)}.filter-select{width:130px}.archive-hint{margin-bottom:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.gap-loop-hint{margin:-6px 0 14px;padding:10px 12px;background:#f7faf8;border-radius:8px;color:var(--muted);font-size:12px;line-height:1.6}.linked-doc{font-size:12px}.gap-doc-select{width:100%}.replay-cell{display:flex;flex-direction:column;gap:3px}.replay-meta{font-size:11px;color:var(--muted)}.replay-excerpt{margin:2px 0 0;font-size:11px;color:#52635d;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.muted{color:var(--muted);font-size:12px}.doc-detail{padding:0 4px}.doc-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0 0 18px}.doc-meta div{display:flex;gap:8px;font-size:12px}.doc-meta dt{color:var(--muted);flex-shrink:0}.doc-meta dd{margin:0}.wrap{word-break:break-all}.doc-detail h4{margin:18px 0 10px;font-size:14px}.chunk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.chunk-controls{display:flex;align-items:center;gap:8px}.page-filter{width:110px}.chunk-range{font-size:11px;color:var(--muted)}.chunk-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}.chunk-list li{padding:12px;background:#f7faf8;border-radius:8px}.chunk-head-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}.chunk-index{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}.chunk-text{margin:0;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}.doc-meta{grid-template-columns:1fr}}
 </style>

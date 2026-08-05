@@ -7,6 +7,7 @@ export interface AdminDashboardApi {
   overview(): Promise<AdminOverview>
   models(): Promise<AdminModel[]>
   setModelActive(id: EntityId, active: boolean): Promise<AdminModel>
+  createModel(payload: { code: string; name: string; brand: string }): Promise<AdminModel>
   knowledgeStatus(): Promise<KnowledgeModelStatus[]>
   contentGaps(days?: number, limit?: number): Promise<AdminContentGap[]>
   uploadKnowledge(form: FormData): Promise<AdminKnowledgeUploadResult>
@@ -120,6 +121,24 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     }
   }
 
+  const creatingModel = ref(false)
+
+  /** 后台建型号：此前只能改仓库 JSON + 重建镜像，接一个新型号等于发一次版。 */
+  async function createModel(payload: { code: string; name: string; brand: string }): Promise<ModelUpdateResult> {
+    if (creatingModel.value) return { ok: false }
+    creatingModel.value = true
+    try {
+      const created = await api.createModel(payload)
+      models.value = [...models.value, created].sort((a, b) => a.code.localeCompare(b.code))
+      overview.value.active_model_count = models.value.filter((item) => item.active).length
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: adminErrorMessage(error, `型号 ${payload.code} 创建失败，请重试。`) }
+    } finally {
+      creatingModel.value = false
+    }
+  }
+
   function isModelUpdating(id: EntityId) {
     return updatingModelIds.has(id)
   }
@@ -187,6 +206,8 @@ export function useAdminDashboard(api: AdminDashboardApi = adminApi) {
     detailError,
     load,
     setModelActive,
+    createModel,
+    creatingModel,
     isModelUpdating,
     uploadingKnowledge,
     uploadKnowledge,

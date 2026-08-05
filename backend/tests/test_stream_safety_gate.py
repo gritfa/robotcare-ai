@@ -125,7 +125,7 @@ def _answer(client, provider, *, streaming: bool, query: str = "吸力变小了�
 
     from app.knowledge_service import HashingNgramEmbeddingProvider, ingest_pdf
     from app.models import RobotModel
-    from tests.test_generation_service import SYNTHETIC_DIR
+    from test_generation_service import SYNTHETIC_DIR
 
     code = "RC-S200"
     with client.app.state.session_factory() as db:

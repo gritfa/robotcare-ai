@@ -112,15 +112,31 @@ def current_step_for(diagnostic: DiagnosticSession) -> DiagnosticStep | None:
 
 
 def enforce_registration_policy(payload: RegisterRequest, settings: Settings) -> None:
+    """注册准入。
+
+    文案要中文、要说清"接下来该做什么"（2026-08-05 体检）：
+    此前两种情况都返回英文的 "Registration is not available"，前端原样显示，
+    而表单上却写着"开放环境可留空"，用户既不知道自己错在哪，也不知道去哪要码。
+    两种情况给不同提示不会泄漏敏感信息——注册模式本来就体现在表单上。
+    """
     if settings.registration_mode == "open":
         return
     if settings.registration_mode == "closed":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration is not available")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="当前站点未开放注册，请联系管理员为你开通账号。",
+        )
 
     supplied_code = payload.invite_code or ""
     expected_code = settings.registration_invite_secret or ""
     if not hmac.compare_digest(supplied_code.encode("utf-8"), expected_code.encode("utf-8")):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration is not available")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "邀请码不正确或已失效。本站点当前为邀请制注册，"
+                "请向管理员索取有效邀请码后重试。"
+            ),
+        )
 
 
 def mask_email(email: str) -> str:

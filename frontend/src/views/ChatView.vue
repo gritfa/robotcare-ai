@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChatDotRound, FirstAidKit, Plus, Promotion } from '@element-plus/icons-vue'
+import { ChatDotRound, CopyDocument, Delete, Edit, FirstAidKit, Plus, Promotion, Refresh, Search, VideoPause } from '@element-plus/icons-vue'
 import { apiError, conversationApi, deviceApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
-import { streamChatMessage } from '../chatStream'
+import { ChatStreamAborted, streamChatMessage } from '../chatStream'
 import { refusalPresentation } from '../answerDisplay'
 import { resolveComposerKey } from '../composerKeys'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
-import type { ChatMessage, Conversation, Device, MessageActionCode, RobotModel } from '../types'
+import type { AnswerCitation, ChatMessage, Conversation, Device, FeedbackReason, MessageActionCode, QuickAction, RobotModel } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,6 +29,25 @@ const streaming = ref(false)
 const streamingText = ref('')
 const safetyError = ref<ApiErrorInfo | null>(null)
 
+// 停止生成：中断信号；服务端在下发 delta 前已把校验通过的回答落库，
+// 所以"停止"只停渲染，之后重新拉详情就能拿到那条已持久化的消息
+const abortController = ref<AbortController | null>(null)
+// 发送失败时暂存原文，供"重试"一键重发（输入框内容同时保留）
+const failedContent = ref('')
+const searchKeyword = ref('')
+const evidence = ref<AnswerCitation | null>(null)
+const evidenceVisible = ref(false)
+// 每条回答的反馈状态：id → helpful，用于按钮高亮，避免重复点击看不出效果
+const feedbackGiven = ref<Record<string, boolean>>({})
+
+const SUGGESTED_QUESTIONS = [
+  '无法启动怎么办？',
+  '为什么回不了充电座？',
+  '如何重新配网？',
+  '主刷卡住怎么清理？',
+  '如何生成售后报告？',
+]
+
 const dialogVisible = ref(false)
 const dialogSelection = ref('')
 const creating = ref(false)
@@ -38,6 +57,12 @@ const messageArea = ref<HTMLElement | null>(null)
 const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value) || null)
 const canSend = computed(() => Boolean(activeId.value && draft.value.trim() && !streaming.value))
 const modelOptions = computed(() => models.value.filter(model => model.enabled !== false))
+// 普通用户记不住型号，优先显示自己起的设备昵称，型号作为副标题
+const activeDevice = computed(() => {
+  const conversation = activeConversation.value
+  if (!conversation) return null
+  return devices.value.find(item => Number(item.robot_model_id) === Number(conversation.robot_model_id)) || null
+})
 
 onMounted(async () => {
   try {
@@ -128,8 +153,11 @@ async function send() {
   const conversationId = activeId.value
   draft.value = ''
   safetyError.value = null
+  failedContent.value = ''
   streaming.value = true
   streamingText.value = ''
+  const controller = new AbortController()
+  abortController.value = controller
   // 乐观展示用户消息；服务端 user_message 事件到达后以真实记录替换
   const optimistic: ChatMessage = {
     id: `local-${conversationId}-${messages.value.length}`,
@@ -146,11 +174,20 @@ async function send() {
         streamingText.value += text
         await scrollToBottom()
       },
+      signal: controller.signal,
     })
     messages.value = [...messages.value, assistant]
     refreshConversationSummary(conversationId, content)
     await scrollToBottom()
   } catch (error) {
+    if (error instanceof ChatStreamAborted) {
+      // 中断只停渲染：回答早在下发前就通过校验并落库了，重新拉详情把它取回来，
+      // 假装这轮没发生反而会让用户以为内容丢了
+      streaming.value = false
+      await reloadActiveConversation()
+      ElMessage.info('已停止生成，本次回答已保存在会话里')
+      return
+    }
     // 失败的轮次不落库：移除乐观消息（可能已被服务端 user_message 替换）并还原输入
     messages.value = dropLastUserMessage(
       messages.value.filter(item => item.id !== optimistic.id),
@@ -158,12 +195,45 @@ async function send() {
     )
     draft.value = content
     const parsed = parseApiError(error, '发送失败，请稍后重试')
-    if (parsed.code === 'SAFETY_BLOCKED') safetyError.value = parsed
-    else ElMessage.error(userFacingApiError(error, '发送失败，请稍后重试'))
+    if (parsed.code === 'SAFETY_BLOCKED') {
+      safetyError.value = parsed
+    } else {
+      // 安全拦截是用户自己该改问法，不给重试；其余失败都可一键重发
+      failedContent.value = content
+      ElMessage.error(userFacingApiError(error, '发送失败，请稍后重试'))
+    }
   } finally {
     streaming.value = false
     streamingText.value = ''
+    abortController.value = null
   }
+}
+
+function stopGenerating() {
+  abortController.value?.abort()
+}
+
+async function retryLastMessage() {
+  if (!failedContent.value) return
+  draft.value = failedContent.value
+  failedContent.value = ''
+  await send()
+}
+
+async function reloadActiveConversation() {
+  if (!activeId.value) return
+  try {
+    const detail = await conversationApi.get(activeId.value)
+    messages.value = detail.messages
+    await scrollToBottom()
+  } catch (error) {
+    ElMessage.error(apiError(error, '会话刷新失败，请手动重新打开'))
+  }
+}
+
+function askSuggested(question: string) {
+  draft.value = question
+  void send()
 }
 
 function dropLastUserMessage(list: ChatMessage[], content: string) {
@@ -194,6 +264,141 @@ async function escalateToDiagnostic() {
       description: (lastUserMessage?.content || conversation.title).slice(0, 500),
     },
   })
+}
+
+// ---- 快捷操作：后端按状态给出 code，前端只负责跳到对应入口 ----
+async function runQuickAction(action: QuickAction) {
+  switch (action.code) {
+    case 'start_diagnostic':
+    case 'upload_image':
+      await escalateToDiagnostic()
+      return
+    case 'resume_diagnostic':
+    case 'view_diagnostic':
+      if (action.diagnostic_id) await router.push({ name: 'diagnostic-session', params: { id: String(action.diagnostic_id) } })
+      return
+    case 'view_report':
+    case 'download_report_pdf':
+      if (action.diagnostic_id) await router.push({ name: 'report', params: { id: String(action.diagnostic_id) } })
+      return
+    case 'mark_resolved':
+      await markResolved(true)
+      return
+    case 'contact_support':
+      // 官方售后入口在指南页，未来接入工单系统时只需换这一处
+      await router.push({ name: 'guides' })
+      return
+    default:
+      ElMessage.info('该操作暂不可用')
+  }
+}
+
+// ---- 证据抽屉：引用可点开看原文 ----
+function openEvidence(citation: AnswerCitation) {
+  evidence.value = citation
+  evidenceVisible.value = true
+}
+
+function openSourcePage() {
+  const url = evidence.value?.source_url
+  if (!url) return
+  // synthetic:// 是演示数据的占位来源，不是可打开的网址，别让用户点了没反应
+  if (!/^https?:\/\//i.test(url)) {
+    ElMessage.info('这份资料是本地演示数据，没有可跳转的在线原页')
+    return
+  }
+  window.open(url, '_blank', 'noopener')
+}
+
+// ---- 会话管理 ----
+async function searchConversations() {
+  try {
+    conversations.value = await conversationApi.list(searchKeyword.value.trim() || undefined)
+  } catch (error) {
+    ElMessage.error(apiError(error, '搜索失败，请稍后重试'))
+  }
+}
+
+async function renameConversation(conversation: Conversation) {
+  try {
+    const { value } = await ElMessageBox.prompt('修改会话标题', '重命名', {
+      inputValue: conversation.title,
+      inputValidator: (input: string) => (input.trim() ? true : '标题不能为空'),
+    })
+    const updated = await conversationApi.update(conversation.id, { title: value.trim() })
+    conversations.value = conversations.value.map(item => (item.id === updated.id ? updated : item))
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(apiError(error, '重命名失败'))
+  }
+}
+
+async function removeConversation(conversation: Conversation) {
+  try {
+    await ElMessageBox.confirm(
+      `删除「${conversation.title || '新会话'}」？会话内的问答记录会一并删除，此操作不可撤销。`,
+      '删除会话',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+    await conversationApi.remove(conversation.id)
+    conversations.value = conversations.value.filter(item => item.id !== conversation.id)
+    if (activeId.value === conversation.id) {
+      activeId.value = null
+      messages.value = []
+      await router.push({ name: 'chat' })
+    }
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(apiError(error, '删除失败'))
+  }
+}
+
+async function markResolved(resolved: boolean) {
+  if (!activeId.value) return
+  try {
+    const updated = await conversationApi.update(activeId.value, { resolved })
+    conversations.value = conversations.value.map(item => (item.id === updated.id ? updated : item))
+    ElMessage.success(resolved ? '已标记为「问题已解决」' : '已取消解决标记')
+  } catch (error) {
+    ElMessage.error(apiError(error, '标记失败'))
+  }
+}
+
+// ---- 回答反馈 ----
+const FEEDBACK_REASONS: { value: FeedbackReason; label: string }[] = [
+  { value: 'off_topic', label: '答非所问' },
+  { value: 'unclear_steps', label: '操作看不懂' },
+  { value: 'wrong_citation', label: '引用不正确' },
+  { value: 'wrong_model', label: '型号不匹配' },
+  { value: 'still_unresolved', label: '问题仍未解决' },
+]
+
+async function sendFeedback(message: ChatMessage, helpful: boolean, reason?: FeedbackReason) {
+  if (!activeId.value) return
+  try {
+    await conversationApi.feedback(activeId.value, message.id, { helpful, reason: reason ?? null })
+    feedbackGiven.value = { ...feedbackGiven.value, [String(message.id)]: helpful }
+    ElMessage.success(helpful ? '谢谢反馈' : '已记录，我们会据此改进资料')
+  } catch (error) {
+    ElMessage.error(apiError(error, '反馈提交失败'))
+  }
+}
+
+async function copyMessage(message: ChatMessage) {
+  try {
+    await navigator.clipboard.writeText(message.content)
+    ElMessage.success('已复制')
+  } catch {
+    ElMessage.error('复制失败，请手动选中文本')
+  }
+}
+
+async function regenerate(message: ChatMessage) {
+  // 重新回答＝把上一条用户提问再发一次；不改历史，让两次回答都留在会话里可对比
+  const index = messages.value.findIndex(item => item.id === message.id)
+  const question = [...messages.value.slice(0, index)].reverse().find(item => item.role === 'user')
+  if (!question) return
+  draft.value = question.content
+  await send()
 }
 
 function onComposerKeydown(evt: Event | KeyboardEvent) {
@@ -244,18 +449,39 @@ async function scrollToBottom() {
           <strong>会话</strong>
           <el-button class="brand-button" type="primary" :icon="Plus" size="small" @click="openCreateDialog">新会话</el-button>
         </div>
+        <el-input
+          v-model="searchKeyword"
+          class="conversation-search"
+          size="small"
+          clearable
+          placeholder="搜索标题或问过的内容"
+          :prefix-icon="Search"
+          @keydown.enter.prevent="searchConversations"
+          @clear="searchConversations"
+        />
         <div v-if="conversations.length" class="conversation-list">
-          <button
+          <div
             v-for="conversation in conversations"
             :key="conversation.id"
-            class="conversation-item"
+            class="conversation-row"
             :class="{ active: conversation.id === activeId }"
-            :disabled="streaming"
-            @click="openConversation(conversation.id)"
           >
-            <span class="conversation-title">{{ conversation.title || '新会话' }}</span>
-            <span class="conversation-model">{{ conversation.robot_model_code }}</span>
-          </button>
+            <button
+              class="conversation-item"
+              :disabled="streaming"
+              @click="openConversation(conversation.id)"
+            >
+              <span class="conversation-title">
+                {{ conversation.title || '新会话' }}
+                <el-tag v-if="conversation.resolved" size="small" type="success" effect="plain">已解决</el-tag>
+              </span>
+              <span class="conversation-model">{{ conversation.robot_model_code }}</span>
+            </button>
+            <div class="conversation-ops">
+              <el-button text size="small" :icon="Edit" :disabled="streaming" title="重命名" @click.stop="renameConversation(conversation)" />
+              <el-button text size="small" :icon="Delete" :disabled="streaming" title="删除" @click.stop="removeConversation(conversation)" />
+            </div>
+          </div>
         </div>
         <p v-else class="conversation-empty">还没有会话，点击「新会话」选择设备型号开始提问。</p>
       </aside>
@@ -263,8 +489,21 @@ async function scrollToBottom() {
       <section class="panel chat-panel" v-loading="detailLoading">
         <template v-if="activeId">
           <div class="chat-head">
-            <strong>{{ activeConversation?.title || '新会话' }}</strong>
+            <div class="chat-head-device">
+              <strong>{{ activeConversation?.title || '新会话' }}</strong>
+              <span class="device-line">
+                当前设备：{{ activeDevice?.nickname || '未绑定设备' }}
+                <em>型号 {{ activeModelCode }}</em>
+              </span>
+            </div>
             <div class="chat-head-actions">
+              <el-button size="small" :disabled="streaming" @click="openCreateDialog">切换设备</el-button>
+              <el-button
+                v-if="messages.length"
+                size="small"
+                :disabled="streaming"
+                @click="markResolved(true)"
+              >问题已解决</el-button>
               <el-button
                 v-if="messages.length"
                 size="small"
@@ -280,6 +519,16 @@ async function scrollToBottom() {
             <div v-if="!messages.length && !streaming" class="chat-placeholder">
               <el-icon><ChatDotRound /></el-icon>
               <p>描述“想完成的操作 + 当前现象 + 已尝试步骤”，回答会附资料页码；追问时无需重复背景。</p>
+              <div class="suggested">
+                <span class="suggested-label">试试这些常见问题：</span>
+                <el-button
+                  v-for="question in SUGGESTED_QUESTIONS"
+                  :key="question"
+                  size="small"
+                  round
+                  @click="askSuggested(question)"
+                >{{ question }}</el-button>
+              </div>
             </div>
             <template v-for="message in messages" :key="message.id">
               <div v-if="message.role === 'user'" class="bubble-row user-row">
@@ -298,14 +547,52 @@ async function scrollToBottom() {
                 <div v-else class="bubble assistant-bubble">
                   <p>{{ message.content }}</p>
                   <div v-if="message.citations.length" class="bubble-citations">
-                    <el-tag v-for="citation in message.citations" :key="citation.index" size="small" effect="light">
+                    <el-tag
+                      v-for="citation in message.citations"
+                      :key="citation.index"
+                      class="citation-tag"
+                      size="small"
+                      effect="light"
+                      @click="openEvidence(citation)"
+                    >
                       [{{ citation.index }}] 说明书第 {{ citation.page_number }} 页
                     </el-tag>
+                    <span class="citation-hint">点击查看原文</span>
                   </div>
-                  <div v-if="actionButton(message.action_code)" class="bubble-action">
+                  <div v-if="message.quick_actions?.length" class="bubble-action">
+                    <el-button
+                      v-for="action in message.quick_actions"
+                      :key="action.code"
+                      type="primary"
+                      plain
+                      size="small"
+                      @click="runQuickAction(action)"
+                    >{{ action.label }}</el-button>
+                  </div>
+                  <div v-else-if="actionButton(message.action_code)" class="bubble-action">
                     <el-button type="primary" plain size="small" @click="actionButton(message.action_code)!.run()">
                       {{ actionButton(message.action_code)!.label }}
                     </el-button>
+                  </div>
+                  <div v-if="message.intent !== 'smalltalk'" class="bubble-feedback">
+                    <el-button
+                      text size="small"
+                      :type="feedbackGiven[String(message.id)] === true ? 'success' : ''"
+                      @click="sendFeedback(message, true)"
+                    >有帮助</el-button>
+                    <el-dropdown trigger="click" @command="(reason: FeedbackReason) => sendFeedback(message, false, reason)">
+                      <el-button text size="small" :type="feedbackGiven[String(message.id)] === false ? 'danger' : ''">没帮助</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item v-for="item in FEEDBACK_REASONS" :key="item.value" :command="item.value">
+                            {{ item.label }}
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                    <el-button text size="small" :icon="CopyDocument" @click="copyMessage(message)">复制</el-button>
+                    <el-button text size="small" :icon="Refresh" :disabled="streaming" @click="regenerate(message)">重新回答</el-button>
+                    <el-button text size="small" :icon="FirstAidKit" :disabled="streaming" @click="escalateToDiagnostic">转分步诊断</el-button>
                   </div>
                 </div>
               </div>
@@ -332,7 +619,29 @@ async function scrollToBottom() {
               @compositionstart="composing = true"
               @compositionend="composing = false"
             />
-            <el-button class="brand-button" type="primary" size="large" :icon="Promotion" :loading="streaming" :disabled="!canSend" @click="send">发送</el-button>
+            <div class="composer-buttons">
+              <el-button
+                v-if="streaming"
+                size="large"
+                :icon="VideoPause"
+                @click="stopGenerating"
+              >停止生成</el-button>
+              <el-button
+                v-else
+                class="brand-button"
+                type="primary"
+                size="large"
+                :icon="Promotion"
+                :disabled="!canSend"
+                @click="send"
+              >发送</el-button>
+              <el-button
+                v-if="failedContent && !streaming"
+                size="large"
+                :icon="Refresh"
+                @click="retryLastMessage"
+              >重试</el-button>
+            </div>
           </div>
           <p class="chat-note">回答只依据已收录资料生成，不代表官方诊断；涉及冒烟、异味、电池鼓包等危险情况请立即联系官方售后。</p>
         </template>
@@ -371,6 +680,33 @@ async function scrollToBottom() {
         <el-button class="brand-button" type="primary" :loading="creating" :disabled="!dialogSelection" @click="createConversation">开始对话</el-button>
       </template>
     </el-dialog>
+
+    <!-- 证据抽屉：引用要能核验，光给页码等于让用户自己去信 -->
+    <el-drawer v-model="evidenceVisible" title="引用证据" size="440px">
+      <div v-if="evidence" class="evidence">
+        <dl>
+          <dt>文档</dt>
+          <dd>{{ evidence.document_title || '官方说明书' }}</dd>
+          <dt>产品型号</dt>
+          <dd>{{ activeModelCode }}</dd>
+          <dt>页码</dt>
+          <dd>第 {{ evidence.page_number }} 页</dd>
+          <dt>相关度</dt>
+          <dd>{{ evidence.score.toFixed(3) }}</dd>
+        </dl>
+        <div class="evidence-snippet">
+          <strong>检索到的原文</strong>
+          <p v-if="evidence.snippet">{{ evidence.snippet }}</p>
+          <p v-else class="evidence-missing">
+            这条引用产生于原文留痕上线之前，只保留了页码。请点下方链接核对说明书原页。
+          </p>
+        </div>
+        <el-button type="primary" plain :disabled="!evidence.source_url" @click="openSourcePage">
+          打开说明书原页
+        </el-button>
+        <p class="evidence-url">{{ evidence.source_url }}</p>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -400,7 +736,28 @@ async function scrollToBottom() {
 .assistant-bubble{background:#f4f8f6;color:#2d3f38}
 .assistant-bubble p{margin:0;white-space:pre-wrap}
 .bubble-citations{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #e0ebe5}
-.bubble-action{margin-top:10px;padding-top:10px;border-top:1px solid #e0ebe5}
+.bubble-action{margin-top:10px;padding-top:10px;border-top:1px solid #e0ebe5;display:flex;flex-wrap:wrap;gap:8px}
+.bubble-feedback{margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:2px}
+.citation-tag{cursor:pointer}
+.citation-hint{font-size:12px;color:var(--muted,#8a9a92);align-self:center}
+.conversation-search{margin-bottom:10px}
+.conversation-row{display:flex;align-items:center;gap:4px;border-radius:10px}
+.conversation-row.active{background:#eef6f2}
+.conversation-row .conversation-item{flex:1}
+.conversation-ops{display:flex;flex-direction:column}
+.chat-head-device{display:flex;flex-direction:column;gap:2px}
+.device-line{font-size:12px;color:var(--muted,#8a9a92)}
+.device-line em{font-style:normal;margin-left:8px}
+.suggested{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.suggested-label{width:100%;font-size:13px;color:var(--muted,#8a9a92)}
+.composer-buttons{display:flex;flex-direction:column;gap:6px}
+.evidence dl{display:grid;grid-template-columns:72px 1fr;row-gap:8px;margin:0 0 16px}
+.evidence dt{color:var(--muted,#8a9a92);font-size:13px}
+.evidence dd{margin:0;font-size:14px;word-break:break-all}
+.evidence-snippet{background:#f6faf8;border:1px solid #e0ebe5;border-radius:10px;padding:12px;margin-bottom:16px}
+.evidence-snippet p{margin:8px 0 0;line-height:1.7;white-space:pre-wrap}
+.evidence-missing{color:var(--muted,#8a9a92)}
+.evidence-url{margin-top:10px;font-size:12px;color:var(--muted,#8a9a92);word-break:break-all}
 .refusal-alert{max-width:78%}
 .streaming-bubble .thinking{color:var(--muted)}
 .cursor{animation:blink 1s step-start infinite;color:var(--brand)}

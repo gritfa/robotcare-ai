@@ -179,6 +179,9 @@ export interface AnswerCitation {
   page_number: number
   score: number
   document_sha256: string
+  /** 检索到的原文；证据抽屉要展示它，没有原文的引用无法核验 */
+  snippet?: string
+  document_title?: string
 }
 
 export interface KnowledgeAnswer {
@@ -194,10 +197,30 @@ export interface Conversation {
   robot_model_id: number
   robot_model_code: string
   title: string
+  resolved?: boolean | null
   updated_at: string
 }
 
-export type MessageIntent = 'smalltalk' | 'action' | 'followup' | 'knowledge'
+export type MessageIntent = 'smalltalk' | 'capability' | 'action' | 'followup' | 'knowledge'
+
+export interface QuickAction {
+  code: string
+  label: string
+  diagnostic_id?: number
+}
+
+export type FeedbackReason =
+  | 'off_topic'
+  | 'unclear_steps'
+  | 'wrong_citation'
+  | 'wrong_model'
+  | 'still_unresolved'
+
+export interface MessageFeedback {
+  message_id: number
+  helpful: boolean
+  reason: FeedbackReason | null
+}
 export type MessageActionCode = 'start_diagnostic' | 'generate_report' | 'upload_image'
 
 export interface ChatMessage {
@@ -209,6 +232,7 @@ export interface ChatMessage {
   // 后端路由层结论；路由层上线前的历史消息为 null，按普通回答渲染
   intent?: MessageIntent | null
   action_code?: MessageActionCode | null
+  quick_actions?: QuickAction[]
   created_at: string
 }
 

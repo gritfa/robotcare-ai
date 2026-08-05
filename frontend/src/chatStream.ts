@@ -14,6 +14,18 @@ export interface ChatStreamHandlers {
   onUserMessage?: (message: ChatMessage) => void
   onStage?: (stage: string) => void
   onDelta?: (text: string) => void
+  /** 用户点"停止生成"用的中断信号 */
+  signal?: AbortSignal
+}
+
+/** 用户主动中断。与网络错误区分开：服务端在开始下发 delta 之前就已经把
+ * 通过校验的回答落库了，所以中断只是停止渲染，答案本身并没有丢——
+ * 调用方应当重新拉取会话详情拿到那条已持久化的消息，而不是报错重来。 */
+export class ChatStreamAborted extends Error {
+  constructor() {
+    super('用户已停止生成')
+    this.name = 'ChatStreamAborted'
+  }
 }
 
 /** 增量 SSE 解析器：容忍事件被网络分片从任意位置切开。 */
@@ -49,7 +61,12 @@ function parseBlock(block: string): ChatStreamEvent | null {
   }
 }
 
-function requestStream(conversationId: EntityId, content: string, fetchImpl: typeof fetch) {
+function requestStream(
+  conversationId: EntityId,
+  content: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
@@ -61,6 +78,7 @@ function requestStream(conversationId: EntityId, content: string, fetchImpl: typ
     headers,
     body: JSON.stringify({ content }),
     credentials: 'include',
+    signal,
   })
 }
 
@@ -84,10 +102,11 @@ export async function streamChatMessage(
   handlers: ChatStreamHandlers = {},
   fetchImpl: typeof fetch = (...request) => fetch(...request),
 ): Promise<ChatMessage> {
-  let response = await requestStream(conversationId, content, fetchImpl)
+  const { signal } = handlers
+  let response = await requestStream(conversationId, content, fetchImpl, signal)
   if (response.status === 401) {
     await authApi.refresh()
-    response = await requestStream(conversationId, content, fetchImpl)
+    response = await requestStream(conversationId, content, fetchImpl, signal)
   }
   if (!response.ok || !response.body) throw await responseError(response)
 
@@ -102,10 +121,20 @@ export async function streamChatMessage(
   })
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    parser.push(decoder.decode(value, { stream: true }))
+  try {
+    for (;;) {
+      if (signal?.aborted) {
+        await reader.cancel().catch(() => undefined)
+        throw new ChatStreamAborted()
+      }
+      const { done, value } = await reader.read()
+      if (done) break
+      parser.push(decoder.decode(value, { stream: true }))
+    }
+  } catch (error) {
+    // fetch 被 abort 时 read() 自己会抛 AbortError，同样归成"用户停止"
+    if (signal?.aborted) throw new ChatStreamAborted()
+    throw error
   }
   parser.push(decoder.decode())
 

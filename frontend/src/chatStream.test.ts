@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseApiError } from './api'
-import { createSseParser, streamChatMessage, type ChatStreamEvent } from './chatStream'
+import { ChatStreamAborted, createSseParser, streamChatMessage, type ChatStreamEvent } from './chatStream'
 import type { ChatMessage } from './types'
 
 function sse(event: string, data: unknown) {
@@ -101,5 +101,38 @@ describe('streamChatMessage', () => {
     await expect(
       streamChatMessage(7, '你好', {}, async () => streamResponse(body)),
     ).rejects.toThrow('回答流意外中断')
+  })
+})
+
+describe('streamChatMessage 中断', () => {
+  it('用户停止生成时抛 ChatStreamAborted，而不是当成网络错误', async () => {
+    const controller = new AbortController()
+    const encoder = new TextEncoder()
+    // 真实 fetch 在 abort 时会让 reader.read() 直接抛 AbortError，这里照此模拟：
+    // 流保持打开（服务端还在下发），abort 到达就把流置错
+    const body = new ReadableStream<Uint8Array>({
+      start(streamController) {
+        streamController.enqueue(encoder.encode('event: delta\ndata: {"text":"先清空"}\n\n'))
+        controller.signal.addEventListener('abort', () => {
+          streamController.error(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+        })
+      },
+    })
+    const fetchImpl = (async () => new Response(body, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })) as unknown as typeof fetch
+
+    const deltas: string[] = []
+    const promise = streamChatMessage(1, '吸力变小了', {
+      onDelta: (text) => { deltas.push(text) },
+      signal: controller.signal,
+    }, fetchImpl)
+    // 等第一片到达后再中断
+    await new Promise(resolve => setTimeout(resolve, 10))
+    controller.abort()
+
+    await expect(promise).rejects.toBeInstanceOf(ChatStreamAborted)
+    expect(deltas).toEqual(['先清空'])
   })
 })

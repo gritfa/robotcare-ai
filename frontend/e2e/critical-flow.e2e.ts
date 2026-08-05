@@ -239,3 +239,78 @@ test('报告和 PDF 限流均展示可重试的持久提示', async ({ page }) =
   await expect(page.getByRole('alert').filter({ hasText: 'PDF 生成过于频繁' })).toContainText('13 秒后重试')
   await expect(page.getByRole('button', { name: '下载正式 PDF' })).toBeEnabled()
 })
+
+test('聊天交互：Enter 发送、闲聊不走检索、报告指令给出前置提示、引用可查证据', async ({ page }) => {
+  await register(page, uniqueEmail('chat-ux'))
+  await addDevice(page, '客厅扫地机器人')
+
+  await page.goto('/chat')
+  await page.getByRole('complementary').getByRole('button', { name: '新会话' }).click()
+  await page.getByRole('button', { name: '开始对话' }).click()
+  await expect(page).toHaveURL(/\/chat\/\d+$/)
+
+  // 当前设备用昵称展示，型号作为副标题——普通用户记不住 JH69U1
+  await expect(page.getByText('当前设备：客厅扫地机器人')).toBeVisible()
+  // 新会话给推荐问题，而不是只有一段使用说明
+  await expect(page.getByRole('button', { name: '如何重新配网？' })).toBeVisible()
+
+  const composer = page.locator('.composer textarea')
+
+  // 闲聊：Enter 直接发送，且不该被当成知识缺口拒答
+  await composer.fill('你好')
+  await composer.press('Enter')
+  await expect(page.getByText('我是这台设备的售后知识助手', { exact: false })).toBeVisible()
+  await expect(page.getByText('资料中没有找到能回答这个问题的内容')).toHaveCount(0)
+
+  // Shift+Enter 换行不发送
+  await composer.fill('第一行')
+  await composer.press('Shift+Enter')
+  await expect(composer).toHaveValue(/第一行\n/)
+  await composer.fill('')
+
+  // 能力介绍：像客服自我介绍，且落到当前型号
+  await composer.fill('你能做什么')
+  await composer.press('Enter')
+  await expect(page.getByText('查询 JH69U1 的使用方法', { exact: false })).toBeVisible()
+
+  // 报告指令：没有诊断时说明前置条件并给出入口，而不是去检索说明书
+  await composer.fill('生成报告')
+  await composer.press('Enter')
+  await expect(page.getByText('需要先完成一次安全分步检查', { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: '开始诊断' })).toBeVisible()
+
+  // 知识问题：引用可点开证据抽屉。E2E 环境没有真实生成模型，这里桩住 SSE
+  // 只验证前端渲染链路（引用带原文 → 可点击 → 抽屉展示文档/型号/页码/原文），
+  // 后端把 snippet 塞进引用由 test_conversations 覆盖。
+  const assistantMessage = {
+    id: 999, role: 'assistant', content: '请先取下拖布组件检查卡扣 [1]。',
+    citations: [{
+      index: 1, source_url: 'https://www.haier.com/manual/jh69u1.pdf', page_number: 15,
+      score: 0.8123, document_sha256: 'a'.repeat(64),
+      snippet: '取下拖布组件，检查卡扣是否到位；若拖布支架未安装到位，拖布不会转动。',
+      document_title: 'JH69U1 用户使用说明书',
+    }],
+    refusal_reason: null, intent: 'knowledge', action_code: null,
+    quick_actions: [{ code: 'start_diagnostic', label: '开始分步诊断' }],
+    created_at: new Date().toISOString(),
+  }
+  await page.route('**/messages/stream', async (route) => {
+    const sse = [
+      `event: user_message\ndata: ${JSON.stringify({ id: 998, role: 'user', content: '拖布不转怎么办', citations: [], refusal_reason: null, created_at: '' })}\n\n`,
+      'event: stage\ndata: {"stage":"generating"}\n\n',
+      `event: delta\ndata: ${JSON.stringify({ text: assistantMessage.content })}\n\n`,
+      `event: assistant_message\ndata: ${JSON.stringify(assistantMessage)}\n\n`,
+      'event: done\ndata: {}\n\n',
+    ].join('')
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse })
+  })
+  await composer.fill('拖布不转怎么办')
+  await composer.press('Enter')
+  const citation = page.locator('.citation-tag').first()
+  await expect(citation).toBeVisible()
+  await citation.click()
+  await expect(page.getByRole('heading', { name: '引用证据' })).toBeVisible()
+  await expect(page.getByText('JH69U1 用户使用说明书')).toBeVisible()
+  await expect(page.getByText('若拖布支架未安装到位', { exact: false })).toBeVisible()
+  await expect(page.locator('.evidence')).toContainText('第 15 页')
+})

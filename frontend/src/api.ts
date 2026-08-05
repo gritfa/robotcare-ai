@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type { AdminAuditLog, AdminContentGap, AdminDiagnosticDetail, AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, ChatMessagePair, Conversation, ConversationDetail, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
-  KnowledgeSearchResult, ReportPdf, RobotModel, ServiceReport, User } from './types'
+  FeedbackReason, KnowledgeSearchResult, MessageFeedback, ReportPdf, RobotModel, ServiceReport, User } from './types'
 import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLost } from './authSession'
 
 export { TOKEN_KEY } from './authSession'
@@ -339,7 +339,11 @@ export const diagnosticApi = {
 
 export const conversationApi = {
   create: async (robotModelId: EntityId) => payload<Conversation>((await http.post('/conversations', { robot_model_id: Number(robotModelId) })).data),
-  list: async () => listPayload<Conversation>((await http.get('/conversations')).data),
+  list: async (search?: string) => listPayload<Conversation>((await http.get('/conversations', { params: search ? { search } : undefined })).data),
+  update: async (id: EntityId, body: { title?: string; resolved?: boolean }) => payload<Conversation>((await http.patch(`/conversations/${id}`, body)).data),
+  remove: async (id: EntityId) => { await http.delete(`/conversations/${id}`) },
+  feedback: async (id: EntityId, messageId: EntityId, body: { helpful: boolean; reason?: FeedbackReason | null }) =>
+    payload<MessageFeedback>((await http.post(`/conversations/${id}/messages/${messageId}/feedback`, body)).data),
   get: async (id: EntityId) => payload<ConversationDetail>((await http.get(`/conversations/${id}`)).data),
   sendMessage: async (id: EntityId, content: string) => payload<ChatMessagePair>((await http.post(`/conversations/${id}/messages`, { content })).data),
 }

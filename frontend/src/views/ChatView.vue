@@ -5,8 +5,9 @@ import { ChatDotRound, FirstAidKit, Plus, Promotion } from '@element-plus/icons-
 import { apiError, conversationApi, deviceApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import { streamChatMessage } from '../chatStream'
 import { refusalPresentation } from '../answerDisplay'
+import { resolveComposerKey } from '../composerKeys'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
-import type { ChatMessage, Conversation, Device, RobotModel } from '../types'
+import type { ChatMessage, Conversation, Device, MessageActionCode, RobotModel } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,8 @@ const activeModelCode = ref('')
 const messages = ref<ChatMessage[]>([])
 
 const draft = ref('')
+// 输入法组词状态：组词期间的回车归输入法，不能当成发送（见 composerKeys.ts）
+const composing = ref(false)
 const streaming = ref(false)
 const streamingText = ref('')
 const safetyError = ref<ApiErrorInfo | null>(null)
@@ -193,6 +196,32 @@ async function escalateToDiagnostic() {
   })
 }
 
+function onComposerKeydown(evt: Event | KeyboardEvent) {
+  // el-input 的 keydown 声明成宽泛的 Event，这里收窄回键盘事件
+  if (!(evt instanceof KeyboardEvent)) return
+  const event = evt
+  const action = resolveComposerKey(event, { composing: composing.value })
+  if (action === 'ignore') return
+  // 换行交给 textarea 默认行为；只有发送需要拦掉默认的插入换行
+  if (action === 'send') {
+    event.preventDefault()
+    void send()
+  }
+}
+
+// 产品操作按钮：后端路由层判成 action 的消息带 action_code，这里映射到真实入口。
+// 图片上传落在诊断创建页（附件挂在诊断会话上，聊天消息本身不存附件），
+// 报告落在历史页（报告由已完成的诊断生成，不能凭空开一份）。
+const ACTION_BUTTONS: Record<MessageActionCode, { label: string; run: () => void | Promise<void> }> = {
+  start_diagnostic: { label: '进入分步诊断', run: () => escalateToDiagnostic() },
+  generate_report: { label: '查看/生成报告', run: async () => { await router.push({ name: 'history' }) } },
+  upload_image: { label: '去上传图片', run: () => escalateToDiagnostic() },
+}
+
+function actionButton(code: MessageActionCode | null | undefined) {
+  return code ? ACTION_BUTTONS[code] : null
+}
+
 async function scrollToBottom() {
   await nextTick()
   messageArea.value?.scrollTo({ top: messageArea.value.scrollHeight })
@@ -273,6 +302,11 @@ async function scrollToBottom() {
                       [{{ citation.index }}] 说明书第 {{ citation.page_number }} 页
                     </el-tag>
                   </div>
+                  <div v-if="actionButton(message.action_code)" class="bubble-action">
+                    <el-button type="primary" plain size="small" @click="actionButton(message.action_code)!.run()">
+                      {{ actionButton(message.action_code)!.label }}
+                    </el-button>
+                  </div>
                 </div>
               </div>
             </template>
@@ -293,8 +327,10 @@ async function scrollToBottom() {
               :rows="2"
               maxlength="2000"
               :disabled="streaming"
-              placeholder="继续提问，按 Ctrl + Enter 发送"
-              @keydown.ctrl.enter.prevent="send"
+              placeholder="继续提问，Enter 发送，Shift + Enter 换行"
+              @keydown="onComposerKeydown"
+              @compositionstart="composing = true"
+              @compositionend="composing = false"
             />
             <el-button class="brand-button" type="primary" size="large" :icon="Promotion" :loading="streaming" :disabled="!canSend" @click="send">发送</el-button>
           </div>
@@ -364,6 +400,7 @@ async function scrollToBottom() {
 .assistant-bubble{background:#f4f8f6;color:#2d3f38}
 .assistant-bubble p{margin:0;white-space:pre-wrap}
 .bubble-citations{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #e0ebe5}
+.bubble-action{margin-top:10px;padding-top:10px;border-top:1px solid #e0ebe5}
 .refusal-alert{max-width:78%}
 .streaming-bubble .thinking{color:var(--muted)}
 .cursor{animation:blink 1s step-start infinite;color:var(--brand)}

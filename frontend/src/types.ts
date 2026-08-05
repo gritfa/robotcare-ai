@@ -197,12 +197,18 @@ export interface Conversation {
   updated_at: string
 }
 
+export type MessageIntent = 'smalltalk' | 'action' | 'followup' | 'knowledge'
+export type MessageActionCode = 'start_diagnostic' | 'generate_report' | 'upload_image'
+
 export interface ChatMessage {
   id: EntityId
   role: 'user' | 'assistant'
   content: string
   citations: AnswerCitation[]
   refusal_reason: KnowledgeAnswer['refusal_reason']
+  // 后端路由层结论；路由层上线前的历史消息为 null，按普通回答渲染
+  intent?: MessageIntent | null
+  action_code?: MessageActionCode | null
   created_at: string
 }
 

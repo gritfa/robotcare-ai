@@ -358,6 +358,10 @@ class ConversationMessageRead(BaseModel):
     content: str
     citations: list[AnswerCitationRead]
     refusal_reason: str | None
+    # 路由层结论：intent 决定前端怎么渲染这条消息，action_code 非空时渲染操作按钮。
+    # 历史消息（路由层上线前）两者为 None，前端按普通回答渲染。
+    intent: str | None = None
+    action_code: str | None = None
     created_at: datetime
 
 

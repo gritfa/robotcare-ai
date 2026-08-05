@@ -13,6 +13,7 @@
 | FastAPI 后端 | `【已验证】` | 单方言重构后全部测试直接跑在 PostgreSQL 16 + pgvector 测试容器上：`278 passed, 0 skipped (47.11s，2026-08-05 本机)`；原独立 PG 集成测试并入常规回归，不再有 skip |
 | Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康、会话流式及认证恢复共 `45 passed`；`vue-tsc + vite build` 通过，element-plus 已改为按需引入，入口包 `224.97 kB (gzip 83.78 kB)`，其余按页面/组件懒加载（改造前单主包 1.11 MB） |
 | 智能客服会话层 | `【已验证：本地】` | 多轮会话（conversations/conversation_messages，迁移 `20260804_0010`）、SSE 流式回答（先校验引用后分片下发）、会话一键转分步诊断（`20260804_0011` 记录来源会话）、售后报告附带会话摘要；后端 pytest + 前端单测覆盖，真实浏览器长会话压力未测 |
+| 聊天消息路由层 | `【已验证：本地】` | `message_router.py` 在 RAG 之前分流四类消息：闲聊（"你好"）与产品操作（"生成报告""开始诊断""上传图片"）直接回复，不消耗 embedding 配额、不检索、不调生成模型；上下文追问与知识问题照常走完整链路。判定规则确定性可解释，`intent`/`routing_rule`/`action_code` 随消息持久化（迁移 `20260805_0012`），会话回放时操作按钮仍在。安全前置阻断永远排在路由之前，路由不是绕过安全检测的旁路。前端 Enter 发送 / Shift+Enter 换行，中文输入法组词期间的回车不发送（`composerKeys.ts`，Safari 个别输入法的 compositionend 顺序问题见文件内说明） |
 | 浏览器 E2E | `【已验证：本机关键链路，PostgreSQL 隔离库】` | 2026-08-05 本机 Chromium 在改造后的隔离 PostgreSQL 测试库（`ROBOTCARE_E2E_DATABASE_URL`）上重跑闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流，共 `8 passed (23.4s)`，远端 CI 的 Chromium E2E job 同版本 success；早前 Edge `8 passed (44.9s)` 的证据基于当时的隔离 SQLite 库，**Microsoft Edge 在 PG 库上尚未重跑**；两者都不代表 Docker/HTTPS |
 | 分类与流程一致性 | `【已验证】` | 型号级确定性关键词/错误码候选；明显冲突拒绝创建，模糊场景要求用户确认；用户选择、系统候选和最终类别写入会话与报告 |
 | 知识安全与业务健康 | `【已验证：本地】` | 高风险检索在 Embedding 前阻断；普通用户不能覆盖阈值；`/knowledge/health` 区分正常、知识降级和外部模型不可用；`?probe=true` 深度探测对 embedding、检索链路、生成模型各发一次真实请求（走 embedding 限流），任一失败即把状态降级为 `external_model_unavailable`，避免"配置存在"冒充"服务可用"；版本化发布清单支持 SHA256 校验、幂等与事务回滚 |

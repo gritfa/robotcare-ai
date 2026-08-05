@@ -501,6 +501,11 @@ class ConversationMessage(Base):
     generation_record_id: Mapped[int | None] = mapped_column(
         ForeignKey("generation_records.id"), nullable=True
     )
+    # 路由留痕（2026-08-05 起）：记在 assistant 消息上，因为它同时承载了回复文案和
+    # 前端要渲染的操作按钮，会话回放时不必重新分类。intent 为空＝该消息早于路由层。
+    intent: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    routing_rule: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    action_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")

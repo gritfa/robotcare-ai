@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 from ..database import get_db
 from ..config import get_settings
 from ..generation_service import generate_answer
+from ..message_router import RoutingDecision, classify_message
 from ..models import (
     Conversation,
     ConversationMessage,
@@ -69,6 +70,8 @@ def _message_read(message: ConversationMessage) -> ConversationMessageRead:
         content=message.content,
         citations=[AnswerCitationRead(**c) for c in (message.citations_json or [])],
         refusal_reason=message.refusal_reason,
+        intent=message.intent,
+        action_code=message.action_code,
         created_at=message.created_at,
     )
 
@@ -142,8 +145,13 @@ def _prepare_turn(
     conversation: Conversation,
     content: str,
     user: User,
-) -> tuple[ConversationMessage, list[dict], float]:
-    """安全前置阻断 + 限流 + 阈值 + 多轮上下文 + 落用户消息（flush 未 commit）。"""
+) -> tuple[ConversationMessage, list[dict], float | None, RoutingDecision]:
+    """安全前置阻断 + 限流 + 路由分流 + 阈值 + 多轮上下文 + 落用户消息（flush 未 commit）。
+
+    顺序不可调整：安全检测永远排在路由之前，闲聊/操作分支绝不能成为绕过
+    安全阻断的旁路。业务限流对四类消息一视同仁（防刷），但 embedding 限流和
+    阈值计算只在真要走检索时才执行——这正是路由层要省掉的开销。
+    """
     safety_block = detect_safety_block(content)
     if safety_block is not None:
         emit_json_log(
@@ -169,21 +177,32 @@ def _prepare_turn(
     enforce_business_rate_limit(
         db, request, action="knowledge_answer", user_id=user.id, settings=settings
     )
-    enforce_embedding_rate_limit(db, request, user_id=user.id, settings=settings)
-
-    robot_model = db.get(RobotModel, conversation.robot_model_id)
-    threshold_version = db.scalar(
-        select(KnowledgeDocument.sha256)
-        .where(KnowledgeDocument.robot_model_id == conversation.robot_model_id)
-        .order_by(KnowledgeDocument.id.desc())
-        .limit(1)
-    )
-    min_score = settings.knowledge_score_threshold(robot_model.code, threshold_version)
 
     history = [
         {"role": m.role, "content": m.content}
         for m in conversation.messages[-MAX_CONTEXT_MESSAGES:]
     ]
+    decision = classify_message(content, has_history=bool(history))
+    emit_json_log(
+        logging.INFO,
+        "chat_message_routed",
+        trace_id=request_trace_id(request),
+        conversation_id=conversation.id,
+        **decision.metadata(),
+    )
+
+    min_score: float | None = None
+    if decision.needs_retrieval:
+        enforce_embedding_rate_limit(db, request, user_id=user.id, settings=settings)
+        robot_model = db.get(RobotModel, conversation.robot_model_id)
+        threshold_version = db.scalar(
+            select(KnowledgeDocument.sha256)
+            .where(KnowledgeDocument.robot_model_id == conversation.robot_model_id)
+            .order_by(KnowledgeDocument.id.desc())
+            .limit(1)
+        )
+        min_score = settings.knowledge_score_threshold(robot_model.code, threshold_version)
+
     user_message = ConversationMessage(
         conversation_id=conversation.id, role="user", content=content
     )
@@ -191,7 +210,7 @@ def _prepare_turn(
     if not conversation.title:
         conversation.title = content[:60]
     db.flush()
-    return user_message, history, min_score
+    return user_message, history, min_score, decision
 
 
 def _generate_turn_answer(
@@ -227,12 +246,35 @@ def _generate_turn_answer(
         raise
 
 
-def _assistant_message_for(conversation: Conversation, result) -> ConversationMessage:
+def _routed_assistant_message(
+    conversation: Conversation, decision: RoutingDecision
+) -> ConversationMessage:
+    """闲聊/产品操作的直接回复：不检索、不调生成模型、不产生 GenerationRecord。
+
+    这类消息没有引用，是因为它本来就不该有——引用是"依据说明书作答"的凭证，
+    打招呼和点按钮都不是在作答，硬造引用才是失真。
+    """
+
+    return ConversationMessage(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=decision.reply,
+        intent=decision.intent,
+        routing_rule=decision.matched_rule,
+        action_code=decision.action_code,
+    )
+
+
+def _assistant_message_for(
+    conversation: Conversation, result, decision: RoutingDecision
+) -> ConversationMessage:
     if result.status == "answered":
         return ConversationMessage(
             conversation_id=conversation.id,
             role="assistant",
             content=result.answer,
+            intent=decision.intent,
+            routing_rule=decision.matched_rule,
             citations_json=[
                 {
                     "index": c.index,
@@ -250,6 +292,8 @@ def _assistant_message_for(conversation: Conversation, result) -> ConversationMe
         role="assistant",
         content=REFUSAL_TEXTS.get(result.refusal_reason, REFUSAL_TEXTS["model_refused"]),
         refusal_reason=result.refusal_reason,
+        intent=decision.intent,
+        routing_rule=decision.matched_rule,
         generation_record_id=result.record_id,
     )
 
@@ -258,9 +302,8 @@ def _commit_turn(
     db: Session,
     conversation: Conversation,
     user_message: ConversationMessage,
-    result,
+    assistant_message: ConversationMessage,
 ) -> ConversationMessage:
-    assistant_message = _assistant_message_for(conversation, result)
     db.add(assistant_message)
     conversation.updated_at = user_message.created_at
     db.commit()
@@ -278,16 +321,26 @@ def post_message(
     user: User = Depends(get_current_user),
 ) -> ChatMessageResponse:
     conversation = _owned_conversation(db, conversation_id, user)
-    user_message, history, min_score = _prepare_turn(
+    user_message, history, min_score, decision = _prepare_turn(
         db, request, conversation, payload.content, user
     )
+    if not decision.needs_retrieval:
+        assistant_message = _commit_turn(
+            db, conversation, user_message, _routed_assistant_message(conversation, decision)
+        )
+        return ChatMessageResponse(
+            user_message=_message_read(user_message),
+            assistant_message=_message_read(assistant_message),
+        )
     try:
         result = _generate_turn_answer(
             db, request, conversation, payload.content, history, min_score, user
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Generation service unavailable") from exc
-    assistant_message = _commit_turn(db, conversation, user_message, result)
+    assistant_message = _commit_turn(
+        db, conversation, user_message, _assistant_message_for(conversation, result, decision)
+    )
     return ChatMessageResponse(
         user_message=_message_read(user_message),
         assistant_message=_message_read(assistant_message),
@@ -313,12 +366,23 @@ def post_message_stream(
     分片，不存在"未校验内容先出现在用户屏幕"的窗口。
     """
     conversation = _owned_conversation(db, conversation_id, user)
-    user_message, history, min_score = _prepare_turn(
+    user_message, history, min_score, decision = _prepare_turn(
         db, request, conversation, payload.content, user
     )
 
     def event_stream() -> Iterator[str]:
         yield _sse("user_message", _message_read(user_message).model_dump(mode="json"))
+        if not decision.needs_retrieval:
+            # 闲聊/操作照样走 delta→assistant_message→done，前端只有一条渲染路径；
+            # 区别只是没有 generating 阶段（本来就不调模型，不该显示"正在生成"）。
+            routed = _commit_turn(
+                db, conversation, user_message, _routed_assistant_message(conversation, decision)
+            )
+            for start in range(0, len(routed.content), STREAM_CHUNK_CHARS):
+                yield _sse("delta", {"text": routed.content[start : start + STREAM_CHUNK_CHARS]})
+            yield _sse("assistant_message", _message_read(routed).model_dump(mode="json"))
+            yield _sse("done", {})
+            return
         yield _sse("stage", {"stage": "generating"})
         try:
             result = _generate_turn_answer(
@@ -331,7 +395,9 @@ def post_message_stream(
                 {"code": "GENERATION_UNAVAILABLE", "message": "生成服务暂不可用，请稍后重试"},
             )
             return
-        assistant_message = _commit_turn(db, conversation, user_message, result)
+        assistant_message = _commit_turn(
+            db, conversation, user_message, _assistant_message_for(conversation, result, decision)
+        )
         if result.status == "answered":
             for start in range(0, len(assistant_message.content), STREAM_CHUNK_CHARS):
                 yield _sse(

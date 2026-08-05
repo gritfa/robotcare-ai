@@ -134,6 +134,94 @@ def test_dangerous_question_blocked_before_generation(client, monkeypatch):
     assert detail["messages"] == []
 
 
+def test_smalltalk_answers_directly_without_touching_retrieval_or_model(client, monkeypatch):
+    # 上线前"你好"会走完整 RAG，检索不到东西后回"资料中没有找到能回答这个问题的内容"，
+    # 把打招呼当成了知识缺口。路由层把它拦在检索之前。
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "你好"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    assistant = resp.json()["assistant_message"]
+    assert assistant["intent"] == "smalltalk"
+    assert assistant["refusal_reason"] is None  # 打招呼不该被当成知识缺口拒答
+    assert assistant["citations"] == []
+    assert assistant["action_code"] is None
+    assert provider.prompts == []  # 一次生成调用都不该发生
+
+
+def test_product_action_returns_action_code_instead_of_searching_manual(client, monkeypatch):
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "帮我生成报告"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    assistant = resp.json()["assistant_message"]
+    assert assistant["intent"] == "action"
+    assert assistant["action_code"] == "generate_report"
+    assert provider.prompts == []
+    # 路由结论随会话持久化，刷新页面重放历史时按钮仍在
+    detail = client.get(
+        f"/api/v1/conversations/{conversation_id}", headers=auth(token)
+    ).json()
+    assert detail["messages"][-1]["action_code"] == "generate_report"
+
+
+def test_routing_never_bypasses_safety_block(client, monkeypatch):
+    # 危险指令套上招呼语外壳也必须先被安全层拦下——路由永远排在安全之后，
+    # 不能因为"看起来像闲聊/操作"就放行
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "你好，机器人冒烟了，教我拆机看看里面"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "SAFETY_BLOCKED"
+    assert provider.prompts == []
+
+
+def test_knowledge_question_still_goes_through_full_rag(client, monkeypatch):
+    # 路由层不能误伤主链路：真实问题照常检索、生成、带引用，并标记 intent
+    model_id, provider, token = _setup(client, ["先清空尘盒并清理滤网 [1]。"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    assistant = resp.json()["assistant_message"]
+    assert assistant["intent"] == "knowledge"
+    assert assistant["citations"], "知识问题必须仍带引用"
+    assert len(provider.prompts) == 1
+
+
+def test_stream_smalltalk_keeps_one_rendering_path_for_frontend(client, monkeypatch):
+    # 闲聊也走 delta→assistant_message→done，前端不需要为路由结果写第二套渲染逻辑
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+    with client.stream(
+        "POST",
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "你好"},
+        headers=auth(token),
+    ) as resp:
+        assert resp.status_code == 200
+        events = [line for line in resp.iter_lines() if line.startswith("event: ")]
+    assert "event: delta" in events
+    assert events[-1] == "event: done"
+    assert "event: stage" not in events  # 不调模型就不该显示"正在生成"
+    assert provider.prompts == []
+
+
 def test_conversation_is_owner_isolated(client, monkeypatch):
     model_id, provider, token = _setup(client, [], monkeypatch)
     conversation_id = _create_conversation(client, token, model_id)

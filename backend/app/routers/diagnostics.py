@@ -18,6 +18,7 @@ from ..diagnostic_graph import feedback_decision_graph
 from ..issue_classifier import classify_issue
 from ..models import (
     Attachment,
+    Conversation,
     DiagnosticFlow,
     DiagnosticSession,
     DiagnosticStep,
@@ -67,6 +68,16 @@ def create_diagnostic(
     device = owned_device(db, payload.device_id, user)
     if not device.robot_model.active:
         raise HTTPException(status_code=409, detail="Robot model is inactive")
+    if payload.source_conversation_id is not None:
+        source_conversation = db.get(Conversation, payload.source_conversation_id)
+        # 404 而非 403：不向他人泄露会话是否存在（与会话路由同语义）
+        if source_conversation is None or source_conversation.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if source_conversation.robot_model_id != device.robot_model_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Conversation robot model does not match the selected device",
+            )
     safety_block = detect_safety_block(
         " ".join(part for part in (payload.issue_description, payload.error_code) if part)
     )
@@ -171,6 +182,7 @@ def create_diagnostic(
         flow_id=flow.id,
         issue_description=payload.issue_description,
         error_code=payload.error_code,
+        source_conversation_id=payload.source_conversation_id,
         category_decision=category_decision.metadata(
             confirmation="keep_selected" if confirmed_ambiguous else None
         ),
@@ -331,6 +343,7 @@ def make_report(diagnostic: DiagnosticSession) -> str:
         lines.extend(f"- {attachment.original_filename}" for attachment in diagnostic.attachments)
     else:
         lines.append("- 未提供")
+    lines.extend(conversation_summary_lines(diagnostic.source_conversation))
     lines.extend(
         [
             "最终结果：自助排查未解决，建议联系海尔官方售后。",
@@ -338,6 +351,38 @@ def make_report(diagnostic: DiagnosticSession) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+REPORT_CONVERSATION_MESSAGE_LIMIT = 12
+REPORT_CONVERSATION_SNIPPET_CHARS = 80
+
+
+def conversation_summary_lines(conversation: Conversation | None) -> list[str]:
+    """未解决会话的问答摘要，附入售后报告给人工售后当上下文。"""
+    if conversation is None or not conversation.messages:
+        return []
+    messages = conversation.messages[-REPORT_CONVERSATION_MESSAGE_LIMIT:]
+    omitted = len(conversation.messages) - len(messages)
+    lines = [f"此前智能客服会话摘要（会话 #{conversation.id}）："]
+    if omitted:
+        lines.append(f"（更早的 {omitted} 条消息略）")
+    for index, message in enumerate(messages, start=1):
+        snippet = message.content.replace("\n", " ").strip()
+        if len(snippet) > REPORT_CONVERSATION_SNIPPET_CHARS:
+            snippet = snippet[:REPORT_CONVERSATION_SNIPPET_CHARS] + "…"
+        if message.role == "user":
+            lines.append(f"{index}. [用户] {snippet}")
+        elif message.refusal_reason:
+            lines.append(f"{index}. [AI·拒答] {snippet}")
+        else:
+            pages = "、".join(
+                str(citation.get("page_number"))
+                for citation in (message.citations_json or [])
+                if citation.get("page_number")
+            )
+            source = f"（引用说明书第 {pages} 页）" if pages else ""
+            lines.append(f"{index}. [AI] {snippet}{source}")
+    return lines
 
 
 def get_or_create_service_report(db: Session, diagnostic: DiagnosticSession) -> ServiceReport:

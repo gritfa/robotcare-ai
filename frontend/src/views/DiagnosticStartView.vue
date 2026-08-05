@@ -33,10 +33,20 @@ const submitError = ref('')
 const route = useRoute()
 const router = useRouter()
 const form = reactive({ device_id: '', issue_category_code: '', issue_description: '', error_code: '' })
+const sourceConversationId = ref<number | null>(null)
+const sourceModelId = ref<number | null>(null)
 let optionsRequestId = 0
 
 watch(() => form.device_id, async (deviceId) => {
   const requestId = ++optionsRequestId
+
+  // 换到与来源会话不同型号的设备时解除溯源，避免提交被拒
+  if (sourceConversationId.value && sourceModelId.value !== null) {
+    const modelIdForDevice = robotModelIdForDevice(devices.value, deviceId)
+    if (modelIdForDevice !== null && Number(modelIdForDevice) !== sourceModelId.value) {
+      sourceConversationId.value = null
+    }
+  }
 
   // Never carry an option from one physical device/model into another request.
   selectedOptionKey.value = ''
@@ -68,8 +78,18 @@ onMounted(async () => {
   try {
     devices.value = await deviceApi.list()
     const requestedDeviceId = String(route.query.device || '')
+    const requestedModelId = String(route.query.model || '')
     const requestedDevice = devices.value.find(device => String(device.id) === requestedDeviceId)
+      || devices.value.find(device => String(device.robot_model_id) === requestedModelId)
     form.device_id = String(requestedDevice?.id || devices.value[0]?.id || '')
+    // 从智能客服会话跳转而来：预填问题描述并保留会话溯源
+    const requestedDescription = String(route.query.description || '')
+    if (requestedDescription) form.issue_description = requestedDescription.slice(0, 4000)
+    const conversationId = Number(route.query.conversation)
+    if (Number.isFinite(conversationId) && conversationId > 0) {
+      sourceConversationId.value = conversationId
+      sourceModelId.value = Number(requestedModelId) || null
+    }
   } catch (error) {
     ElMessage.error(apiError(error, '设备列表加载失败'))
   } finally {
@@ -157,6 +177,7 @@ async function submit(confirmCategoryMismatch = false) {
       issue_description: form.issue_description.trim(),
       error_code: form.error_code.trim() || undefined,
       confirm_category_mismatch: confirmCategoryMismatch || undefined,
+      source_conversation_id: sourceConversationId.value || undefined,
     })
 
     let failedUploads = 0

@@ -191,6 +191,7 @@ class DiagnosticCreate(BaseModel):
     issue_description: str = Field(min_length=3, max_length=4000)
     error_code: str | None = Field(default=None, max_length=100)
     confirm_category_mismatch: bool = False
+    source_conversation_id: int | None = Field(default=None, gt=0)
 
 
 class StepRead(ORMModel):
@@ -219,6 +220,7 @@ class DiagnosticRead(ORMModel):
     device_id: int
     issue_description: str
     error_code: str | None
+    source_conversation_id: int | None = None
     category_decision: dict[str, object] = Field(default_factory=dict)
     status: str
     current_position: int | None

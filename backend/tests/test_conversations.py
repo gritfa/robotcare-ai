@@ -15,7 +15,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from app.config import Settings
 from app.knowledge_service import HashingNgramEmbeddingProvider, ingest_pdf
 from app.models import RobotModel
-from conftest import auth, register
+from conftest import auth, register, submit_feedback
 
 SYNTHETIC_DIR = PROJECT_ROOT / "knowledge" / "synthetic"
 
@@ -236,6 +236,97 @@ class ExplodingGenerationProvider:
 
     def generate(self, *, system: str, prompt: str) -> str:
         raise RuntimeError("provider down")
+
+
+def _add_device(client, token, model_id, nickname="客厅机器人"):
+    resp = client.post(
+        "/api/v1/devices",
+        headers=auth(token),
+        json={"robot_model_id": model_id, "nickname": nickname},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+def test_conversation_escalates_to_diagnostic_and_report_includes_summary(
+    client, monkeypatch
+):
+    model_id, provider, token = _setup(
+        client, ["先清空尘盒并清理滤网 [1]。"], monkeypatch
+    )
+    conversation_id = _create_conversation(client, token, model_id)
+    assert (
+        client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={"content": "吸力变小了怎么办"},
+            headers=auth(token),
+        ).status_code
+        == 200
+    )
+
+    device_id = _add_device(client, token, model_id)
+    created = client.post(
+        "/api/v1/diagnostics",
+        headers=auth(token),
+        json={
+            "device_id": device_id,
+            "issue_category_code": "suction_drop",
+            "issue_description": "吸力变小，按客服建议清理后仍未解决",
+            "source_conversation_id": conversation_id,
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["source_conversation_id"] == conversation_id
+    diagnostic_id = created.json()["id"]
+
+    for _ in range(3):
+        assert submit_feedback(client, token, diagnostic_id, "not_resolved").status_code == 200
+
+    report = client.post(
+        f"/api/v1/diagnostics/{diagnostic_id}/report", headers=auth(token)
+    )
+    assert report.status_code == 201, report.text
+    content = report.json()["content"]
+    assert "此前智能客服会话摘要" in content
+    assert "[用户] 吸力变小了怎么办" in content
+    assert "[AI] 先清空尘盒并清理滤网" in content
+    assert "引用说明书第" in content
+
+
+def test_escalation_rejects_foreign_or_mismatched_conversation(client, monkeypatch):
+    model_id, provider, token = _setup(client, [], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+
+    # 他人会话 → 404，不泄露存在性
+    other_token = register(client, "chat-escalate-intruder@gritfa-test.com")["access_token"]
+    other_device_id = _add_device(client, other_token, model_id, nickname="入侵者设备")
+    resp = client.post(
+        "/api/v1/diagnostics",
+        headers=auth(other_token),
+        json={
+            "device_id": other_device_id,
+            "issue_category_code": "suction_drop",
+            "issue_description": "试图挂他人会话",
+            "source_conversation_id": conversation_id,
+        },
+    )
+    assert resp.status_code == 404
+
+    # 会话型号与设备型号不一致 → 409
+    with client.app.state.session_factory() as db:
+        other_model_id = db.scalar(select(RobotModel.id).where(RobotModel.code == "JH69U1"))
+    mismatched_device_id = _add_device(client, token, other_model_id, nickname="别的型号")
+    resp = client.post(
+        "/api/v1/diagnostics",
+        headers=auth(token),
+        json={
+            "device_id": mismatched_device_id,
+            "issue_category_code": "suction_drop",
+            "issue_description": "型号不匹配的转诊断",
+            "source_conversation_id": conversation_id,
+        },
+    )
+    assert resp.status_code == 409
 
 
 def test_stream_generation_failure_emits_error_event_and_rolls_back(client, monkeypatch):

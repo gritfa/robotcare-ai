@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ChatDotRound, Plus, Promotion } from '@element-plus/icons-vue'
+import { ChatDotRound, FirstAidKit, Plus, Promotion } from '@element-plus/icons-vue'
 import { apiError, conversationApi, deviceApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import { streamChatMessage } from '../chatStream'
 import { refusalPresentation } from '../answerDisplay'
@@ -180,6 +180,20 @@ function refreshConversationSummary(conversationId: number, firstQuestion: strin
     .sort((a, b) => (a.id === conversationId ? -1 : b.id === conversationId ? 1 : 0))
 }
 
+async function escalateToDiagnostic() {
+  const conversation = activeConversation.value
+  if (!conversation) return
+  const lastUserMessage = [...messages.value].reverse().find(item => item.role === 'user')
+  await router.push({
+    path: '/diagnostics/new',
+    query: {
+      conversation: String(conversation.id),
+      model: String(conversation.robot_model_id),
+      description: (lastUserMessage?.content || conversation.title).slice(0, 500),
+    },
+  })
+}
+
 async function scrollToBottom() {
   await nextTick()
   messageArea.value?.scrollTo({ top: messageArea.value.scrollHeight })
@@ -222,7 +236,16 @@ async function scrollToBottom() {
         <template v-if="activeId">
           <div class="chat-head">
             <strong>{{ activeConversation?.title || '新会话' }}</strong>
-            <el-tag effect="plain">{{ activeModelCode }}</el-tag>
+            <div class="chat-head-actions">
+              <el-button
+                v-if="messages.length"
+                size="small"
+                :icon="FirstAidKit"
+                :disabled="streaming"
+                @click="escalateToDiagnostic"
+              >转分步诊断</el-button>
+              <el-tag effect="plain">{{ activeModelCode }}</el-tag>
+            </div>
           </div>
 
           <div ref="messageArea" class="message-area">
@@ -333,6 +356,7 @@ async function scrollToBottom() {
 .chat-panel{padding:22px;display:flex;flex-direction:column;min-height:520px;max-height:calc(100vh - 240px)}
 .chat-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--line)}
 .chat-head strong{font-size:15px}
+.chat-head-actions{display:flex;align-items:center;gap:10px}
 .message-area{flex:1;overflow-y:auto;padding:18px 4px;display:flex;flex-direction:column;gap:14px}
 .bubble-row{display:flex}
 .user-row{justify-content:flex-end}

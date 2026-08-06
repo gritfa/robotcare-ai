@@ -26,6 +26,17 @@ INSECURE_INVITE_SECRET_MARKERS = (
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://robotcare:robotcare@localhost:5432/robotcare"
+    # 连接池此前完全用 SQLAlchemy 默认值（5 + 10 溢出，无 pre_ping、无 recycle）。
+    # 一路 SSE 聊天在生成期间会占住一条连接，15 路并发就能把池抽干，
+    # 之后连登录和健康检查一起 500——2026-08-06 体检的第 3 号问题。
+    # 池大小要按「并发聊天数 + 常规请求」估，不是按 CPU 核数。
+    db_pool_size: int = Field(default=20, ge=1, le=200)
+    db_max_overflow: int = Field(default=30, ge=0, le=200)
+    db_pool_timeout_seconds: float = Field(default=10.0, ge=1.0, le=120.0)
+    # 回收早于任何中间件的空闲断连阈值；没有 pre_ping 时 Postgres 重启后
+    # 第一批请求会全部 500。
+    db_pool_recycle_seconds: int = Field(default=1800, ge=60, le=86400)
+    db_pool_pre_ping: bool = True
     environment: str = "development"
     jwt_secret: str = DEFAULT_DEVELOPMENT_JWT_SECRET
     # jwt_secret 此前被复用为三种用途（JWT 签名 / 限流键 HMAC / 报告文件名派生），

@@ -36,7 +36,9 @@ def create_app(
     auto_create_schema: bool | None = None,
 ) -> FastAPI:
     settings = get_settings()
-    session_factory = build_session_factory(database_url or settings.database_url)
+    session_factory = build_session_factory(
+        database_url or settings.database_url, settings=settings
+    )
     should_auto_create = settings.auto_create_schema if auto_create_schema is None else auto_create_schema
 
     @asynccontextmanager

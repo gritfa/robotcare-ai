@@ -30,6 +30,7 @@ from ..models import (
     MessageFeedback,
     RobotModel,
     User,
+    utcnow,
 )
 from ..observability import emit_json_log, request_trace_id
 from ..rate_limit_service import enforce_business_rate_limit, enforce_embedding_rate_limit
@@ -271,13 +272,15 @@ def _prepare_turn(
         )
         min_score = settings.knowledge_score_threshold(robot_model.code, threshold_version)
 
+    # 用户消息在这里只构造、不落库（体检 #3）。此前是 add+flush 挂着一个未提交
+    # 事务跑完整个生成，一路 SSE 就占住一条连接与一把行锁，~15 路并发打死全站。
+    # created_at 显式取"提问时刻"，否则延迟到生成之后落库会让它比实际晚几秒。
     user_message = ConversationMessage(
-        conversation_id=conversation.id, role="user", content=content
+        conversation_id=conversation.id,
+        role="user",
+        content=content,
+        created_at=utcnow(),
     )
-    db.add(user_message)
-    if not conversation.title:
-        conversation.title = content[:60]
-    db.flush()
     return user_message, history, min_score, decision
 
 
@@ -451,6 +454,11 @@ def _commit_turn(
     user_message: ConversationMessage,
     assistant_message: ConversationMessage,
 ) -> ConversationMessage:
+    # 用户消息与助手消息在这里一起落库。延迟到此刻的直接好处：生成失败或客户端
+    # 中断时这一轮天然不留痕，不再依赖"回滚一个开着整场生成的长事务"。
+    db.add(user_message)
+    if not conversation.title:
+        conversation.title = user_message.content[:60]
     db.add(assistant_message)
     conversation.updated_at = user_message.created_at
     db.commit()
@@ -522,7 +530,11 @@ def post_message_stream(
     )
 
     def event_stream() -> Iterator[str]:
-        yield _sse("user_message", _message_read(user_message).model_dump(mode="json"))
+        # user_message 事件此前在流开头下发，靠的是"进流之前已 flush 用户消息"——
+        # 而那正是让一条连接被整场生成占住的原因（体检 #3）。改为延迟落库后，
+        # 用户消息在这里还没有 id，事件顺延到落库之后下发。
+        # 前端本就先渲染一条乐观消息（ChatView「乐观展示用户消息」），
+        # 收到本事件时把它替换成真实记录，所以时机后移对用户无感。
         if not decision.needs_retrieval:
             # 闲聊/操作照样走 delta→assistant_message→done，前端只有一条渲染路径；
             # 区别只是没有 generating 阶段（本来就不调模型，不该显示"正在生成"）。
@@ -533,6 +545,7 @@ def post_message_stream(
                 user_message,
                 _routed_assistant_message(conversation, decision, reply, quick_actions),
             )
+            yield _sse("user_message", _message_read(user_message).model_dump(mode="json"))
             for start in range(0, len(routed.content), STREAM_CHUNK_CHARS):
                 yield _sse("delta", {"text": routed.content[start : start + STREAM_CHUNK_CHARS]})
             yield _sse("assistant_message", _message_read(routed).model_dump(mode="json"))
@@ -587,6 +600,8 @@ def post_message_stream(
             # 最终判定为拒答，但已经有内容到过用户屏幕：必须明确撤回。
             # 留着不管，用户会把半截未通过校验的文本当成答案。
             yield _sse("discard", {"reason": "refused_after_stream"})
+        # 正文与撤回都处理完，再把落库后的用户消息与助手消息交给前端收尾
+        yield _sse("user_message", _message_read(user_message).model_dump(mode="json"))
         yield _sse(
             "assistant_message", _message_read(assistant_message).model_dump(mode="json")
         )

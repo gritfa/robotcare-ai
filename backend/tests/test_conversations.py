@@ -274,8 +274,13 @@ def test_stream_answer_emits_validated_chunks_then_final_message(client, monkeyp
     assert resp.headers["content-type"].startswith("text/event-stream")
     events = _sse_events(resp.text)
     names = [name for name, _ in events]
-    assert names[:2] == ["user_message", "stage"]
-    assert names[-2:] == ["assistant_message", "done"]
+    # 阶段事件先行；user_message 在落库之后才下发（此前是流开头，靠的是
+    # "进流前已 flush 用户消息"，而那会让一条连接被整场生成占住）。
+    # 前端在发送瞬间已渲染乐观消息，收到本事件时替换成带 id 的真实记录。
+    assert names[0] == "stage"
+    assert names[-3:] == ["user_message", "assistant_message", "done"]
+    user_event = next(data for name, data in events if name == "user_message")
+    assert user_event["id"] > 0 and user_event["role"] == "user"
     final = next(data for name, data in events if name == "assistant_message")
     deltas = "".join(data["text"] for name, data in events if name == "delta")
     # delta 拼接必须与最终已校验消息完全一致，且带引用页码

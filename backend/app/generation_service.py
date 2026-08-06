@@ -695,6 +695,13 @@ def answer_events(
     )
     yield ("stage", "retrieved")
 
+    # 检索结束，接下来是几秒到几十秒的模型生成——这段时间不该占着数据库连接。
+    # 此刻没有任何待写数据（会话的用户消息延迟到落库阶段才写、限流计数自行提交），
+    # 所以 commit 只是结束这个只读事务、把连接还给池子；sessionmaker 配了
+    # expire_on_commit=False，已加载的 ORM 对象不会因此失效。
+    # 不这么做的话，一路 SSE 会从检索开始一直占住连接到生成结束（体检 #3）。
+    db.commit()
+
     gate: StreamSafetyGate | None = None
 
     def refuse(reason: str, *, answer: str | None = None, snippet_count: int = len(results)) -> AnswerResult:

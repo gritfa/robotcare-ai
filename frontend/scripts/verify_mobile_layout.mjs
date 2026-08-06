@@ -22,8 +22,21 @@ const PREFIX = '/api/v1'
 const VIEWPORTS = [390, 768, 1440]
 const TOLERANCE = 2 // 浏览器亚像素舍入
 
-const USER = { email: process.env.RC_USER || 'prod-acceptance@gritfa.com', password: process.env.RC_PASS || 'REDACTED-USE-ENV-VAR' }
-const ADMIN = { email: process.env.RC_ADMIN_USER || 'prod-admin-test@gritfa.com', password: process.env.RC_ADMIN_PASS || 'REDACTED-USE-ENV-VAR' }
+// 凭据一律从环境变量注入，脚本内不留任何默认值。
+// 本仓是公开仓：把可登录账号写成默认值等同于明文公开生产口令。
+function requireCred(emailVar, passVar) {
+  const email = process.env[emailVar]
+  const password = process.env[passVar]
+  if (!email || !password) {
+    console.error(`缺少环境变量 ${emailVar} / ${passVar}，无法登录。`)
+    console.error(`用法: ${emailVar}=... ${passVar}=... node frontend/scripts/verify_mobile_layout.mjs`)
+    process.exit(2)
+  }
+  return { email, password }
+}
+
+const USER = requireCred('RC_USER', 'RC_PASS')
+const ADMIN = requireCred('RC_ADMIN_USER', 'RC_ADMIN_PASS')
 
 async function login(cred) {
   const res = await fetch(`${API}${PREFIX}/auth/login`, {

@@ -138,10 +138,13 @@ def test_no_retry_when_remaining_budget_cannot_fit_a_useful_attempt():
         clock.advance(45.0)
         raise httpx.ReadTimeout("slow")
 
-    with pytest.raises(httpx.ReadTimeout):
+    # 失败统一成 LLMTransportError（RuntimeError 子类）——调用方按 RuntimeError
+    # 接才能回滚并返回 503 / 下发 SSE error 事件；原始异常保留在 __cause__。
+    with pytest.raises(LLMTransportError) as caught:
         call_with_budget(
             operation, _policy(), op_name="t", monotonic=clock.monotonic, sleep=clock.sleep
         )
+    assert isinstance(caught.value.__cause__, httpx.ReadTimeout)
 
     assert calls == 1
     assert clock.now <= 50.0
@@ -158,10 +161,11 @@ def test_budget_exhausted_before_any_attempt_raises_budget_error():
         clock.advance(5.9)
         raise httpx.ConnectTimeout("nope")
 
-    with pytest.raises(httpx.ConnectTimeout):
+    with pytest.raises(LLMTransportError) as caught:
         call_with_budget(
             operation, policy, op_name="t", monotonic=clock.monotonic, sleep=clock.sleep
         )
+    assert isinstance(caught.value.__cause__, httpx.ConnectTimeout)
 
     assert calls == 1
 
@@ -275,3 +279,90 @@ def test_empty_stream_is_not_an_error():
         )
         == []
     )
+
+
+def test_underlying_exception_is_wrapped_into_the_runtime_contract():
+    """底层异常必须包成 RuntimeError 子类再抛。
+
+    2026-08-06 体检 #10：调用方全都 `except RuntimeError`——同步端点靠它
+    回滚并返回 503，流式端点靠它下发 error 事件。而 httpx.ConnectTimeout
+    只是 Exception，此前被原样重抛：同步端点返回 500 而非 503，流式端点
+    SSE 直接被掐断、连 error 事件都发不出去。
+    """
+    clock = FakeClock()
+
+    def always_fails(read_timeout: float):
+        clock.advance(40.0)
+        raise httpx.ConnectTimeout("upstream refused")
+
+    with pytest.raises(LLMTransportError) as caught:
+        call_with_budget(
+            always_fails,
+            _policy(max_attempts=1),
+            op_name="test.op",
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+    assert isinstance(caught.value, RuntimeError), "调用方按 RuntimeError 接"
+    assert isinstance(caught.value.__cause__, httpx.ConnectTimeout), "原始异常不能丢"
+
+
+def test_stream_failure_is_also_wrapped():
+    clock = FakeClock()
+
+    def failing_chunks():
+        yield "第一段。"
+        raise httpx.ReadError("connection dropped mid-stream")
+
+    received = []
+    with pytest.raises(LLMTransportError) as caught:
+        for chunk in stream_with_budget(
+            failing_chunks(), _policy(), op_name="test.stream", monotonic=clock.monotonic
+        ):
+            received.append(chunk)
+    assert received == ["第一段。"]
+    assert isinstance(caught.value, RuntimeError)
+    assert isinstance(caught.value.__cause__, httpx.ReadError)
+
+
+def test_keyboard_interrupt_is_not_disguised_as_a_transport_error():
+    """KeyboardInterrupt 不是"模型调用失败"，不该被包装。"""
+    clock = FakeClock()
+
+    def interrupted(read_timeout: float):
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        call_with_budget(
+            interrupted,
+            _policy(max_attempts=1),
+            op_name="test.op",
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+
+
+def test_no_retry_when_remaining_budget_cannot_cover_connect_plus_useful_read():
+    """默认配置下不再发那个注定超时的重试。
+
+    体检 #11：门槛此前只看剩余预算，没扣 connect。默认值下第一次 40s 超时后
+    还剩约 10s，10 − 0.5 ≥ 8 成立于是重试，而真正给模型的 read_timeout 只有
+    10 − 5 = 5s，一次 5 秒的大模型生成必然失败，纯粹把账单翻倍。
+    """
+    clock = FakeClock()
+    attempts: list[float] = []
+
+    def slow_timeout(read_timeout: float):
+        attempts.append(read_timeout)
+        clock.advance(40.0)
+        raise httpx.ReadTimeout("too slow")
+
+    with pytest.raises(LLMTransportError):
+        call_with_budget(
+            slow_timeout,
+            _policy(),  # connect 5 / read 40 / budget 50 / attempts 2
+            op_name="test.op",
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+    assert attempts == [40.0], f"只该尝试一次，实际 {attempts}"

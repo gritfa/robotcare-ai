@@ -114,6 +114,35 @@ def is_retryable_exception(exc: BaseException) -> bool:
     return any(marker in name for marker in _RETRYABLE_EXCEPTION_MARKERS)
 
 
+def _as_transport_failure(
+    exc: BaseException, *, op_name: str, retryable: bool
+) -> BaseException:
+    """把底层异常统一成 LLMTransportError（RuntimeError 子类）再抛。
+
+    为什么必须统一（2026-08-06 体检 #10）：调用方全都按 `except RuntimeError`
+    接生成失败——同步端点靠它回滚并返回 503，流式端点靠它下发 error 事件。
+    而这里此前是 `raise` 原样重抛，httpx.ConnectTimeout / ReadTimeout /
+    RemoteProtocolError 都只是 Exception，不是 RuntimeError：
+    - 同步端点接不住 → 没有 rollback、没有结构化日志、返回 500 而不是 503；
+    - 流式端点接不住 → 异常从 StreamingResponse 的生成器里抛出，SSE 连接
+      被直接掐断，**连 error 事件都发不出去**，前端只能显示"回答流意外中断"。
+    应用没有全局 exception handler，所以没有第二道网。
+
+    KeyboardInterrupt / SystemExit 这类非 Exception 原样放行——它们不是
+    "模型调用失败"，不该被伪装成传输错误。
+    """
+    if isinstance(exc, LLMTransportError) or not isinstance(exc, Exception):
+        return exc
+    failure = LLMTransportError(
+        f"{op_name} failed: {type(exc).__name__}: {exc}",
+        retryable=retryable,
+        status_code=getattr(exc, "status_code", None),
+    )
+    # 保留原始异常，排查时不丢现场（日志里的 error_type 也仍记原始类型）
+    failure.__cause__ = exc
+    return failure
+
+
 def call_with_budget(
     operation: Callable[[float], T],
     policy: TimeoutPolicy,
@@ -143,10 +172,17 @@ def call_with_budget(
             retryable = is_retryable_exception(exc)
             elapsed_ms = round((monotonic() - started_at) * 1000, 3)
             remaining_after = deadline - monotonic()
+            # 门槛要扣掉 connect：真正给模型读的时间是「剩余预算 − connect」
+            # （见上面 read_timeout 的算法）。只按剩余预算判断的话，出厂默认值
+            # （connect 5 / read 40 / budget 50）下第一次超时后还剩约 10s，
+            # 10 − 0.5 ≥ 8 成立于是重试，可实际 read_timeout = 10 − 5 = 5s，
+            # 一次 5 秒的大模型生成必然失败——正好是本模块第 3 条声明要避免的
+            # "发一个注定超时的请求"，只把账单翻倍（2026-08-06 体检 #11）。
             will_retry = (
                 retryable
                 and attempt < policy.max_attempts
-                and remaining_after - RETRY_BACKOFF_SECONDS >= policy.min_retry_seconds
+                and remaining_after - RETRY_BACKOFF_SECONDS - policy.connect_seconds
+                >= policy.min_retry_seconds
             )
             emit_json_log(
                 logging.WARNING if will_retry else logging.ERROR,
@@ -163,7 +199,7 @@ def call_with_budget(
                 remaining_budget_ms=round(max(remaining_after, 0) * 1000, 3),
             )
             if not will_retry:
-                raise
+                raise _as_transport_failure(exc, op_name=op_name, retryable=retryable)
             sleep(RETRY_BACKOFF_SECONDS)
 
     # 预算耗尽（或首轮就没有可用预算）而没有成功结果
@@ -228,4 +264,10 @@ def stream_with_budget(
             chunk = next(iterator)
         except StopIteration:
             return
+        except BaseException as exc:  # noqa: BLE001 - 统一成调用方接得住的契约异常
+            # 与 call_with_budget 同一口径：流式端点靠 except RuntimeError 才能
+            # 下发 error 事件收束 SSE，底层 httpx 异常逃逸会让连接被直接掐断。
+            raise _as_transport_failure(
+                exc, op_name=op_name, retryable=is_retryable_exception(exc)
+            ) from exc
         yield chunk

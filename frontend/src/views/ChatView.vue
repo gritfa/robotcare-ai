@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChatDotRound, CopyDocument, Delete, Edit, FirstAidKit, Plus, Promotion, Refresh, Search, VideoPause } from '@element-plus/icons-vue'
 import { apiError, conversationApi, deviceApi, knowledgeApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import { ChatStreamAborted, streamChatMessage } from '../chatStream'
+import { SKIPPED, createLatestOnly, createSingleFlight } from '../requestGuard'
 import { refusalPresentation } from '../answerDisplay'
 import { resolveComposerKey } from '../composerKeys'
 import { OFFICIAL_SUPPORT_NAME, OFFICIAL_SUPPORT_URL, supportHandoffHint } from '../supportChannels'
@@ -62,6 +63,23 @@ const creating = ref(false)
 
 const messageArea = ref<HTMLElement | null>(null)
 
+// 连点两个会话时，慢的那次不许覆盖快的那次（详情与建议问题各一条时间线）
+const detailRequest = createLatestOnly()
+const suggestionRequest = createLatestOnly()
+// 冷启动连点建议问题会各建一个空会话——建会话入口同一时刻只放行一次
+const conversationCreation = createSingleFlight()
+// 组件卸载后不再做任何 UI 反馈：SSE 已中断，这一轮的收尾提示没有观众
+let disposed = false
+
+onUnmounted(() => {
+  disposed = true
+  // 不 abort 的话：用户离开聊天页后 SSE 连接仍开着，后端继续生成、继续计费，
+  // 而增量只会被写进一个再也不会渲染的 ref。
+  abortController.value?.abort()
+  detailRequest.invalidate()
+  suggestionRequest.invalidate()
+})
+
 const activeConversation = computed(() => conversations.value.find(item => item.id === activeId.value) || null)
 const canSend = computed(() => Boolean(activeId.value && draft.value.trim() && !streaming.value))
 const modelOptions = computed(() => models.value.filter(model => model.enabled !== false))
@@ -104,18 +122,20 @@ async function openConversation(id: number, { syncRoute = true } = {}) {
   if (streaming.value) return
   detailLoading.value = true
   safetyError.value = null
-  try {
-    const detail = await conversationApi.get(id)
-    activeId.value = detail.id
-    activeModelCode.value = detail.robot_model_code
-    messages.value = detail.messages
-    if (syncRoute) await router.push({ name: 'chat', params: { id: String(id) } })
-    await scrollToBottom()
-  } catch (error) {
+  const { stale, value: detail, error } = await detailRequest.run(() => conversationApi.get(id))
+  // 已被后点的会话超越：既不能渲染这份详情，也不能弹它的错误、不能收 loading
+  // （新的那次请求还在飞，loading 归它管）
+  if (stale) return
+  detailLoading.value = false
+  if (error || !detail) {
     ElMessage.error(apiError(error, '会话加载失败，请稍后重试'))
-  } finally {
-    detailLoading.value = false
+    return
   }
+  activeId.value = detail.id
+  activeModelCode.value = detail.robot_model_code
+  messages.value = detail.messages
+  if (syncRoute) await router.push({ name: 'chat', params: { id: String(id) } })
+  await scrollToBottom()
 }
 
 function openCreateDialog() {
@@ -138,23 +158,28 @@ function selectionModelId(selection: string): number | null {
 }
 
 async function createConversationFor(robotModelId: number): Promise<boolean> {
-  creating.value = true
-  try {
-    const conversation = await conversationApi.create(robotModelId)
-    conversations.value = [conversation, ...conversations.value]
-    dialogVisible.value = false
-    activeId.value = conversation.id
-    activeModelCode.value = conversation.robot_model_code
-    messages.value = []
-    safetyError.value = null
-    await router.push({ name: 'chat', params: { id: String(conversation.id) } })
-    return true
-  } catch (error) {
-    ElMessage.error(apiError(error, '创建会话失败，请稍后重试'))
-    return false
-  } finally {
-    creating.value = false
-  }
+  // 单飞：连点「新会话」/两条建议问题都只应产生一个会话
+  const result = await conversationCreation.run(async () => {
+    creating.value = true
+    try {
+      const conversation = await conversationApi.create(robotModelId)
+      conversations.value = [conversation, ...conversations.value]
+      dialogVisible.value = false
+      activeId.value = conversation.id
+      activeModelCode.value = conversation.robot_model_code
+      messages.value = []
+      safetyError.value = null
+      await router.push({ name: 'chat', params: { id: String(conversation.id) } })
+      return true
+    } catch (error) {
+      ElMessage.error(apiError(error, '创建会话失败，请稍后重试'))
+      return false
+    } finally {
+      creating.value = false
+    }
+  })
+  // 被挡下等于「已经有一次创建在进行中」，按未成功处理：调用方不该接着发消息
+  return result !== SKIPPED && result
 }
 
 async function createConversation() {
@@ -208,6 +233,9 @@ async function send() {
     refreshConversationSummary(conversationId, content)
     await scrollToBottom()
   } catch (error) {
+    // 组件已卸载（用户离开了聊天页）：连接已在 onUnmounted 里 abort，
+    // 这里既不该再拉详情，也不该弹一句没人看得到的提示
+    if (disposed) { streaming.value = false; return }
     if (error instanceof ChatStreamAborted) {
       // 改真流式后，回答不再"下发前就已落库"——增量是边生成边发的，
       // 落库发生在全文校验通过之后。中断意味着这一轮整体回滚（含用户消息），
@@ -254,13 +282,16 @@ async function retryLastMessage() {
 
 async function reloadActiveConversation() {
   if (!activeId.value) return
-  try {
-    const detail = await conversationApi.get(activeId.value)
-    messages.value = detail.messages
-    await scrollToBottom()
-  } catch (error) {
+  // 与 openConversation 共用同一条时间线：中断后刷新的结果不能盖掉
+  // 用户此刻已经切过去的另一个会话
+  const { stale, value: detail, error } = await detailRequest.run(() => conversationApi.get(activeId.value as number))
+  if (stale) return
+  if (error || !detail) {
     ElMessage.error(apiError(error, '会话刷新失败，请手动重新打开'))
+    return
   }
+  messages.value = detail.messages
+  await scrollToBottom()
 }
 
 // 建议问题面向的型号：有会话就跟着会话走，没会话就用用户第一台设备的型号，
@@ -276,19 +307,21 @@ const suggestionModelId = computed<number | null>(() => {
 async function loadSuggestions(modelId: number | null) {
   if (!modelId) { suggestions.value = []; return }
   suggestionsLoading.value = true
-  try {
-    suggestions.value = await modelApi.suggestedQuestions(modelId)
-  } catch {
-    // 建议问题是锦上添花，取不到就安静降级，不要用报错打断用户
-    suggestions.value = []
-  } finally {
-    suggestionsLoading.value = false
-  }
+  const { stale, value, error } = await suggestionRequest.run(() => modelApi.suggestedQuestions(modelId))
+  // 快速切型号时，旧型号的建议问题绝不能盖到新型号上——用户会照着不属于
+  // 自己机器的问题去问
+  if (stale) return
+  suggestionsLoading.value = false
+  // 建议问题是锦上添花，取不到就安静降级，不要用报错打断用户
+  suggestions.value = error ? [] : (value ?? [])
 }
 
 watch(suggestionModelId, (modelId) => { void loadSuggestions(modelId) }, { immediate: false })
 
 async function askSuggested(question: string) {
+  // 重入守卫：冷启动连点两条建议问题，两次都看到 activeId 为空，
+  // 会各建一个会话（多出来的那个还是空的）
+  if (streaming.value || conversationCreation.busy) return
   // 还没有会话时先建一个：用户点建议问题的意图就是"我要问这个"，
   // 不应该再把他弹回"请先新建会话"的对话框
   if (!activeId.value) {
@@ -298,7 +331,7 @@ async function askSuggested(question: string) {
     if (!created) return
   }
   draft.value = question
-  void send()
+  await send()
 }
 
 function dropLastUserMessage(list: ChatMessage[], content: string) {
@@ -634,6 +667,7 @@ async function scrollToBottom() {
                   :key="question.text"
                   size="small"
                   round
+                  :disabled="streaming || creating"
                   @click="askSuggested(question.text)"
                 >{{ question.text }}</el-button>
               </div>
@@ -801,6 +835,7 @@ async function scrollToBottom() {
               size="small"
               round
               :loading="creating"
+              :disabled="streaming || creating"
               @click="askSuggested(question.text)"
             >{{ question.text }}</el-button>
           </div>

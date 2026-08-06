@@ -14,6 +14,7 @@ import argparse
 import json
 import subprocess
 import sys
+from ipaddress import ip_address, ip_network
 import urllib.error
 import urllib.request
 
@@ -83,6 +84,54 @@ def check_frontend_assets() -> list[str]:
     return checks
 
 
+def check_forwarded_chain() -> list[str]:
+    """限流按真实客户端 IP 分桶——这条链必须在**运行中的**容器里成立。
+
+    静态校验读的是仓库里的 nginx.conf 与 compose 默认值；只要镜像没重建、
+    或者线上用外部环境变量覆盖了可信网段，静态检查照样全绿而线上是坏的。
+    坏掉的后果不是「限流不准」，是任意一人失败登录 30 次锁全站（体检 D1）。
+    """
+    checks: list[str] = []
+
+    nginx_conf = container_sh(FRONTEND_SERVICE, "cat /etc/nginx/conf.d/default.conf")
+    require(
+        "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;" in nginx_conf,
+        "运行中的 Nginx 仍在覆盖 X-Forwarded-For：上游反代的真实客户端 IP 会被丢掉，"
+        "全站共用一个限流桶",
+    )
+    checks.append("running Nginx appends to the forwarded chain")
+
+    trusted = container_sh(
+        "backend", "printenv ROBOTCARE_TRUSTED_PROXY_CIDRS || true"
+    ).strip()
+    require(
+        bool(trusted),
+        "运行中的后端没有 ROBOTCARE_TRUSTED_PROXY_CIDRS：Nginx 这一跳不被信任，"
+        "client_ip() 会把所有人都算成 Nginx 容器地址",
+    )
+    networks = [ip_network(item.strip()) for item in trusted.split(",") if item.strip()]
+    require(
+        all(network.is_private and network.prefixlen >= 24 for network in networks),
+        f"运行中的可信代理网段过宽或非私有（{trusted}）：调用方可以自选限流桶",
+    )
+
+    # 真正的端到端证据：Nginx 容器解析出的地址必须落在后端信任的网段里
+    nginx_address = ip_address(
+        container_sh(
+            FRONTEND_SERVICE,
+            "getent hosts $(hostname) | awk '{print $1}' | head -1",
+        ).strip()
+    )
+    require(
+        any(nginx_address in network for network in networks),
+        f"运行中的 Nginx 地址 {nginx_address} 不在后端信任的网段 {trusted} 内："
+        "转发来的地址会被整条忽略",
+    )
+    checks.append(f"backend trusts the running Nginx address ({nginx_address})")
+
+    return checks
+
+
 def check_backend_contract(base_url: str) -> list[str]:
     """后端跑的必须是本轮的代码——以 openapi 暴露的路径为证。"""
     checks: list[str] = []
@@ -121,6 +170,7 @@ def main() -> int:
     passed: list[str] = []
     try:
         passed += check_frontend_assets()
+        passed += check_forwarded_chain()
         passed += check_backend_contract(args.backend_url.rstrip("/").removesuffix("/api/v1"))
     except CheckFailed as exc:
         for line in passed:

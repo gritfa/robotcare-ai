@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import re
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 
 import yaml
@@ -78,6 +79,21 @@ def config_default(field: str) -> float:
     raise AssertionError(f"Settings.{field} has no readable numeric default")
 
 
+def compose_env_default(raw: str, name: str) -> str:
+    """从 compose 的 `${VAR:-default}` 里取出内联默认值。
+
+    断言默认值的**语义关系**（例如「可信网段必须覆盖 nginx 的实际地址」）比断言
+    字面量可靠得多：字面量断言对「两边各改各的、互相不一致」完全免疫，本项目
+    已经因此漏掉过 nginx 上传上限与后端不一致、超时窗口互相打架等问题。
+    """
+    prefix = "${" + name + ":-"
+    require(
+        raw.startswith(prefix) and raw.endswith("}"),
+        f"{name} must be wired in compose as ${{{name}:-<default>}}",
+    )
+    return raw[len(prefix) : -1]
+
+
 def main() -> None:
     compose_path = ROOT / "docker-compose.yml"
     compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
@@ -147,11 +163,8 @@ def main() -> None:
         == "${ROBOTCARE_REFRESH_COOKIE_SECURE:-true}",
         "refresh cookies must default to Secure",
     )
-    require(
-        backend_env["ROBOTCARE_TRUSTED_PROXY_CIDRS"]
-        == "${ROBOTCARE_TRUSTED_PROXY_CIDRS:-172.30.0.10/32}",
-        "backend must trust only the pinned Nginx proxy address by default",
-    )
+    # 这条原本断言的是字面量 "…:-172.30.0.10/32"，对「地址改了但两边没对上」
+    # 完全免疫。真正的关系校验放在下面与 nginx 的实际 ipv4_address 交叉比对。
     require(
         backend_env["ROBOTCARE_LOGIN_EMAIL_MAX_FAILURES"]
         == "${ROBOTCARE_LOGIN_EMAIL_MAX_FAILURES:-20}",
@@ -335,23 +348,70 @@ def main() -> None:
         "location = /backend-healthz" not in nginx,
         "detailed backend readiness must not be exposed through public Nginx",
     )
+    # 追加而非覆盖：覆盖会在「宿主再放一层 HTTPS 反代」的拓扑下把所有用户
+    # 压成同一个地址，全站共用一个限流桶（体检 D1）。伪造风险由 client_ip()
+    # 的右到左走链 + 下面的可信网段收敛共同挡住。
     require(
-        "proxy_set_header X-Forwarded-For $remote_addr;" in nginx,
-        "Nginx must overwrite caller-controlled forwarded addresses",
+        "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;" in nginx,
+        "Nginx must append to the forwarded chain so an upstream TLS proxy's real client IP survives",
     )
     require(
-        "$proxy_add_x_forwarded_for" not in nginx,
-        "single-hop Nginx must not append an untrusted forwarded chain",
+        "proxy_set_header X-Forwarded-For $remote_addr;" not in nginx,
+        "overwriting the forwarded chain collapses every user into one rate-limit bucket",
     )
     internal_network = compose["networks"]["robotcare_internal"]
     require(
         internal_network["ipam"]["config"][0]["subnet"] == "172.30.0.0/24",
         "Compose trusted-proxy network must use its reviewed subnet",
     )
-    require(
+    nginx_address = ip_address(
         frontend["networks"]["robotcare_internal"]["ipv4_address"]
-        == "172.30.0.10",
-        "Nginx must keep the address trusted by the backend",
+    )
+    trusted_default = compose_env_default(
+        backend_env["ROBOTCARE_TRUSTED_PROXY_CIDRS"], "ROBOTCARE_TRUSTED_PROXY_CIDRS"
+    )
+    trusted_networks = [
+        ip_network(item.strip()) for item in trusted_default.split(",") if item.strip()
+    ]
+    # 空列表 = client_ip() 认不出 nginx 这一跳，直接返回它的容器地址：
+    # 追不追加 XFF 都白搭，还是全站一个桶。这是最容易被「顺手清空环境变量」
+    # 触发的静默退化，必须挡在部署前。
+    require(
+        bool(trusted_networks),
+        "ROBOTCARE_TRUSTED_PROXY_CIDRS must not be empty — the backend would treat the "
+        "Nginx container address as the client and share one bucket across all users",
+    )
+    require(
+        any(nginx_address in network for network in trusted_networks),
+        f"Nginx runs at {nginx_address} but the backend's trusted proxy networks "
+        f"({trusted_default}) do not cover it — forwarded addresses would be ignored",
+    )
+    # 网关这一跳同样必须可信。前端端口只绑 127.0.0.1，对外只能靠宿主上的 TLS
+    # 反代转发，而它经 loopback 进来后源地址一律是 Compose 网关。漏掉这一跳，
+    # 后端就把网关当客户端——全站一个限流桶（体检 D1 的完整根因，只改 Nginx
+    # 的 append 是不够的）。
+    compose_subnet = ip_network(internal_network["ipam"]["config"][0]["subnet"])
+    gateway = next(compose_subnet.hosts())
+    require(
+        any(gateway in network for network in trusted_networks),
+        f"Compose gateway {gateway} is not trusted ({trusted_default}) — an upstream TLS "
+        "proxy reaching the stack through loopback would collapse every user into one bucket",
+    )
+    frontend_ports = frontend.get("ports", [])
+    require(
+        all(str(mapping).startswith("127.0.0.1:") for mapping in frontend_ports),
+        f"frontend ports {frontend_ports} must stay bound to loopback — trusting the Compose "
+        "gateway is only safe while the sole reachable caller is a host-side proxy",
+    )
+    require(
+        all(network.is_private for network in trusted_networks),
+        f"trusted proxy networks must stay private ({trusted_default}) — trusting a public "
+        "range lets any caller pick their own rate-limit bucket via X-Forwarded-For",
+    )
+    require(
+        all(network.prefixlen >= 24 for network in trusted_networks),
+        f"trusted proxy networks must be no wider than /24 ({trusted_default}) — a broad "
+        "range effectively trusts caller-supplied forwarded addresses",
     )
     frontend_dockerfile = (ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
     require(

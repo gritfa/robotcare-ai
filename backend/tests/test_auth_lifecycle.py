@@ -410,6 +410,66 @@ def test_trusted_proxy_resolution_ignores_spoofing_and_walks_chain_right_to_left
     assert client_ip(malformed, trusted_settings) == "10.0.0.10"
 
 
+def test_two_hop_proxy_chain_keeps_the_real_client_and_ignores_spoofed_prefix():
+    """宿主 HTTPS 反代 → 容器 Nginx → 后端：真实客户端必须活到限流桶里。
+
+    Nginx 从覆盖式 X-Forwarded-For 改成 $proxy_add_x_forwarded_for 之后，
+    链上会有两个可信跳。原来的覆盖式写法在这个拓扑下把所有人压成同一个地址，
+    任意一人失败登录 30 次就能锁掉全站（2026-08-06 体检 D1）。
+    """
+
+    settings = Settings(trusted_proxy_cidrs="172.30.0.0/24", _env_file=None)
+
+    # 上游反代把真实客户端写进链首，容器 Nginx 追加自己看到的上游地址
+    two_hops = Request(
+        {
+            "type": "http",
+            "headers": [(b"x-forwarded-for", b"203.0.113.44, 172.30.0.1")],
+            "client": ("172.30.0.10", 50000),
+        }
+    )
+    assert client_ip(two_hops, settings) == "203.0.113.44"
+
+    # 同一拓扑下换一个真实客户端，必须落到不同的桶——否则限流形同虚设
+    other_client = Request(
+        {
+            "type": "http",
+            "headers": [(b"x-forwarded-for", b"203.0.113.45, 172.30.0.1")],
+            "client": ("172.30.0.10", 50000),
+        }
+    )
+    assert client_ip(other_client, settings) != client_ip(two_hops, settings)
+
+    # 调用方自己塞的值只会排在链最左边，右到左走链永远取不到它
+    spoofed_prefix = Request(
+        {
+            "type": "http",
+            "headers": [(b"x-forwarded-for", b"9.9.9.9, 203.0.113.44, 172.30.0.1")],
+            "client": ("172.30.0.10", 50000),
+        }
+    )
+    assert client_ip(spoofed_prefix, settings) == "203.0.113.44"
+
+
+def test_empty_trusted_proxy_config_falls_back_to_the_peer_instead_of_trusting_headers():
+    """没配可信网段时宁可退化成「全站一个桶」，也不能采信调用方的头。
+
+    这个退化本身是不可接受的运维状态（登录限流会被一个人拖垮），
+    由 scripts/verify_deployment_config.py 在部署前拦下；这里锁住的是
+    「退化的方向必须是保守的」——不能变成人人自选限流桶。
+    """
+
+    settings = Settings(trusted_proxy_cidrs="", _env_file=None)
+    request = Request(
+        {
+            "type": "http",
+            "headers": [(b"x-forwarded-for", b"203.0.113.44, 172.30.0.1")],
+            "client": ("172.30.0.10", 50000),
+        }
+    )
+    assert client_ip(request, settings) == "172.30.0.10"
+
+
 def test_postgres_login_lock_ids_are_ordered_and_share_email_or_ip_boundaries():
     settings = Settings(_env_file=None)
 

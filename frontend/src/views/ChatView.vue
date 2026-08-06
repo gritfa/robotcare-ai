@@ -62,6 +62,10 @@ const dialogSelection = ref('')
 const creating = ref(false)
 
 const messageArea = ref<HTMLElement | null>(null)
+// 后端只回最近一页消息（D5 分页）。截断时要如实告诉用户，
+// 否则一条长会话看起来像是「前面的记录被吞了」。
+const historyTruncated = ref(false)
+const totalMessages = ref(0)
 
 // 连点两个会话时，慢的那次不许覆盖快的那次（详情与建议问题各一条时间线）
 const detailRequest = createLatestOnly()
@@ -134,6 +138,8 @@ async function openConversation(id: number, { syncRoute = true } = {}) {
   activeId.value = detail.id
   activeModelCode.value = detail.robot_model_code
   messages.value = detail.messages
+  historyTruncated.value = Boolean(detail.truncated)
+  totalMessages.value = detail.total_messages ?? detail.messages.length
   if (syncRoute) await router.push({ name: 'chat', params: { id: String(id) } })
   await scrollToBottom()
 }
@@ -168,6 +174,8 @@ async function createConversationFor(robotModelId: number): Promise<boolean> {
       activeId.value = conversation.id
       activeModelCode.value = conversation.robot_model_code
       messages.value = []
+      historyTruncated.value = false
+      totalMessages.value = 0
       safetyError.value = null
       await router.push({ name: 'chat', params: { id: String(conversation.id) } })
       return true
@@ -291,6 +299,8 @@ async function reloadActiveConversation() {
     return
   }
   messages.value = detail.messages
+  historyTruncated.value = Boolean(detail.truncated)
+  totalMessages.value = detail.total_messages ?? detail.messages.length
   await scrollToBottom()
 }
 
@@ -657,6 +667,9 @@ async function scrollToBottom() {
           </div>
 
           <div ref="messageArea" class="message-area">
+            <p v-if="historyTruncated" class="history-note">
+              仅显示最近 {{ messages.length }} 条，此前还有 {{ totalMessages - messages.length }} 条更早的消息未加载。
+            </p>
             <div v-if="!messages.length && !streaming" class="chat-placeholder">
               <el-icon><ChatDotRound /></el-icon>
               <p>描述“想完成的操作 + 当前现象 + 已尝试步骤”，回答会附资料页码；追问时无需重复背景。</p>
@@ -939,6 +952,7 @@ async function scrollToBottom() {
 .bubble-feedback{margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:2px}
 .citation-tag{cursor:pointer}
 .citation-hint{font-size:12px;color:var(--muted,#8a9a92);align-self:center}
+.history-note{margin:0 0 10px;padding:8px 12px;background:#f4f8f6;border-radius:8px;color:var(--muted);font-size:12px;line-height:1.6;text-align:center}
 .conversation-search{margin-bottom:10px}
 .conversation-row{display:flex;align-items:center;gap:4px;border-radius:10px}
 .conversation-row.active{background:#eef6f2}

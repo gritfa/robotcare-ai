@@ -657,6 +657,10 @@ class ConversationDetailRead(BaseModel):
     robot_model_code: str
     title: str
     messages: list[ConversationMessageRead]
+    # 只回最近 N 条。长会话此前是全量加载：一次请求把整段历史读进内存再序列化，
+    # 而多轮上下文本来就只取最近若干条，多读的部分谁也没用上（体检 D5）。
+    total_messages: int = 0
+    truncated: bool = False
 
 
 class ChatMessageRequest(BaseModel):

@@ -22,6 +22,24 @@ from ..models import (
 from ..observability import request_trace_id
 from ..schemas import RegisterRequest, TokenResponse
 
+LIKE_ESCAPE = "\\"
+
+
+def escape_like(value: str) -> str:
+    """转义 LIKE/ILIKE 的通配符，让用户输入只当字面量匹配。
+
+    不转义时，一个 `%` 就退化成「匹配全部」——在会话正文上做全表 ILIKE 扫描，
+    单个请求即可拖慢库；`_` 同理会放大匹配面。反斜杠必须先转，否则后面补的
+    转义符自己会被再转一次（体检 D5）。
+    """
+
+    return (
+        value.replace(LIKE_ESCAPE, LIKE_ESCAPE * 2)
+        .replace("%", f"{LIKE_ESCAPE}%")
+        .replace("_", f"{LIKE_ESCAPE}_")
+    )
+
+
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 MAX_ATTACHMENTS_PER_DIAGNOSTIC = 5
 MAX_IMAGE_PIXELS = 25_000_000

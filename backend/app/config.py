@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     login_ip_max_failures: int = Field(default=30, ge=1, le=5000)
     login_window_minutes: int = Field(default=15, ge=1, le=1440)
     login_lock_minutes: int = Field(default=15, ge=1, le=1440)
+    # 登录成功也要限流：失败计数只拦得住猜密码的人，拦不住拿着有效凭据狂刷
+    # 令牌的脚本——每次成功登录都签发一对 token 并写一行 refresh_tokens（体检 D5）
+    login_success_email_per_minute: int = Field(default=10, ge=1, le=1000)
+    login_success_ip_per_minute: int = Field(default=30, ge=1, le=5000)
+    # 每个用户的会话总数上限。会话表此前无上限，一个脚本可以无限建空会话
+    max_conversations_per_user: int = Field(default=200, ge=1, le=10000)
     trusted_proxy_cidrs: str = ""
     registration_email_per_minute: int = Field(default=3, ge=1, le=1000)
     registration_ip_per_minute: int = Field(default=10, ge=1, le=5000)

@@ -59,7 +59,7 @@ from ..schemas import (
     KnowledgeStatusRead,
 )
 from ..security import require_admin, require_knowledge_manage, require_operations_read
-from ._shared import audit_sensitive_admin_read, mask_email
+from ._shared import LIKE_ESCAPE, audit_sensitive_admin_read, escape_like, mask_email
 
 router = APIRouter(prefix="/api/v1")
 
@@ -809,11 +809,13 @@ def admin_list_conversations(
         statement = statement.where(RobotModel.code == model_code)
     if search:
         # 标题与正文一起搜：投诉转述的往往是回答里的一句话，不是会话标题
-        keyword = f"%{search.strip()}%"
+        keyword = f"%{escape_like(search.strip())}%"
         statement = statement.where(
             or_(
-                Conversation.title.ilike(keyword),
-                Conversation.messages.any(ConversationMessage.content.ilike(keyword)),
+                Conversation.title.ilike(keyword, escape=LIKE_ESCAPE),
+                Conversation.messages.any(
+                    ConversationMessage.content.ilike(keyword, escape=LIKE_ESCAPE)
+                ),
             )
         )
     return [

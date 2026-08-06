@@ -9,9 +9,9 @@ import json
 import logging
 from collections.abc import Iterator
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
@@ -34,6 +34,7 @@ from ..models import (
 )
 from ..observability import emit_json_log, request_trace_id
 from ..rate_limit_service import enforce_business_rate_limit, enforce_embedding_rate_limit
+from ._shared import LIKE_ESCAPE, escape_like
 from ..safety import detect_safety_block
 from ..schemas import (
     AnswerCitationRead,
@@ -53,6 +54,13 @@ router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 
 MAX_CONTEXT_MESSAGES = 6
 STREAM_CHUNK_CHARS = 48
+# 会话详情默认/最大返回条数。默认值远大于 MAX_CONTEXT_MESSAGES，
+# 保证「界面看得到的历史」比「模型实际用到的上下文」宽裕得多。
+MESSAGE_PAGE_SIZE = 200
+MAX_MESSAGE_PAGE_SIZE = 500
+# 会话列表单页上限（原本硬编码 50，提出来供测试与前端共用）
+CONVERSATION_PAGE_SIZE = 50
+MAX_CONVERSATION_PAGE_SIZE = 200
 REFUSAL_TEXTS = {
     "knowledge_gap": "抱歉，当前资料中没有找到能回答这个问题的内容，建议联系官方售后获取帮助。",
     "model_refused": "抱歉，现有资料不足以回答这个问题，建议联系官方售后获取帮助。",
@@ -62,10 +70,15 @@ REFUSAL_TEXTS = {
 
 
 def _owned_conversation(db: Session, conversation_id: int, user: User) -> Conversation:
+    """按 id 取会话并校验归属。
+
+    **不要**在这里 selectinload(messages)。原来这么写，等于每个用到会话的接口
+    （发消息、流式、反馈、改标题）都把整段历史读进内存——发一条消息只需要最近
+    6 条上下文，却要先把几百条全读出来（体检 D5）。需要消息的地方各自按需分页。
+    """
+
     conversation = db.scalar(
-        select(Conversation)
-        .options(selectinload(Conversation.messages))
-        .where(Conversation.id == conversation_id)
+        select(Conversation).where(Conversation.id == conversation_id)
     )
     if conversation is None or conversation.user_id != user.id:
         # 404 而非 403：不向他人泄露会话是否存在
@@ -96,6 +109,26 @@ def create_conversation(
     robot_model = db.scalar(select(RobotModel).where(RobotModel.id == payload.robot_model_id))
     if robot_model is None:
         raise HTTPException(status_code=404, detail="Robot model not found")
+    # 会话表此前无上限：一个脚本可以无限建空会话，把库和列表接口一起撑坏（体检 D5）。
+    # 用 409 而不是 429——这不是"太快了等一会儿"，是"你的会话太多了，删掉一些"。
+    settings = get_settings()
+    existing = db.scalar(
+        select(func.count())
+        .select_from(Conversation)
+        .where(Conversation.user_id == user.id)
+    ) or 0
+    if existing >= settings.max_conversations_per_user:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "CONVERSATION_LIMIT_REACHED",
+                "limit": settings.max_conversations_per_user,
+                "message": (
+                    f"会话数量已达上限 {settings.max_conversations_per_user} 个，"
+                    "请先删除一些不再需要的会话。"
+                ),
+            },
+        )
     conversation = Conversation(user_id=user.id, robot_model_id=robot_model.id)
     db.add(conversation)
     db.commit()
@@ -111,7 +144,10 @@ def create_conversation(
 
 @router.get("", response_model=list[ConversationRead])
 def list_conversations(
-    search: str | None = None,
+    search: str | None = Query(default=None, max_length=120),
+    limit: int = Query(
+        default=CONVERSATION_PAGE_SIZE, ge=1, le=MAX_CONVERSATION_PAGE_SIZE
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ConversationRead]:
@@ -122,14 +158,16 @@ def list_conversations(
     )
     if search:
         # 标题 + 消息正文一起搜：用户记得的往往是"我问过拖布"，而不是会话标题
-        keyword = f"%{search.strip()}%"
+        keyword = f"%{escape_like(search.strip())}%"
         statement = statement.where(
             or_(
-                Conversation.title.ilike(keyword),
-                Conversation.messages.any(ConversationMessage.content.ilike(keyword)),
+                Conversation.title.ilike(keyword, escape=LIKE_ESCAPE),
+                Conversation.messages.any(
+                    ConversationMessage.content.ilike(keyword, escape=LIKE_ESCAPE)
+                ),
             )
         )
-    rows = db.execute(statement.order_by(Conversation.updated_at.desc()).limit(50)).all()
+    rows = db.execute(statement.order_by(Conversation.updated_at.desc()).limit(limit)).all()
     return [
         ConversationRead(
             id=c.id,
@@ -191,17 +229,42 @@ def delete_conversation(
 @router.get("/{conversation_id}", response_model=ConversationDetailRead)
 def get_conversation(
     conversation_id: int,
+    limit: int = Query(default=MESSAGE_PAGE_SIZE, ge=1, le=MAX_MESSAGE_PAGE_SIZE),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ConversationDetailRead:
+    """只回最近 `limit` 条消息。
+
+    此前是 `conversation.messages` 全量加载：一条会话问上几百轮之后，每次打开
+    都要把整段历史读进内存再序列化，而多轮上下文本来只取最近若干条——多读的
+    部分谁也没用上，纯粹是内存和带宽（体检 D5）。
+    """
+
     conversation = _owned_conversation(db, conversation_id, user)
     robot_model = db.get(RobotModel, conversation.robot_model_id)
+    total = db.scalar(
+        select(func.count())
+        .select_from(ConversationMessage)
+        .where(ConversationMessage.conversation_id == conversation.id)
+    ) or 0
+    # 取最近 limit 条（按 id 倒序），再翻回时间正序交给前端渲染
+    recent = list(
+        db.scalars(
+            select(ConversationMessage)
+            .where(ConversationMessage.conversation_id == conversation.id)
+            .order_by(ConversationMessage.id.desc())
+            .limit(limit)
+        )
+    )
+    recent.reverse()
     return ConversationDetailRead(
         id=conversation.id,
         robot_model_id=conversation.robot_model_id,
         robot_model_code=robot_model.code,
         title=conversation.title,
-        messages=[_message_read(m) for m in conversation.messages],
+        messages=[_message_read(m) for m in recent],
+        total_messages=total,
+        truncated=total > len(recent),
     )
 
 
@@ -244,10 +307,17 @@ def _prepare_turn(
         db, request, action="knowledge_answer", user_id=user.id, settings=settings
     )
 
-    history = [
-        {"role": m.role, "content": m.content}
-        for m in conversation.messages[-MAX_CONTEXT_MESSAGES:]
-    ]
+    # 只查最近 MAX_CONTEXT_MESSAGES 条，而不是全量加载后切片
+    recent_messages = list(
+        db.scalars(
+            select(ConversationMessage)
+            .where(ConversationMessage.conversation_id == conversation.id)
+            .order_by(ConversationMessage.id.desc())
+            .limit(MAX_CONTEXT_MESSAGES)
+        )
+    )
+    recent_messages.reverse()
+    history = [{"role": m.role, "content": m.content} for m in recent_messages]
     decision = classify_message(content, has_history=bool(history))
     emit_json_log(
         logging.INFO,

@@ -5,7 +5,17 @@ import logging
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -56,6 +66,9 @@ from ._shared import (
 )
 
 router = APIRouter(prefix="/api/v1")
+
+DIAGNOSTIC_PAGE_SIZE = 100
+MAX_DIAGNOSTIC_PAGE_SIZE = 200
 
 
 @router.post("/diagnostics", response_model=DiagnosticRead, status_code=201)
@@ -207,8 +220,12 @@ def create_diagnostic(
 
 @router.get("/diagnostics", response_model=list[DiagnosticRead])
 def list_diagnostics(
-    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+    limit: int = Query(default=DIAGNOSTIC_PAGE_SIZE, ge=1, le=MAX_DIAGNOSTIC_PAGE_SIZE),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[DiagnosticSession]:
+    # 每条诊断还要 selectinload 出全部步骤执行记录与报告，无 limit 的话
+    # 一个老账号打开「诊断历史」就是一次全表级读取（体检 D5）
     stmt = (
         select(DiagnosticSession)
         .options(
@@ -217,6 +234,7 @@ def list_diagnostics(
         )
         .where(DiagnosticSession.user_id == user.id)
         .order_by(DiagnosticSession.created_at.desc())
+        .limit(limit)
     )
     return list(db.scalars(stmt))
 

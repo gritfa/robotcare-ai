@@ -362,6 +362,9 @@ export interface ConversationDetail {
   robot_model_code: string
   title: string
   messages: ChatMessage[]
+  /** 后端只回最近一页消息；下面两个字段说明这一页之外还有多少（后端 D5 分页） */
+  total_messages?: number
+  truncated?: boolean
 }
 
 export interface ChatMessagePair {

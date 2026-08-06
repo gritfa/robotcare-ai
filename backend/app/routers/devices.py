@@ -1,6 +1,6 @@
 """/devices* routes: create, list, get, update, delete."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -11,6 +11,9 @@ from ..security import get_current_user
 from ._shared import owned_device
 
 router = APIRouter(prefix="/api/v1")
+
+DEVICE_PAGE_SIZE = 100
+MAX_DEVICE_PAGE_SIZE = 200
 
 
 @router.post("/devices", response_model=DeviceRead, status_code=201)
@@ -31,12 +34,18 @@ def create_device(
 
 
 @router.get("/devices", response_model=list[DeviceRead])
-def list_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[UserDevice]:
+def list_devices(
+    limit: int = Query(default=DEVICE_PAGE_SIZE, ge=1, le=MAX_DEVICE_PAGE_SIZE),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[UserDevice]:
+    # 无 limit 的列表接口迟早会被一个绑了几千台设备的账号拖垮（体检 D5）
     stmt = (
         select(UserDevice)
         .options(selectinload(UserDevice.robot_model))
         .where(UserDevice.user_id == user.id)
         .order_by(UserDevice.created_at.desc())
+        .limit(limit)
     )
     return list(db.scalars(stmt))
 

@@ -168,6 +168,44 @@ def enforce_registration_rate_limit(
     )
 
 
+def enforce_login_success_rate_limit(
+    db: Session,
+    email: str,
+    request: Request,
+    settings: Settings | None = None,
+) -> None:
+    # 参数顺序刻意与同文件的 enforce_login_rate_limit 保持一致（db, email, request）。
+    # registration 那个是 (db, request, email)，两者在同一文件里很容易记混。
+    """成功登录也要计费。
+
+    失败计数（enforce_login_rate_limit）只拦得住猜密码的人。拿着一副有效凭据
+    的脚本可以无限次登录：每次都签发一对 token、写一行 refresh_tokens、跑一次
+    Argon2 校验——这三件事都不便宜，而此前成功路径上没有任何速率约束（体检 D5）。
+    """
+
+    resolved = settings or get_settings()
+    consume_rate_quotas(
+        db,
+        (
+            RateQuota(
+                "login_success",
+                "email",
+                normalize_email(email),
+                "minute",
+                resolved.login_success_email_per_minute,
+            ),
+            RateQuota(
+                "login_success",
+                "ip",
+                client_ip(request, resolved),
+                "minute",
+                resolved.login_success_ip_per_minute,
+            ),
+        ),
+        resolved,
+    )
+
+
 def enforce_business_rate_limit(
     db: Session,
     request: Request,

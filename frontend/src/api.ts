@@ -9,6 +9,12 @@ import { applyAuthResult, clearAuthState, getAccessToken, notifyAuthenticationLo
 export { TOKEN_KEY } from './authSession'
 export const http = axios.create({ baseURL: '/api/v1', timeout: 20000, withCredentials: true })
 
+// 会真的调大模型的请求需要单独的超时。20s 的默认值小于后端的生成预算
+// （llm_budget 50s），慢的时候前端先超时报"服务暂不可用"，后端却还在正常
+// 生成、还在烧 token，用户重试一次又是同样的 20s 假失败（2026-08-06 体检 #6）。
+// 这个值必须大于后端预算；verify_deployment_config.py 有交叉断言。
+export const GENERATION_TIMEOUT_MS = 65000
+
 type RetryableRequest = InternalAxiosRequestConfig & { _authRetry?: boolean }
 const AUTH_ENDPOINTS_WITHOUT_REFRESH = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout']
 const AUTH_REFRESH_LOCK = 'robotcare-auth-refresh'
@@ -365,8 +371,10 @@ export const knowledgeApi = {
     return listPayload<KnowledgeSearchResult>(response.data)
   },
   answer: async (body: { robot_model_id: number; query: string; top_k?: number }) =>
-    payload<KnowledgeAnswer>((await http.post('/knowledge/answer', body)).data),
-  health: async (probe = false) => payload<KnowledgeHealth>((await http.get('/knowledge/health', { params: probe ? { probe: true } : undefined, timeout: probe ? 60000 : undefined })).data),
+    payload<KnowledgeAnswer>(
+      (await http.post('/knowledge/answer', body, { timeout: GENERATION_TIMEOUT_MS })).data,
+    ),
+  health: async (probe = false) => payload<KnowledgeHealth>((await http.get('/knowledge/health', { params: probe ? { probe: true } : undefined, timeout: probe ? GENERATION_TIMEOUT_MS : undefined })).data),
   status: async () => listPayload<KnowledgeModelStatus>((await http.get('/knowledge/status')).data),
   /** 只取引用命中的那一页原件；官方外链常常是几十 MB 的整本 PDF。 */
   citationPage: async (sha256: string, page: number) =>

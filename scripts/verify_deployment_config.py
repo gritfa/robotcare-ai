@@ -240,6 +240,22 @@ def main() -> None:
             "backend keeps burning tokens",
         )
 
+    # 前端调生成的超时必须大于后端预算，否则前端先超时报"服务不可用"，
+    # 后端还在正常生成、还在计费，用户重试又是同样的假失败（体检 #6）。
+    api_ts = (ROOT / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
+    generation_timeout = re.search(r"GENERATION_TIMEOUT_MS\s*=\s*(\d+)", api_ts)
+    require(
+        generation_timeout is not None,
+        "frontend must pin GENERATION_TIMEOUT_MS for model-backed requests",
+    )
+    frontend_generation_seconds = int(generation_timeout.group(1)) / 1000
+    require(
+        frontend_generation_seconds > config_default("llm_budget_seconds"),
+        f"frontend generation timeout ({frontend_generation_seconds:g}s) must exceed the backend "
+        f"budget ({config_default('llm_budget_seconds'):g}s), otherwise the browser gives up while "
+        "the backend is still generating and billing",
+    )
+
     # 流式的最坏耗时是 budget + read，不是 budget：越界只能在拿到一块之后
     # 发现，阻塞在读上是打断不了的（见 llm_transport.stream_with_budget）。
     # 反代必须给到这个上界，否则预算闸永远轮不到生效（2026-08-06 体检 #4）。

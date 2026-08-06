@@ -9,7 +9,7 @@ import threading
 from collections.abc import Mapping
 from contextvars import ContextVar
 from pathlib import Path
-from time import perf_counter
+from time import monotonic, perf_counter
 from typing import Any
 from uuid import uuid4
 
@@ -237,6 +237,44 @@ def install_observability(application: FastAPI) -> None:
             _trace_context.reset(context_token)
 
 
+class EmbeddingReachability:
+    """带缓存的 embedding 轻量可达性探测。
+
+    /ready 被容器 healthcheck 每 10s 打一次，若每次都真发一次 embedding 调用，
+    光探针一天就是近万次付费请求。所以成功结果缓存较久、失败结果缓存较短
+    （坏了要尽快恢复感知），并用锁保证同一时刻只有一个探测在飞。
+    """
+
+    def __init__(self, success_ttl_seconds: int = 300, failure_ttl_seconds: int = 30):
+        self.success_ttl_seconds = success_ttl_seconds
+        self.failure_ttl_seconds = failure_ttl_seconds
+        self._lock = threading.Lock()
+        self._checked_at: float | None = None
+        self._reachable = False
+        self._error_type: str | None = None
+
+    def _fresh(self, now: float) -> bool:
+        if self._checked_at is None:
+            return False
+        ttl = self.success_ttl_seconds if self._reachable else self.failure_ttl_seconds
+        return (now - self._checked_at) < ttl
+
+    def check(self, provider: Any) -> tuple[bool, str | None]:
+        now = monotonic()
+        with self._lock:
+            if self._fresh(now):
+                return self._reachable, self._error_type
+            try:
+                vector = provider.embed_query("ready")
+                self._reachable = bool(vector)
+                self._error_type = None if self._reachable else "EmptyEmbedding"
+            except Exception as exc:  # noqa: BLE001 — 就绪探针不该把异常抛给调用方
+                self._reachable = False
+                self._error_type = type(exc).__name__
+            self._checked_at = monotonic()
+            return self._reachable, self._error_type
+
+
 def _storage_component(path: Path) -> dict[str, Any]:
     exists = path.exists()
     is_directory = path.is_dir() if exists else False
@@ -284,15 +322,30 @@ def readiness_status(application: FastAPI, trace_id: str) -> tuple[int, dict[str
 
     components["attachments"] = _storage_component(application.state.attachment_dir)
     components["reports"] = _storage_component(application.state.report_dir)
+    # 知识原件目录此前不在就绪检查里：卷没挂上时服务照样报 ready，
+    # 直到用户点开"查看原页"才 404 —— 就绪探针的意义就是提前拦住这种半瘫状态。
+    components["knowledge"] = _storage_component(application.state.knowledge_dir)
     production = getattr(application.state, "environment", "development") == "production"
     embedding_configured = bool(
         getattr(application.state, "embedding_configured", False)
     )
-    components["embedding"] = {
+    embedding_component: dict[str, Any] = {
         "status": "ok" if embedding_configured or not production else "error",
         "configured": embedding_configured,
         "required": production,
     }
+    # 配置存在不等于服务可达（key 失效 / DNS / 权限都可能）。做一次**带缓存**的
+    # 轻量真实调用：/ready 被 healthcheck 每 10s 打一次，不缓存就是在烧钱。
+    probe = getattr(application.state, "embedding_reachability", None)
+    if probe is not None and embedding_configured:
+        reachable, error_type = probe.check(application.state.embedding_provider)
+        embedding_component["reachable"] = reachable
+        if error_type:
+            embedding_component["error_type"] = error_type
+        if not reachable and production:
+            # 非 production 不因外部模型不可达而 not_ready：本地开发常年没 key
+            embedding_component["status"] = "error"
+    components["embedding"] = embedding_component
     is_ready = all(component["status"] == "ok" for component in components.values())
     return (
         200 if is_ready else 503,

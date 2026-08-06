@@ -18,8 +18,17 @@ from app.knowledge_service import (
     split_pages,
 )
 from app.config import Settings
-from app.models import ApiRateLimit, KnowledgeChunk, KnowledgeDocument, RobotModel
+from app.models import ApiRateLimit, KnowledgeChunk, KnowledgeDocument, RobotModel, User
 from conftest import auth, register
+
+
+def _with_role(client, email: str, role: str) -> str:
+    token = register(client, email)["access_token"]
+    with client.app.state.session_factory() as db:
+        user = db.scalar(select(User).where(User.email == email))
+        user.role = role
+        db.commit()
+    return token
 
 
 class FakeEmbeddingProvider:
@@ -723,7 +732,8 @@ def _seed_ready_knowledge(client):
 
 
 def test_knowledge_health_probe_proves_external_models_with_real_calls(client):
-    token = register(client, "knowledge-probe@example.com")["access_token"]
+    # probe 是有真实调用成本的运维动作，收权到 viewer 及以上（D2）
+    token = _with_role(client, "knowledge-probe@example.com", "viewer")
     headers = auth(token)
     client.app.state.embedding_provider = FakeEmbeddingProvider()
     client.app.state.embedding_configured = True
@@ -747,7 +757,7 @@ def test_knowledge_health_probe_proves_external_models_with_real_calls(client):
 
 
 def test_knowledge_health_probe_downgrades_when_generation_actually_fails(client):
-    token = register(client, "knowledge-probe-fail@example.com")["access_token"]
+    token = _with_role(client, "knowledge-probe-fail@example.com", "viewer")
     headers = auth(token)
     client.app.state.embedding_provider = FakeEmbeddingProvider()
     client.app.state.embedding_configured = True
@@ -768,3 +778,71 @@ def test_knowledge_health_probe_downgrades_when_generation_actually_fails(client
     assert probe["retrieval_end_to_end"] is True
     assert probe["generation_service"] is False
     assert any("upstream 503" in item for item in probe["errors"])
+
+
+def test_probe_requires_operations_capability_and_counts_generation_quota(client):
+    """D2：probe=true 会发真实生成调用，普通用户不该能触发，且必须计入生成配额。"""
+    plain_token = register(client, "probe-plain-user@example.com")["access_token"]
+    client.app.state.embedding_provider = FakeEmbeddingProvider()
+    client.app.state.embedding_configured = True
+    client.app.state.generation_provider = ProbeGenerationProvider()
+    _seed_ready_knowledge(client)
+
+    # 普通用户：不带 probe 照常可读（这是运行状态展示，不能一刀切封死）
+    assert client.get("/api/v1/knowledge/health", headers=auth(plain_token)).status_code == 200
+    # 带 probe：403
+    denied = client.get(
+        "/api/v1/knowledge/health", params={"probe": True}, headers=auth(plain_token)
+    )
+    assert denied.status_code == 403
+
+    # viewer 触发 probe 后，生成侧配额必须被消耗（此前只受 embedding 日配额约束，
+    # 等于给生成开了一条不计费的旁路）
+    viewer_token = _with_role(client, "probe-viewer@example.com", "viewer")
+    with client.app.state.session_factory() as db:
+        before = db.scalar(
+            select(func.coalesce(func.sum(ApiRateLimit.request_count), 0)).where(
+                ApiRateLimit.action == "knowledge_answer"
+            )
+        )
+    ok = client.get(
+        "/api/v1/knowledge/health", params={"probe": True}, headers=auth(viewer_token)
+    )
+    assert ok.status_code == 200
+    with client.app.state.session_factory() as db:
+        after = db.scalar(
+            select(func.coalesce(func.sum(ApiRateLimit.request_count), 0)).where(
+                ApiRateLimit.action == "knowledge_answer"
+            )
+        )
+    assert after > before
+
+
+def test_knowledge_search_cache_is_bounded_and_purges_expired():
+    """D4：长尾查询此前只增不减，进程内缓存会一路涨到 OOM。"""
+    from app.rate_limit_service import KnowledgeSearchCache
+
+    cache = KnowledgeSearchCache(ttl_seconds=60, max_entries=3)
+    for index in range(10):
+        cache.set(f"key-{index}", [index])
+    assert cache.size() == 3
+    # 最久未使用的先走
+    assert cache.get("key-0") is None
+    assert cache.get("key-9") == [9]
+
+    # LRU 语义：被读过的键不该在下一次写入时被淘汰
+    lru = KnowledgeSearchCache(ttl_seconds=60, max_entries=2)
+    lru.set("a", [1])
+    lru.set("b", [2])
+    lru.get("a")
+    lru.set("c", [3])
+    assert lru.get("a") == [1]
+    assert lru.get("b") is None
+
+    # 过期条目即使没人再来查，也要被写入时的清扫回收
+    expiring = KnowledgeSearchCache(ttl_seconds=1, max_entries=100)
+    expiring.set("stale", [1])
+    sleep(1.1)
+    expiring.set("fresh", [2])
+    assert expiring.size() == 1
+    assert expiring.get("stale") is None

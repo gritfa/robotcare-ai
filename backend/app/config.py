@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     alert_webhook_format: str = "wecom"  # wecom | dingtalk | generic
     alert_cooldown_seconds: int = Field(default=14400, ge=60, le=86400)
     knowledge_search_cache_ttl_seconds: int = Field(default=30, ge=1, le=300)
+    knowledge_search_cache_max_entries: int = Field(default=512, ge=16, le=100000)
+    citation_page_cache_max_entries: int = Field(default=64, ge=1, le=10000)
+    citation_page_cache_max_mb: int = Field(default=32, ge=1, le=1024)
+    citation_page_max_concurrent: int = Field(default=4, ge=1, le=64)
+    readiness_probe_success_ttl_seconds: int = Field(default=300, ge=10, le=3600)
+    readiness_probe_failure_ttl_seconds: int = Field(default=30, ge=5, le=600)
     cors_origins: str = "http://localhost:5173"
     attachment_dir: str = "./data/attachments"
     report_dir: str = "./data/reports"

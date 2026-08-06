@@ -17,11 +17,13 @@ from .generation_service import (
 from .knowledge_service import DashScopeEmbeddingProvider, EmbeddingProvider
 from .migration_guard import ensure_database_at_head
 from .observability import (
+    EmbeddingReachability,
     emit_json_log,
     install_observability,
     readiness_status,
     request_trace_id,
 )
+from .citation_page_service import CitationPageCache
 from .rate_limit_service import KnowledgeSearchCache
 from .seed import seed_database
 
@@ -61,7 +63,17 @@ def create_app(
         timeout_policy=getattr(settings, "embedding_timeout_policy", None),
     )
     application.state.knowledge_search_cache = KnowledgeSearchCache(
-        settings.knowledge_search_cache_ttl_seconds
+        settings.knowledge_search_cache_ttl_seconds,
+        max_entries=settings.knowledge_search_cache_max_entries,
+    )
+    application.state.embedding_reachability = EmbeddingReachability(
+        success_ttl_seconds=settings.readiness_probe_success_ttl_seconds,
+        failure_ttl_seconds=settings.readiness_probe_failure_ttl_seconds,
+    )
+    application.state.citation_page_cache = CitationPageCache(
+        max_entries=settings.citation_page_cache_max_entries,
+        max_bytes=settings.citation_page_cache_max_mb * 1024 * 1024,
+        max_concurrent_extractions=settings.citation_page_max_concurrent,
     )
     application.state.generation_provider = generation_provider or build_generation_provider(settings)
     application.state.generation_configured = bool(

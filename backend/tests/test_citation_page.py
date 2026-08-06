@@ -132,3 +132,78 @@ def test_document_without_archive_falls_back_with_clear_message(client):
 
     assert response.status_code == 404
     assert "原件" in response.json()["detail"]
+
+
+def test_corrupt_archive_returns_readable_error_not_500(client):
+    """损坏/非 PDF 的原件此前让 pypdf 直接抛穿，用户看到的是裸 500。"""
+    _model_id, sha = _ingest(client)
+    token = register(client, "citation-corrupt@example.com")["access_token"]
+    with client.app.state.session_factory() as db:
+        document = db.scalar(select(KnowledgeDocument).where(KnowledgeDocument.sha256 == sha))
+        stored = Path(client.app.state.knowledge_dir) / document.stored_filename
+        stored.write_bytes(b"not a pdf at all")
+        db.commit()
+
+    response = client.get(f"/api/v1/knowledge/citations/{sha}/pages/1", headers=auth(token))
+
+    assert response.status_code == 422
+    assert "原件" in response.json()["detail"]
+
+
+def test_second_read_is_served_from_cache(client):
+    """同一 (sha, page) 结果不变，第二次不该再解析整本 PDF。"""
+    _model_id, sha = _ingest(client)
+    token = register(client, "citation-cache@example.com")["access_token"]
+    cache = client.app.state.citation_page_cache
+
+    first = client.get(f"/api/v1/knowledge/citations/{sha}/pages/1", headers=auth(token))
+    assert first.status_code == 200
+    assert cache.stats()["entries"] == 1
+
+    # 把原件内容改坏（文件仍在，所以存在性检查照过）：
+    # 若第二次仍返回同样内容，只可能是走了缓存 —— 重新解析必然 422
+    with client.app.state.session_factory() as db:
+        document = db.scalar(select(KnowledgeDocument).where(KnowledgeDocument.sha256 == sha))
+        (Path(client.app.state.knowledge_dir) / document.stored_filename).write_bytes(b"broken")
+
+    second = client.get(f"/api/v1/knowledge/citations/{sha}/pages/1", headers=auth(token))
+    assert second.status_code == 200
+    assert second.content == first.content
+
+
+def test_extraction_slot_is_bounded(client):
+    """并发解析闸满了要 503 排队，而不是让 N 份 27MB 同时进内存。"""
+    from app.citation_page_service import CitationPageCache, CitationPageCacheFull
+
+    cache = CitationPageCache(max_concurrent_extractions=1, acquire_timeout_seconds=0.05)
+    with cache.extraction_slot():
+        try:
+            with cache.extraction_slot():
+                raise AssertionError("second slot should not be granted")
+        except CitationPageCacheFull:
+            pass
+    # 释放后能重新拿到
+    with cache.extraction_slot():
+        pass
+
+
+def test_page_cache_evicts_by_entries_and_bytes():
+    from app.citation_page_service import CitationPageCache
+
+    cache = CitationPageCache(max_entries=2, max_bytes=10 * 1024 * 1024)
+    cache.set("a:1", b"a" * 10)
+    cache.set("b:1", b"b" * 10)
+    cache.get("a:1")  # a 变成最近使用
+    cache.set("c:1", b"c" * 10)
+    assert cache.get("b:1") is None  # b 最久未用被淘汰
+    assert cache.get("a:1") is not None
+    assert cache.stats()["entries"] == 2
+
+    tiny = CitationPageCache(max_entries=100, max_bytes=32)
+    tiny.set("x:1", b"x" * 20)
+    tiny.set("y:1", b"y" * 20)
+    assert tiny.stats()["bytes"] <= 32
+    # 单页大于整缓存预算：不存，也不能把已有条目挤光
+    tiny.set("huge:1", b"z" * 999)
+    assert tiny.get("huge:1") is None
+    assert tiny.stats()["entries"] >= 1

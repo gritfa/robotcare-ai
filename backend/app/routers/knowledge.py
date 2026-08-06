@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..alerting import send_alert
+from ..citation_page_service import CitationPageCache, CitationPageCacheFull
 from ..config import get_settings
 from ..database import get_db
 from ..generation_service import generate_answer
@@ -42,7 +43,7 @@ from ..schemas import (
     KnowledgeSearchResult,
     KnowledgeStatusRead,
 )
-from ..security import get_current_user
+from ..security import CAPABILITY_MESSAGES, get_current_user, has_capability
 
 router = APIRouter(prefix="/api/v1")
 
@@ -369,7 +370,23 @@ def knowledge_health(
 
     probe_result: KnowledgeProbeRead | None = None
     if probe:
+        # probe=true 会对 embedding / 检索 / 生成各发一次**真实**外部调用，
+        # 是有成本的运维动作，不是普通用户该有的按钮：收权到 viewer 及以上。
+        if not has_capability(user.role, "read_operations"):
+            raise HTTPException(
+                status_code=403,
+                detail=CAPABILITY_MESSAGES["read_operations"],
+            )
         enforce_embedding_rate_limit(db, request, user_id=user.id)
+        # 探测里包含一次真实生成，此前只受 embedding 日配额约束，
+        # 等于给生成开了一条不计费的旁路 —— 补上生成侧的分钟级限流。
+        enforce_business_rate_limit(
+            db,
+            request,
+            action="knowledge_answer",
+            user_id=user.id,
+            settings=get_settings(),
+        )
         probe_result = _probe_external_models(db, request, model_health)
 
     if not embedding_configured:
@@ -392,6 +409,21 @@ def knowledge_health(
         models=[KnowledgeModelHealthRead(**item.__dict__) for item in model_health],
         probe=probe_result,
     )
+
+
+class _PageOutOfRange(RuntimeError):
+    """请求页码超出原件总页数（与"文件损坏"区分，前者是 404 后者是 422）。"""
+
+
+def _extract_pdf_page(path, page_number: int) -> bytes:
+    reader = PdfReader(str(path))
+    if page_number > len(reader.pages):
+        raise _PageOutOfRange(str(page_number))
+    writer = PdfWriter()
+    writer.add_page(reader.pages[page_number - 1])
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
 
 
 @router.get("/knowledge/citations/{document_sha256}/pages/{page_number}")
@@ -443,14 +475,47 @@ def read_citation_page(
             status_code=404, detail="该资料没有留存原件，请改用来源链接查看"
         )
 
-    reader = PdfReader(str(path))
-    if page_number > len(reader.pages):
-        raise HTTPException(status_code=404, detail="Cited page is out of range")
-    writer = PdfWriter()
-    writer.add_page(reader.pages[page_number - 1])
-    buffer = io.BytesIO()
-    writer.write(buffer)
-    buffer.seek(0)
+    cache = getattr(request.app.state, "citation_page_cache", None)
+    cache_key = (
+        CitationPageCache.make_key(document.sha256, page_number)
+        if cache is not None
+        else ""
+    )
+    payload = cache.get(cache_key) if cache is not None else None
+    cache_hit = payload is not None
+
+    if payload is None:
+        try:
+            if cache is not None:
+                with cache.extraction_slot():
+                    payload = _extract_pdf_page(path, page_number)
+            else:
+                payload = _extract_pdf_page(path, page_number)
+        except CitationPageCacheFull:
+            # 并发解析已排满：让客户端稍后重试，好过把内存吃爆拖垮整个进程
+            raise HTTPException(
+                status_code=503,
+                detail="原件读取繁忙，请稍后重试",
+                headers={"Retry-After": "3"},
+            ) from None
+        except _PageOutOfRange:
+            raise HTTPException(status_code=404, detail="Cited page is out of range") from None
+        except Exception as exc:  # noqa: BLE001 — 损坏/加密原件不该以 500 收场
+            emit_json_log(
+                logging.WARNING,
+                "citation_page_unreadable",
+                trace_id=request_trace_id(request),
+                user_id=user.id,
+                document_sha256=document.sha256,
+                page_number=page_number,
+                error_type=type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=422, detail="该资料原件无法解析，请改用来源链接查看"
+            ) from None
+        if cache is not None:
+            cache.set(cache_key, payload)
+
     emit_json_log(
         logging.INFO,
         "citation_page_read",
@@ -458,9 +523,10 @@ def read_citation_page(
         user_id=user.id,
         robot_model_id=document.robot_model_id,
         page_number=page_number,
+        cache_hit=cache_hit,
     )
     return StreamingResponse(
-        buffer,
+        io.BytesIO(payload),
         media_type="application/pdf",
         headers={
             # inline：用户要的是"看一眼这页"，不是下载一个文件

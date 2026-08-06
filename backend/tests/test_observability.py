@@ -4,6 +4,7 @@ import json
 import logging
 import sys
 from io import StringIO
+from time import sleep
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -452,3 +453,81 @@ def test_embedding_log_records_model_latency_and_failure_without_input(monkeypat
     assert isinstance(entry["duration_ms"], (int, float))
     assert "private-embedding-input" not in stream.getvalue()
     assert "private-api-key" not in stream.getvalue()
+
+
+def test_ready_checks_knowledge_dir(tmp_path, monkeypatch):
+    """D6：知识原件目录没挂上时服务照样报 ready，直到用户点"查看原页"才 404。"""
+    client, app = _migrated_client(tmp_path, monkeypatch)
+    with client:
+        healthy = client.get("/ready")
+        assert healthy.status_code == 200
+        assert healthy.json()["components"]["knowledge"]["writable"] is True
+
+        # 目录消失（卷没挂上的等价状态）
+        app.state.knowledge_dir = tmp_path / "knowledge-not-mounted"
+        broken = client.get("/ready")
+
+    assert broken.status_code == 503
+    assert broken.json()["components"]["knowledge"]["status"] == "error"
+    assert broken.json()["components"]["knowledge"]["exists"] is False
+
+
+def test_ready_probes_embedding_reachability_in_production(tmp_path, monkeypatch):
+    """D6：配置存在不等于可达，key 失效时 /ready 必须 not_ready。"""
+    from app.observability import EmbeddingReachability
+
+    class DeadProvider:
+        def embed_query(self, text):
+            raise ConnectionError("dns failure")
+
+    client, app = _migrated_client(tmp_path, monkeypatch)
+    app.state.environment = "production"
+    app.state.embedding_configured = True
+    app.state.embedding_provider = DeadProvider()
+    app.state.embedding_reachability = EmbeddingReachability()
+
+    with client:
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    component = response.json()["components"]["embedding"]
+    assert component["status"] == "error"
+    assert component["configured"] is True
+    assert component["reachable"] is False
+    assert component["error_type"] == "ConnectionError"
+
+
+def test_embedding_reachability_caches_result(tmp_path, monkeypatch):
+    """/ready 被容器 healthcheck 每 10s 打一次，不缓存就是在烧钱。"""
+    from app.observability import EmbeddingReachability
+
+    class CountingProvider:
+        def __init__(self):
+            self.calls = 0
+
+        def embed_query(self, text):
+            self.calls += 1
+            return [0.1, 0.2]
+
+    provider = CountingProvider()
+    probe = EmbeddingReachability(success_ttl_seconds=300, failure_ttl_seconds=30)
+    for _ in range(5):
+        assert probe.check(provider) == (True, None)
+    assert provider.calls == 1
+
+    # 失败结果缓存更短：坏了要尽快恢复感知
+    fast = EmbeddingReachability(success_ttl_seconds=300, failure_ttl_seconds=0.01)
+
+    class FlakyProvider:
+        def __init__(self):
+            self.calls = 0
+
+        def embed_query(self, text):
+            self.calls += 1
+            raise TimeoutError("slow")
+
+    flaky = FlakyProvider()
+    assert fast.check(flaky) == (False, "TimeoutError")
+    sleep(0.05)
+    fast.check(flaky)
+    assert flaky.calls == 2

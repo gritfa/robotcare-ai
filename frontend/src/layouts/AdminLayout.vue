@@ -22,4 +22,16 @@ import { ArrowLeft, DataAnalysis, Lock } from '@element-plus/icons-vue'
 
 <style scoped>
 .admin-shell{min-height:100vh;display:grid;grid-template-columns:230px 1fr}.admin-shell aside{position:fixed;inset:0 auto 0 0;width:230px;background:#102a23;color:#c6d8d2;padding:24px 16px;display:flex;flex-direction:column;gap:6px}.title{display:flex;gap:10px;align-items:center;margin:0 8px 28px}.title>span{background:#24a77a;color:#fff;border-radius:9px;padding:9px;font-weight:800}.title b,.title small{display:block}.title small{font-size:11px;opacity:.65;margin-top:3px}a{padding:12px;border-radius:8px;display:flex;gap:10px;align-items:center;font-size:14px}a:hover,a.router-link-exact-active{background:#20463b;color:#fff}.rbac-note{margin-top:20px;padding:14px 12px;border:1px solid #315348;border-radius:10px;display:flex;gap:9px;color:#a9c3ba}.rbac-note .el-icon{margin-top:2px}.rbac-note b,.rbac-note small{display:block}.rbac-note b{font-size:12px;color:#d5e4df}.rbac-note small{font-size:10px;line-height:1.55;margin-top:5px}.back{margin-top:auto}main{grid-column:2;min-width:0;background:#f4f7f6}
+/* 窄屏下 230px 固定侧栏只给内容留 160px，后台表格完全没法看。
+   改成顶部横条：侧栏脱离 fixed 回到文档流，网格退成单列。 */
+@media(max-width:900px){
+  .admin-shell{grid-template-columns:minmax(0,1fr)}
+  .admin-shell aside{position:static;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:14px}
+  .title{margin:0 auto 0 0}
+  .title small{display:none}
+  .rbac-note{display:none}
+  a{padding:8px 12px;font-size:13px}
+  .back{margin-top:0}
+  main{grid-column:1}
+}
 </style>

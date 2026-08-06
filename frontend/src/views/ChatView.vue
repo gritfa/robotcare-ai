@@ -935,5 +935,9 @@ async function scrollToBottom() {
 .chat-placeholder h3{margin:0;color:var(--ink);font-size:16px}
 .chat-placeholder p{max-width:420px;margin:0}
 .dialog-hint{margin:0 0 14px;font-size:12px;color:var(--muted)}
-@media(max-width:1000px){.chat-grid{grid-template-columns:1fr}.conversation-panel{max-height:260px}}
+/* 单列必须写 minmax(0,1fr) 而不是 1fr：1fr 的下限是 auto，grid item 的
+   min-content（会话标题 220px + 操作列 + 气泡）会把列撑到 461px，390px 屏
+   实测溢出 86px。宽屏那条早就写对了 minmax(0,1fr)，只有这条断点漏了。 */
+@media(max-width:1000px){.chat-grid{grid-template-columns:minmax(0,1fr)}.conversation-panel{max-height:260px}}
+@media(max-width:640px){.conversation-title{max-width:none}.bubble{max-width:92%}.conversation-panel,.chat-panel{padding:14px}.chat-head{flex-direction:column;align-items:flex-start;gap:10px}.chat-head-actions{flex-wrap:wrap;width:100%}.chat-head-device strong{font-size:14px;word-break:break-word}}
 </style>

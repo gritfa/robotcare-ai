@@ -736,3 +736,47 @@ def test_stream_discards_already_sent_text_when_final_verdict_is_refusal(client,
     final = next(data for name, data in events if name == "assistant_message")
     assert final["refusal_reason"] == "citation_invalid"
     assert final["citations"] == []
+
+
+def test_background_from_first_turn_stays_in_prompt_after_many_rounds(client, monkeypatch):
+    """C3 端到端：界面承诺"追问时无需重复背景"，那第 8 轮的提示词里就必须还有背景。
+
+    只测 select_context_messages 不够——路由查几条、生成层又截几条是两层，
+    此前两处各写死 6，只改一层等于没改。这里断言的是**真实提示词内容**。
+    """
+    rounds = 9
+    _model_id, provider, token = _setup(client, ["资料未提及。"] * rounds, monkeypatch)
+    # 9 轮会撞上默认 6/min 的生成限流；这里测的是上下文窗口，不是限流
+    monkeypatch.setattr(
+        "app.routers.conversations.get_settings",
+        lambda: Settings(
+            knowledge_min_score=0.0,
+            knowledge_answer_user_per_minute=1000,
+            knowledge_answer_ip_per_minute=5000,
+            embedding_user_per_minute=1000,
+            embedding_ip_per_minute=5000,
+            _env_file=None,
+        ),
+    )
+    conversation_id = _create_conversation(client, token, _model_id)
+
+    background = "我的 JH69U1 加水后拖地还是干"
+    first = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": background},
+        headers=auth(token),
+    )
+    assert first.status_code == 200
+
+    for index in range(rounds - 1):
+        follow_up = client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={"content": f"那第{index + 2}步呢"},
+            headers=auth(token),
+        )
+        assert follow_up.status_code == 200
+
+    last_prompt = provider.prompts[-1]
+    # 第 9 轮时首轮问题早已滑出"最近 6 条"，旧实现这里必然找不到型号
+    assert background in last_prompt
+    assert "那第8步呢" in last_prompt

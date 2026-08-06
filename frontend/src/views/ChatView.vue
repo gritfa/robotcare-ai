@@ -672,7 +672,7 @@ async function scrollToBottom() {
             </p>
             <div v-if="!messages.length && !streaming" class="chat-placeholder">
               <el-icon><ChatDotRound /></el-icon>
-              <p>描述“想完成的操作 + 当前现象 + 已尝试步骤”，回答会附资料页码；追问时无需重复背景。</p>
+              <p>描述“想完成的操作 + 当前现象 + 已尝试步骤”，回答会附资料页码；后续追问会带上本次会话的背景，无需重复描述。</p>
               <div v-if="suggestions.length" class="suggested">
                 <span class="suggested-label">试试这些常见问题（{{ activeModelCode }}）：</span>
                 <el-button

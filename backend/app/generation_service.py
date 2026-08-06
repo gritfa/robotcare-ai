@@ -26,6 +26,7 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
+from .context_window import MAX_CONTEXT_MESSAGES, MAX_MESSAGE_CHARS
 from .knowledge_service import (
     EmbeddingProvider,
     SearchResult,
@@ -705,11 +706,19 @@ def _persist(
     return record
 
 
-MAX_HISTORY_MESSAGES = 6
-MAX_HISTORY_CHARS = 500
+# 与 context_window 统一：此前这里独立写死 6，路由层即使放宽也会被这道二次
+# 截断吃掉——两个都叫"历史上限"的常量分处两层，只改一个等于没改。
+MAX_HISTORY_MESSAGES = MAX_CONTEXT_MESSAGES
+MAX_HISTORY_CHARS = MAX_MESSAGE_CHARS
 
 
 def _history_block(history: list[dict]) -> str:
+    """把已选好的上下文渲染成提示词片段。
+
+    这里的 `[:MAX_HISTORY_MESSAGES]` / `[:MAX_HISTORY_CHARS]` 是防御性上限：
+    正常路径上 `select_context_messages` 已经按预算选过，但本函数也被
+    直接调用 generate_answer 的地方（CLI、评测）用到，不能假设入参已受约束。
+    """
     role_names = {"user": "用户", "assistant": "助手"}
     lines = [
         f"{role_names.get(m['role'], m['role'])}：{m['content'][:MAX_HISTORY_CHARS]}"

@@ -48,11 +48,11 @@ from ..schemas import (
     MessageFeedbackRead,
     MessageFeedbackRequest,
 )
+from ..context_window import MAX_CONTEXT_MESSAGES, select_context_messages
 from ..security import get_current_user
 
 router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 
-MAX_CONTEXT_MESSAGES = 6
 STREAM_CHUNK_CHARS = 48
 # 会话详情默认/最大返回条数。默认值远大于 MAX_CONTEXT_MESSAGES，
 # 保证「界面看得到的历史」比「模型实际用到的上下文」宽裕得多。
@@ -317,7 +317,18 @@ def _prepare_turn(
         )
     )
     recent_messages.reverse()
-    history = [{"role": m.role, "content": m.content} for m in recent_messages]
+    # 首轮问题带着型号、现象、已尝试步骤这些背景，是最不该被时间窗口挤掉的一条。
+    # 单独取一次（conversation_id + id 有索引，代价可忽略），滑出窗口就置顶补回。
+    first_user_message = db.scalar(
+        select(ConversationMessage)
+        .where(
+            ConversationMessage.conversation_id == conversation.id,
+            ConversationMessage.role == "user",
+        )
+        .order_by(ConversationMessage.id.asc())
+        .limit(1)
+    )
+    history = select_context_messages(recent_messages, first_user_message)
     decision = classify_message(content, has_history=bool(history))
     emit_json_log(
         logging.INFO,

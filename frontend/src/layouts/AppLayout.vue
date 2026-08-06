@@ -28,7 +28,7 @@ async function logout() { try { await auth.logout() } finally { await router.pus
         </router-link>
       </nav>
       <div class="safe-card"><span class="status-dot"></span><strong>安全模式已开启</strong><p>仅提供清洁、检查、配网和复位等非拆机操作。</p></div>
-      <router-link v-if="auth.isAdmin" to="/admin" class="admin-link"><el-icon><Setting /></el-icon>管理后台</router-link>
+      <router-link v-if="auth.canViewOperations" to="/admin" class="admin-link"><el-icon><Setting /></el-icon>管理后台</router-link>
       <button class="profile" @click="logout"><span class="avatar">{{ (auth.user?.name || auth.user?.full_name || auth.user?.email || 'U')[0].toUpperCase() }}</span><span><strong>{{ auth.user?.name || auth.user?.full_name || '用户' }}</strong><small>{{ auth.user?.email }}</small></span><el-icon><SwitchButton /></el-icon></button>
     </aside>
     <main>

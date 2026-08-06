@@ -45,6 +45,19 @@ class User(Base):
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
+    @property
+    def capabilities(self) -> list[str]:
+        """这个角色能做什么，随 UserRead 一起下发给前端。
+
+        前端不该按 role 硬编码判断（2026-08-06 体检 #9：前端写死
+        role === 'admin'，viewer/operator 后端全线放行、UI 却完全进不去）。
+        能力表是后端的事实源，前端只消费结论。
+        延迟 import：security 依赖 models，模块级导入会成环。
+        """
+        from .security import ROLE_CAPABILITIES
+
+        return sorted(ROLE_CAPABILITIES.get(self.role, frozenset()))
+
 
 class AuthSession(Base):
     __tablename__ = "auth_sessions"

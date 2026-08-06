@@ -37,6 +37,8 @@ router.beforeEach(async (to) => {
     }
   }
   if (to.meta.guest && auth.isAuthenticated) return '/'
-  if (to.meta.admin && !auth.isAdmin) return '/'
+  // meta.admin 的含义是「后台页面」，门槛是能看运营数据即可（viewer 及以上）。
+  // 页面内部的写操作再按 manage_knowledge / administer 各自收口。
+  if (to.meta.admin && !auth.canViewOperations) return '/'
 })
 export default router

@@ -17,9 +17,11 @@ import {
   Warning,
 } from '@element-plus/icons-vue'
 import { useAdminDashboard } from '../adminDashboard'
+import { useAuthStore } from '../stores'
 import { CHUNK_PAGE_SIZE, describeDiff, useKnowledgeConsole } from '../knowledgeConsole'
 import type { AdminContentGap, AdminKnowledgeDocument, AdminModel } from '../types'
 
+const auth = useAuthStore()
 const dashboard = useAdminDashboard()
 const console_ = useKnowledgeConsole()
 
@@ -714,6 +716,7 @@ onMounted(async () => {
                 原件
               </el-button>
               <el-button
+                v-if="auth.canManageKnowledge"
                 link
                 size="small"
                 :loading="console_.isBusy((row as AdminKnowledgeDocument).id)"
@@ -722,10 +725,11 @@ onMounted(async () => {
               >
                 重新向量化
               </el-button>
-              <el-button link size="small" :disabled="console_.isBusy((row as AdminKnowledgeDocument).id)" @click="toggleDocument(row as AdminKnowledgeDocument)">
+              <el-button v-if="auth.canManageKnowledge" link size="small" :disabled="console_.isBusy((row as AdminKnowledgeDocument).id)" @click="toggleDocument(row as AdminKnowledgeDocument)">
                 {{ (row as AdminKnowledgeDocument).status === 'active' ? '停用' : '启用' }}
               </el-button>
-              <el-button link type="danger" size="small" :disabled="console_.isBusy((row as AdminKnowledgeDocument).id)" @click="removeDocument(row as AdminKnowledgeDocument)">删除</el-button>
+              <!-- 删除与回滚不可逆，只给 admin；viewer/operator 看得到内容但动不了 -->
+              <el-button v-if="auth.isAdmin" link type="danger" size="small" :disabled="console_.isBusy((row as AdminKnowledgeDocument).id)" @click="removeDocument(row as AdminKnowledgeDocument)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -853,7 +857,7 @@ onMounted(async () => {
             <el-table-column label="操作" width="90" align="right">
               <template #default="{ row }">
                 <el-button
-                  v-if="row.sha256 !== console_.selected.value?.sha256"
+                  v-if="row.sha256 !== console_.selected.value?.sha256 && auth.isAdmin"
                   link
                   type="primary"
                   size="small"

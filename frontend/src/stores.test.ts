@@ -174,6 +174,44 @@ describe('auth store session lifecycle', () => {
     expect(localStorage.getItem('robotcare_user')).toContain('current@example.com')
   })
 
+  it('drives admin access from backend capabilities, not from the role string', () => {
+    // 2026-08-06 体检 #9：前端此前写死 role === 'admin'，于是后端四级角色
+    // 全线放行、测试全绿，viewer/operator 登录后侧栏却没有入口、
+    // 手敲 /admin 还被路由守卫弹回——"给运营看一眼看板"根本达不成。
+    const store = useAuthStore()
+
+    store.user = {
+      id: 1, email: 'viewer@example.com', role: 'viewer',
+      capabilities: ['read_operations'],
+    }
+    expect(store.canViewOperations).toBe(true)   // 能进后台
+    expect(store.canManageKnowledge).toBe(false) // 但不能改知识库
+    expect(store.isAdmin).toBe(false)            // 更不能删/回滚
+
+    store.user = {
+      id: 2, email: 'operator@example.com', role: 'operator',
+      capabilities: ['read_operations', 'manage_knowledge'],
+    }
+    expect(store.canViewOperations).toBe(true)
+    expect(store.canManageKnowledge).toBe(true)
+    expect(store.isAdmin).toBe(false)
+
+    store.user = {
+      id: 3, email: 'admin@example.com', role: 'admin',
+      capabilities: ['administer', 'manage_knowledge', 'read_operations'],
+    }
+    expect(store.isAdmin).toBe(true)
+  })
+
+  it('grants nothing when the backend sends no capabilities', () => {
+    const store = useAuthStore()
+    store.user = { id: 4, email: 'plain@example.com', role: 'user' }
+
+    expect(store.capabilities).toEqual([])
+    expect(store.canViewOperations).toBe(false)
+    expect(store.isAdmin).toBe(false)
+  })
+
   it('still clears local state when the backend logout request fails', async () => {
     localStorage.setItem('robotcare_access_token', 'access-token')
     authMocks.logout.mockRejectedValue(new Error('network unavailable'))

@@ -25,6 +25,11 @@ class UserRead(ORMModel):
     role: str
     status: str
     created_at: datetime
+    # 后端把能力位算好下发，前端不要自己按 role 硬编码。
+    # 2026-08-06 体检 #9：后端四级角色齐全、测试全绿，前端却写死
+    # role === 'admin'——viewer/operator 登录后侧栏没有入口、手敲 /admin
+    # 还会被路由守卫弹回，"给运营看一眼看板"这个目标通过 UI 根本达不成。
+    capabilities: list[str] = []
 
 
 class TokenResponse(BaseModel):

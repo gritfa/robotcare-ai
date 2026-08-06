@@ -190,3 +190,30 @@ def test_revoked_sessions_are_marked_with_reason(client):
         )
 
     assert reasons == {"password_reset"}
+
+
+def test_auth_me_exposes_capabilities_for_the_frontend(client):
+    """/auth/me 必须下发能力位——前端不该按 role 字符串硬编码。
+
+    2026-08-06 体检 #9：后端四级角色齐全、本文件其余用例全绿，但前端写死
+    role === 'admin'，viewer/operator 登录后 UI 完全进不去。能力表是后端的
+    事实源，前端只消费结论。
+    """
+    for role, expected in (
+        ("user", []),
+        ("viewer", ["read_operations"]),
+        ("operator", ["manage_knowledge", "read_operations"]),
+        ("admin", ["administer", "manage_knowledge", "read_operations"]),
+    ):
+        email = f"caps-{role}@example.com"
+        token = register(client, email)["access_token"]
+        if role != "user":
+            with client.app.state.session_factory() as db:
+                set_role(db, email=email, role=role)
+            token = client.post(
+                "/api/v1/auth/login",
+                json={"email": email, "password": "StrongPass123"},
+            ).json()["access_token"]
+        body = client.get("/api/v1/auth/me", headers=auth(token)).json()
+        assert body["role"] == role
+        assert body["capabilities"] == expected, f"{role} 的能力位不对"

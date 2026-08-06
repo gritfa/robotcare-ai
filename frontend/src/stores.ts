@@ -2,14 +2,21 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { authApi, diagnosticApi } from './api'
 import { applyAuthResult, bindAuthState, clearAuthState, persistUser, readStoredAccessToken, readStoredUser } from './authSession'
-import type { Diagnostic, DiagnosticStep, User } from './types'
+import type { Capability, Diagnostic, DiagnosticStep, User } from './types'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(readStoredAccessToken())
   const user = ref<User | null>(readStoredUser())
   const profileLoaded = ref(false)
   const isAuthenticated = computed(() => Boolean(token.value))
-  const isAdmin = computed(() => user.value?.role === 'admin')
+  // 能力位由后端算好下发，前端只消费结论。此前这里写死 role === 'admin'，
+  // 于是 viewer/operator 后端全线放行、UI 却完全进不去（体检 #9）。
+  const capabilities = computed(() => user.value?.capabilities ?? [])
+  const can = (capability: Capability) => capabilities.value.includes(capability)
+  // 能看运营数据就该有后台入口，不必是 admin
+  const canViewOperations = computed(() => can('read_operations'))
+  const canManageKnowledge = computed(() => can('manage_knowledge'))
+  const isAdmin = computed(() => can('administer'))
 
   bindAuthState({
     getAccessToken: () => token.value,
@@ -50,7 +57,11 @@ export const useAuthStore = defineStore('auth', () => {
       clearAuthState()
     }
   }
-  return { token, user, profileLoaded, isAuthenticated, isAdmin, login, register, loadMe, logout }
+  return {
+    token, user, profileLoaded, isAuthenticated,
+    capabilities, can, canViewOperations, canManageKnowledge, isAdmin,
+    login, register, loadMe, logout,
+  }
 })
 
 export const useDiagnosticStore = defineStore('diagnostics', () => {

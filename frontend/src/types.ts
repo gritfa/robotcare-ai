@@ -1,5 +1,6 @@
 export type EntityId = string | number
-export interface User { id: EntityId; email: string; name?: string; full_name?: string; role?: 'user' | 'admin' }
+export type Capability = 'read_operations' | 'manage_knowledge' | 'administer'
+export interface User { id: EntityId; email: string; name?: string; full_name?: string; role?: 'user' | 'viewer' | 'operator' | 'admin'; capabilities?: Capability[] }
 export interface AuthResult { access_token: string; token_type?: string; user?: User }
 export interface RobotModel { id: EntityId; code: string; name: string; brand?: string; description?: string; image_url?: string; enabled?: boolean }
 export interface Device { id: EntityId; nickname: string; robot_model_id: EntityId; robot_model?: RobotModel; serial_number?: string; purchase_date?: string; created_at?: string }

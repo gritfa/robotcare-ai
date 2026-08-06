@@ -648,3 +648,91 @@ def test_citation_invalid_is_not_a_content_gap(client, monkeypatch):
 
     with client.app.state.session_factory() as db:
         assert list(db.scalars(select(KnowledgeGapEvent))) == []
+
+
+class StreamingScriptedProvider:
+    """带真流式能力的测试桩——此前所有流式测试都直接调 answer_events，
+    没有一条打过 POST /messages/stream，SSE 编码与事件顺序全靠人眼。"""
+
+    model_name = "stream-test-model"
+
+    def __init__(self, pieces):
+        self.pieces = list(pieces)
+        self.stream_calls = 0
+
+    def generate(self, *, system: str, prompt: str) -> str:
+        return "".join(self.pieces)
+
+    def generate_stream(self, *, system: str, prompt: str):
+        self.stream_calls += 1
+        yield from self.pieces
+
+
+def _setup_streaming(client, pieces, monkeypatch):
+    model_id, _provider, token = _setup(client, [], monkeypatch)
+    provider = StreamingScriptedProvider(pieces)
+    client.app.state.generation_provider = provider
+    return model_id, provider, token
+
+
+def test_stream_endpoint_emits_real_deltas_in_contract_order(client, monkeypatch):
+    """端到端 SSE：真流式下的事件顺序与编码。"""
+    model_id, provider, token = _setup_streaming(
+        client, ["先清空尘盒 [1]。", "再清理滤网 [1]。"], monkeypatch
+    )
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    assert provider.stream_calls == 1, "必须真的走流式，而不是回退整段生成"
+
+    events = _sse_events(resp.text)
+    names = [name for name, _ in events]
+    assert names[0] == "stage"
+    assert [n for n, _ in events if n == "stage"][:3] == ["stage", "stage", "stage"]
+    assert names[-3:] == ["user_message", "assistant_message", "done"]
+    assert "discard" not in names, "正常作答不该出现丢弃重发"
+
+    deltas = "".join(data["text"] for name, data in events if name == "delta")
+    final = next(data for name, data in events if name == "assistant_message")
+    assert deltas == final["content"]
+
+    # 落库时序：done 之后库里就该是完整的一问一答
+    detail = client.get(
+        f"/api/v1/conversations/{conversation_id}", headers=auth(token)
+    ).json()
+    assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
+    assert detail["messages"][1]["content"] == final["content"]
+
+
+def test_stream_discards_already_sent_text_when_final_verdict_is_refusal(client, monkeypatch):
+    """已下发的内容最终没通过校验，必须明确撤回。
+
+    这条分支（discard: refused_after_stream）此前零覆盖——而它正是"用户把
+    一段未通过安全/引用校验的文本当成答案"的最后一道闸。
+    第一句合法先被放行，第二句引用越界让闸门关闭，全文校验判 citation_invalid。
+    """
+    model_id, _provider, token = _setup_streaming(
+        client, ["先清空尘盒 [1]。", "再看第 [9] 步操作。"], monkeypatch
+    )
+    conversation_id = _create_conversation(client, token, model_id)
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "吸力变小了怎么办"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    events = _sse_events(resp.text)
+    names = [name for name, _ in events]
+
+    assert "delta" in names, "第一句合法，应该已经到过用户屏幕"
+    discards = [data for name, data in events if name == "discard"]
+    assert discards, "已下发内容最终判拒答，必须下发 discard"
+    assert discards[0]["reason"] == "refused_after_stream"
+
+    final = next(data for name, data in events if name == "assistant_message")
+    assert final["refusal_reason"] == "citation_invalid"
+    assert final["citations"] == []

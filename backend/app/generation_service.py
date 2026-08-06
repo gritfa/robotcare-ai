@@ -246,6 +246,17 @@ class StreamSafetyGate:
             self.closed = True
             return ""
         self.buffer = self.buffer[cut:]
+        if not self.released:
+            # 回答开头的空白不下发。这既是显示上的正确做法，也是为了让
+            # released 与最终 raw_answer.strip() 保持同一基准——两者口径不一致时，
+            # 调用方的 final_text.startswith(streamed) 会失败，进而触发
+            # discard + 整段重发，用户看到"字打了一半突然清屏再从头打"，
+            # 比不做流式还糟。模型首块吐 "\n"/"\n\n"（markdown 列表、思考型模型
+            # 开头）很常见，而 \n 恰好又是句末边界，所以这条路径踩得到
+            # （2026-08-06 生产实测 8 条撞 1 条）。
+            candidate = candidate.lstrip()
+            if not candidate:
+                return ""
         self.released += candidate
         return candidate
 

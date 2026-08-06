@@ -228,3 +228,34 @@ def test_streaming_and_sync_agree_on_final_answer(client, streaming):
 
     assert result.status == "answered"
     assert result.answer == "".join(pieces)
+
+
+def test_leading_newline_does_not_trigger_discard():
+    """模型首块吐换行，不能因此触发整段丢弃重发。
+
+    2026-08-06 生产实测：8 条问题里 1 条撞到 discard(answer_revised)——
+    用户看到字打了一半突然清屏再从头打，比不做流式还糟。根因是
+    raw_answer 做了 .strip() 而闸门累积的 released 没有，而 \\n 恰好是句末
+    边界，模型开头吐个换行就让 final_text.startswith(streamed) 失败。
+    """
+    gate = StreamSafetyGate(snippet_count=3)
+    pieces = ["\n\n", "先清空尘盒 [1]。", "再清理滤网 [2]。"]
+    for piece in pieces:
+        gate.feed(piece)
+
+    raw_answer = "".join(pieces).strip()
+    # 调用方（conversations.post_message_stream）就是这么判断的
+    assert raw_answer.startswith(gate.released), (
+        f"released={gate.released!r} 不是 final={raw_answer!r} 的前缀，会触发整段重发"
+    )
+    assert not gate.released.startswith("\n")
+
+
+def test_leading_whitespace_only_chunk_releases_nothing():
+    """整块都是空白时不下发任何东西，也不该把它算进 released。"""
+    gate = StreamSafetyGate(snippet_count=2)
+    assert gate.feed("\n") == ""
+    assert gate.released == ""
+    released = gate.feed("清理滤网 [1]。")
+    assert released == "清理滤网 [1]。"
+    assert gate.released == "清理滤网 [1]。"

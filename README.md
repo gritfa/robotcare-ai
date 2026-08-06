@@ -45,23 +45,46 @@
 
 ## 已验证命令
 
-后端（2026-08-05 本机 macOS + PostgreSQL 16/pgvector 测试容器）：
+后端（2026-08-06 本机 macOS + PostgreSQL 16/pgvector 测试容器）：
 
 ```bash
 cd backend
 .venv/bin/pytest -p no:cacheprovider
-# 344 passed, 2 warnings in 60.42s（退出码 0）
+# 508 passed, 2 warnings in 92.25s（退出码 0）
+# 注意：加 -q 会吞掉统计行
 ```
 
-前端（2026-08-05 本机）：
+前端（2026-08-06 本机）：
 
 ```bash
 cd frontend
 npm ci
-npm test          # 62 passed (11 test files)
+npm test          # 94 passed (14 test files)
 npm run build     # vue-tsc + vite build 通过
 # dist/assets/index-*.js  224.97 kB (gzip 83.78 kB)，element-plus 按需引入后
 # 按组件/页面拆成 el-table-column 91.6 kB、el-popper 48.3 kB 等独立块
+```
+
+自检脚本（2026-08-06 本机 Compose 生产栈，五个全部通过）。**凭据一律由环境变量/参数注入，脚本内不留默认值**——本仓公开，写死账号等同于公开发布口令：
+
+```bash
+# 1) 运行中的容器是否真含本轮代码（防「提交了但镜像没重建」）
+python3 scripts/verify_running_stack.py                      # 6 checks passed
+
+# 2) 新增 Settings 字段是否同步进 docker-compose.yml 与 .env.example
+python3 scripts/verify_deployment_config.py                  # static contract passed
+
+# 3) 并发流式期间旁路接口是否仍可用（429 不计故障，成功登录本身也限流）
+python3 scripts/verify_stream_concurrency.py \
+  --email "$RC_USER" --password "$RC_PASS" --streams 6
+
+# 4) 全路由 × 390/768/1440px 零横向溢出
+RC_USER=... RC_PASS=... RC_ADMIN_USER=... RC_ADMIN_PASS=... \
+  node frontend/scripts/verify_mobile_layout.mjs             # 36 项
+
+# 5) 界面细节与权限收敛（探测入口收权、退出二次确认、引用连续编号、报告页降级）
+RC_USER=... RC_PASS=... RC_VIEWER=... RC_VIEWER_PASS=... \
+  node frontend/scripts/verify_ui_details.mjs                # 7 项
 ```
 
 Docker 依赖层缓存（2026-08-05 本机 Docker 29.5.2）：

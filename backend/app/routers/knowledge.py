@@ -15,7 +15,12 @@ from ..config import get_settings
 from ..database import get_db
 from ..generation_service import generate_answer
 from ..knowledge_admin_service import resolve_stored_file
-from ..knowledge_service import get_knowledge_health, get_knowledge_status, search_knowledge
+from ..knowledge_service import (
+    get_knowledge_health,
+    get_knowledge_status,
+    record_knowledge_gap_event,
+    search_knowledge,
+)
 from ..models import KnowledgeDocument, KnowledgeGapEvent, RobotModel, User
 from ..observability import emit_json_log, request_trace_id
 from ..rate_limit_service import (
@@ -40,37 +45,6 @@ from ..schemas import (
 from ..security import get_current_user
 
 router = APIRouter(prefix="/api/v1")
-
-
-def record_knowledge_gap_event(
-    db: Session,
-    *,
-    robot_model_id: int,
-    query_normalized: str,
-    source: str,
-    trace_id: str | None = None,
-) -> None:
-    """内容缺口埋点：写入失败只记日志，绝不影响检索/回答主流程。"""
-
-    try:
-        db.add(
-            KnowledgeGapEvent(
-                robot_model_id=robot_model_id,
-                query_normalized=query_normalized,
-                source=source,
-            )
-        )
-        db.commit()
-    except Exception as exc:  # noqa: BLE001 - 埋点失败不允许打断主流程
-        db.rollback()
-        emit_json_log(
-            logging.ERROR,
-            "knowledge_gap_event_write_failed",
-            trace_id=trace_id,
-            robot_model_id=robot_model_id,
-            source=source,
-            error_type=type(exc).__name__,
-        )
 
 
 @router.post("/knowledge/search", response_model=list[KnowledgeSearchResult])
@@ -295,6 +269,7 @@ def knowledge_answer(
             generation_provider=request.app.state.generation_provider,
             top_k=payload.top_k,
             min_score=min_score,
+            gap_source="knowledge_answer_refusal",
         )
     except RuntimeError as exc:
         emit_json_log(
@@ -306,14 +281,8 @@ def knowledge_answer(
         )
         send_alert("generation_unavailable", "智能回答服务调用失败（生成模型不可用），请检查 DashScope 配置与额度")
         raise HTTPException(status_code=503, detail="Generation service unavailable") from exc
-    if result.status == "refused" and result.refusal_reason == "knowledge_gap":
-        record_knowledge_gap_event(
-            db,
-            robot_model_id=payload.robot_model_id,
-            query_normalized=normalized_query,
-            source="answer_knowledge_gap",
-            trace_id=request_trace_id(request),
-        )
+    # 拒答埋点已下沉到生成层（generation_service.refuse），聊天与本端点共用
+    # 同一条路径，这里不再重复记录——否则本端点的缺口会被计两次。
     return KnowledgeAnswerResponse(
         status=result.status,
         answer=result.answer,

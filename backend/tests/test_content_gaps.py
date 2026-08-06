@@ -131,7 +131,8 @@ def test_answer_knowledge_gap_refusal_writes_gap_event(client):
 
     events = gap_events(client)
     assert len(events) == 1
-    assert events[0].source == "answer_knowledge_gap"
+    assert events[0].source == "knowledge_answer_refusal"
+    assert events[0].refusal_reason == "knowledge_gap"
     assert events[0].robot_model_id == robot_model_id
     assert events[0].query_normalized == normalize_knowledge_query("支持 自动更换拖布 吗")
 

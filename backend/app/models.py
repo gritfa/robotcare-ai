@@ -524,7 +524,8 @@ class KnowledgeGapEvent(Base):
     __tablename__ = "knowledge_gap_events"
     __table_args__ = (
         CheckConstraint(
-            "source IN ('search_empty', 'answer_knowledge_gap')",
+            "source IN ('search_empty', 'answer_knowledge_gap', 'chat_refusal', "
+            "'knowledge_answer_refusal')",
             name="ck_knowledge_gap_events_source",
         ),
     )
@@ -533,6 +534,10 @@ class KnowledgeGapEvent(Base):
     robot_model_id: Mapped[int] = mapped_column(ForeignKey("robot_models.id"), index=True)
     query_normalized: Mapped[str] = mapped_column(String(2000))
     source: Mapped[str] = mapped_column(String(30))
+    # 为什么拒答：knowledge_gap（检索没命中）与 model_refused（检索到了但模型
+    # 判定不足）对应两种不同的补资料动作，只看 source 区分不出来。
+    # 旧行为空——它们早于本列（迁移 0017）。
+    refusal_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )

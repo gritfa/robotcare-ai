@@ -575,3 +575,76 @@ def test_message_feedback_records_reason_and_is_overwritable(client, monkeypatch
         json={"helpful": True},
         headers=auth(token),
     ).status_code == 422
+
+
+def test_chat_refusal_writes_gap_event(client, monkeypatch):
+    """聊天里答不上来，必须进内容缺口榜。
+
+    2026-08-06 体检 #2：缺口埋点此前只挂在 /knowledge/answer 上，而前端对该
+    端点零调用——聊天（真正的主入口）拒答多少次，缺口表都是 0 行，运营永远
+    不知道该补什么资料。这条守住"聊天拒答 → 缺口有记录"这条链。
+    """
+    from app.models import KnowledgeGapEvent
+
+    model_id, _provider, token = _setup(client, ["REFUSE"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "机器提示 E5 错误码是什么意思"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["assistant_message"]["refusal_reason"] == "model_refused"
+
+    with client.app.state.session_factory() as db:
+        events = list(db.scalars(select(KnowledgeGapEvent)))
+    assert len(events) == 1, "聊天拒答必须留下缺口事件"
+    assert events[0].source == "chat_refusal"
+    assert events[0].refusal_reason == "model_refused"
+    assert events[0].robot_model_id == model_id
+    assert events[0].query_normalized == "机器提示 e5 错误码是什么意思"
+
+
+def test_stream_refusal_also_writes_gap_event(client, monkeypatch):
+    """流式路径同样要埋点——它才是前端真正走的那条。"""
+    from app.models import KnowledgeGapEvent
+
+    model_id, _provider, token = _setup(client, ["REFUSE"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "水箱加水后拖地还是干的"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    _sse_events(resp.text)
+
+    with client.app.state.session_factory() as db:
+        events = list(db.scalars(select(KnowledgeGapEvent)))
+    assert len(events) == 1
+    assert events[0].source == "chat_refusal"
+
+
+def test_citation_invalid_is_not_a_content_gap(client, monkeypatch):
+    """引用不合格是生成质量问题，不该进缺口榜。
+
+    记进去会把运营引向"补资料"这个错误动作——资料其实是有的。
+    """
+    from app.models import KnowledgeGapEvent
+
+    # 引用越界（片段只有个位数，回答引用 [9]）触发 citation_invalid
+    model_id, _provider, token = _setup(client, ["按步骤清理即可 [9]。"], monkeypatch)
+    conversation_id = _create_conversation(client, token, model_id)
+
+    resp = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "尘盒怎么清理"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["assistant_message"]["refusal_reason"] == "citation_invalid"
+
+    with client.app.state.session_factory() as db:
+        assert list(db.scalars(select(KnowledgeGapEvent))) == []

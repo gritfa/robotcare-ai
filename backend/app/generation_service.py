@@ -26,7 +26,12 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from .knowledge_service import EmbeddingProvider, SearchResult, search_knowledge
+from .knowledge_service import (
+    EmbeddingProvider,
+    SearchResult,
+    record_knowledge_gap_event,
+    search_knowledge,
+)
 from .llm_transport import (
     LLMTransportError,
     TimeoutPolicy,
@@ -36,11 +41,20 @@ from .llm_transport import (
 )
 from .models import GenerationRecord
 from .observability import current_trace_id, emit_json_log
+from .rate_limit_service import normalize_knowledge_query
 from .safety import detect_unsafe_generated_answer
 
 PROMPT_VERSION = "answer-v5"
 REFUSE_TOKEN = "REFUSE"
 MAX_SNIPPETS = 5
+
+# 哪些拒答算"内容缺口"（该补资料），哪些不算。
+# knowledge_gap：检索没命中，资料里确实没有。
+# model_refused：检索命中了但模型判定不足以回答——实测里最常见的一类，
+#   「E5 错误码」「加水后拖地还是干的」都落在这里，正是最该进缺口榜的问题。
+# citation_invalid / unsafe_answer 不算：那是生成质量与安全拦截问题，
+#   记进缺口榜只会把运营引向"补资料"这个错误动作。
+_GAP_REFUSAL_REASONS = frozenset({"knowledge_gap", "model_refused"})
 
 # 未显式注入配置时的兜底预算（脚本、评测等旁路入口）。默认值与 Settings 一致，
 # 且必须小于反代 proxy_read_timeout；正式请求路径走 settings.llm_timeout_policy。
@@ -682,6 +696,9 @@ def answer_events(
     commit: bool = True,
     history: list[dict] | None = None,
     streaming: bool = False,
+    # 缺口埋点的来源标签。默认 chat：聊天是主入口，也是此前唯一没被埋点
+    # 覆盖到的入口（体检 #2）。
+    gap_source: str = "chat_refusal",
 ) -> Iterator[tuple[str, str]]:
     """检索增强作答，以事件流的形式产出过程、以返回值产出结果。
 
@@ -720,6 +737,19 @@ def answer_events(
     gate: StreamSafetyGate | None = None
 
     def refuse(reason: str, *, answer: str | None = None, snippet_count: int = len(results)) -> AnswerResult:
+        # 内容缺口埋点。放在 _persist 之前：此刻 Session 里没有待提交的业务数据
+        # （用户消息延迟落库），埋点自己的 commit 不会连带提交调用方的写入。
+        # 只有"资料不够"才算缺口——引用不合格与安全拦截是生成质量问题，
+        # 记进缺口榜会把运营引向补资料这个错误动作。
+        if reason in _GAP_REFUSAL_REASONS:
+            record_knowledge_gap_event(
+                db,
+                robot_model_id=robot_model_id,
+                query_normalized=normalize_knowledge_query(query),
+                source=gap_source,
+                refusal_reason=reason,
+                trace_id=current_trace_id(),
+            )
         # 拒答同样烧了 token（模型已经跑完），成本必须照记，否则账单对不上
         refuse_usage = getattr(generation_provider, "last_usage", None)
         record = _persist(

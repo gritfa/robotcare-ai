@@ -28,6 +28,7 @@ from .models import (
     KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeDocumentVersion,
+    KnowledgeGapEvent,
     RobotModel,
 )
 from .observability import current_trace_id, emit_json_log
@@ -555,6 +556,49 @@ def release_knowledge_package(
         "created_at": manifest["created_at"],
         "documents": results,
     }
+
+
+def record_knowledge_gap_event(
+    db: Session,
+    *,
+    robot_model_id: int,
+    query_normalized: str,
+    source: str,
+    refusal_reason: str | None = None,
+    trace_id: str | None = None,
+) -> None:
+    """内容缺口埋点：写入失败只记日志，绝不影响检索/回答主流程。
+
+    这个函数原本住在 routers/knowledge.py 里，于是「缺口闭环」只覆盖了
+    /knowledge/answer 这一个端点——而前端对它零调用（2026-08-06 体检 #2：
+    实测拒答 8 次、缺口表 0 行、缺口榜 0 条，卖点从上线起没产生过一条数据）。
+    下沉到这里是为了让生成层统一埋点，聊天、知识问答、诊断走的是同一条路。
+
+    调用时机要求：此刻 Session 里不能有待提交的业务数据——本函数会 commit，
+    否则会把调用方还没准备好的写入一并提交。生成层在 refuse() 开头调用，
+    那时用户消息尚未落库（见 conversations._prepare_turn 的延迟落库）。
+    """
+
+    try:
+        db.add(
+            KnowledgeGapEvent(
+                robot_model_id=robot_model_id,
+                query_normalized=query_normalized,
+                source=source,
+                refusal_reason=refusal_reason,
+            )
+        )
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - 埋点失败不允许打断主流程
+        db.rollback()
+        emit_json_log(
+            logging.ERROR,
+            "knowledge_gap_event_write_failed",
+            trace_id=trace_id,
+            robot_model_id=robot_model_id,
+            source=source,
+            error_type=type(exc).__name__,
+        )
 
 
 def search_knowledge(

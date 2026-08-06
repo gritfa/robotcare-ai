@@ -68,8 +68,14 @@ def stream_one(base: str, token: str, model_id: int, question: str, errors: list
 
 
 def probe_sidecar(base: str, email: str, password: str, stop: threading.Event,
-                  latencies: list[float], errors: list[str]) -> None:
-    """流跑着的时候，登录接口必须照常可用。"""
+                  latencies: list[float], errors: list[str],
+                  throttled: list[int]) -> None:
+    """流跑着的时候，登录接口必须照常可用。
+
+    429 不算失败：D5 之后成功登录也限流（email 10/min），而本脚本 0.3s 探一次，
+    十几秒就必然撞上。撞上恰恰说明接口活着且限流按预期工作——本脚本要证伪的是
+    "并发流式把登录接口拖死"，那表现为超时或 5xx，不是 429。单独计数以免被无声吞掉。
+    """
     while not stop.is_set():
         try:
             _, _, elapsed = post_json(
@@ -77,7 +83,10 @@ def probe_sidecar(base: str, email: str, password: str, stop: threading.Event,
             )
             latencies.append(elapsed)
         except urllib.error.HTTPError as exc:
-            errors.append(f"login HTTP {exc.code}")
+            if exc.code == 429:
+                throttled.append(1)
+            else:
+                errors.append(f"login HTTP {exc.code}")
         except Exception as exc:  # noqa: BLE001
             errors.append(f"login {type(exc).__name__}: {exc}")
         time.sleep(0.3)
@@ -98,10 +107,11 @@ def main() -> int:
 
     errors: list[str] = []
     latencies: list[float] = []
+    throttled: list[int] = []
     stop = threading.Event()
     sidecar = threading.Thread(
         target=probe_sidecar,
-        args=(args.base, args.email, args.password, stop, latencies, errors),
+        args=(args.base, args.email, args.password, stop, latencies, errors, throttled),
         daemon=True,
     )
     sidecar.start()
@@ -128,7 +138,11 @@ def main() -> int:
     sidecar.join(timeout=5)
 
     print(f"{args.streams} 路流全部收束，用时 {elapsed:.1f}s")
-    print(f"期间登录探测 {len(latencies)} 次，失败 {len([e for e in errors if 'login' in e])} 次")
+    print(
+        f"期间登录探测 {len(latencies)} 次成功，"
+        f"{len(throttled)} 次被限流（预期内，D5 起成功登录也限流），"
+        f"{len([e for e in errors if 'login' in e])} 次失败"
+    )
     if latencies:
         ordered = sorted(latencies)
         p95 = ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]

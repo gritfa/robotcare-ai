@@ -411,6 +411,13 @@ def _generate_turn_events(
 
     失败处理与 _generate_turn_answer 完全一致（回滚 + 结构化日志 + 重抛），
     两条路径的事务语义不能有差异。
+
+    捕获范围是 Exception 而不是 RuntimeError：非 RuntimeError（上游返回体变形导致的
+    ValueError、KeyError 等）此前直接穿透，而**流式响应的头已经发出去了**，
+    FastAPI 的全局异常处理再也插不进来——客户端收到的是一个没有 error 事件、
+    也没有 done 的截断流，前端只能一直转圈。同步端点有 500 兜底，流式没有。
+    GeneratorExit（客户端断连）是 BaseException，不在捕获范围内，正是想要的：
+    断连不该被记成生成失败，也不该往一个已经关掉的连接里写 error 事件。
     """
     try:
         return (
@@ -427,7 +434,7 @@ def _generate_turn_events(
                 streaming=True,
             )
         )
-    except RuntimeError as exc:
+    except Exception as exc:
         db.rollback()
         emit_json_log(
             logging.ERROR,
@@ -655,6 +662,16 @@ def post_message_stream(
             yield _sse(
                 "error",
                 {"code": "GENERATION_UNAVAILABLE", "message": "生成服务暂不可用，请稍后重试"},
+            )
+            return
+        except Exception:
+            # 流的头已经发出去了，全局异常处理插不进来。不在这里兜住，
+            # 客户端拿到的就是一个既没有 error 也没有 done 的截断流。
+            # 对用户的说法与上面一致（都是"这轮没成"），但 code 分开，
+            # 便于运维区分"外部模型挂了"和"我们自己的代码炸了"（日志已记 error_type）。
+            yield _sse(
+                "error",
+                {"code": "INTERNAL_ERROR", "message": "服务暂时异常，请稍后重试"},
             )
             return
         assistant_message = _commit_turn(

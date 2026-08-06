@@ -31,9 +31,9 @@ FastAPI /api/v1
 ```
 
 - 【已验证】前端已使用 Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus 与 Axios，并通过生产构建。
-- 【已验证】后端使用 FastAPI、Pydantic v2、SQLAlchemy 2、JWT、Argon2 与 Alembic；当前 head `20260722_0007` 包含状态约束、独立登录 IP 桶和 API 配额，本地备份升级和 metadata 零漂移已验证。
+- 【已验证】后端使用 FastAPI、Pydantic v2、SQLAlchemy 2、JWT、Argon2 与 Alembic；当前 head `20260806_0017`（早期记录的 `20260722_0007` 已被后续 10 个版本取代）包含状态约束、独立登录 IP 桶和 API 配额，本地备份升级和 metadata 零漂移已验证。
 - 【已验证】管理员授权由 FastAPI 依赖在服务器端执行；`AuditLog` 记录型号启停、管理员创建/提升和敏感详情读取。敏感读取先提交审计再返回正文，审计失败关闭为 503；前端路由守卫不作为安全边界。
-- 【已验证】数据层已实现 SQLite/PostgreSQL 双方言：SQLite 用 JSON Text 保存 256 维向量并在 Python 中计算余弦相似度；PostgreSQL 使用 `vector(256)` 和数据库内余弦 Top-K SQL。
+- 【已验证】数据层为 **PostgreSQL 单方言**：`vector(256)` 列 + 数据库内余弦 Top-K SQL。早期的 SQLite/PostgreSQL 双方言分叉已在 `34d96fa` 整体删除——两种方言的检索代码路径已经不同，本地测过的不能代表线上行为。历史 SQLite 开发库的一次性迁入工具保留在 `backend/scripts/migrate_legacy_sqlite.py`。
 - 【已验证：实现与静态/单元验证】PostgreSQL 查询保持 HNSW 索引列无 CAST，并在数据库层完成型号过滤、阈值、排序和 LIMIT；迁移定义 `vector` 扩展和 `vector_cosine_ops` HNSW 索引。
 - 【已验证：GitHub Actions】PostgreSQL 16 + pgvector service 已运行迁移和集成测试，验证扩展、`vector(256)`、HNSW、数据库 Top-K、型号隔离和 `/ready`；本机 Docker、生产数据规模和查询计划调优仍未验证。
 - 【已验证】附件开发期使用本地目录，已实现真实图片解码、格式一致性、大小/像素/数量/会话状态限制、随机文件名、所有权隔离和删除失败追踪；切换 MinIO 仍为【计划】。

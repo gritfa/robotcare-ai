@@ -39,3 +39,36 @@ export function refusalPresentation(reason: KnowledgeAnswer['refusal_reason']): 
       }
   }
 }
+
+/** 引用编号在正文与角标里必须一一对应，且从 1 起连续。
+ *
+ * 后端的 `index` 是**检索片段序号**：模型只引用了第 1、2、3、5 条片段时，
+ * 角标就显示 [1][2][3][5]，用户看到的是"第 4 条哪去了"。
+ *
+ * 重排放在展示层而不是后端：`citations_json` 已经落库，是数据契约（改了会让
+ * 历史消息的正文标记与角标错位）。展示层重排则新旧消息都能修好。
+ *
+ * **正文和角标必须成对改**：只重排角标而不动正文里的 `[5]`，角标 [4] 和正文
+ * [5] 就彻底对不上，比跳号更糟。
+ */
+export function renumberCitations<T extends { index: number }>(
+  content: string,
+  citations: readonly T[],
+): { content: string; citations: T[] } {
+  if (!citations.length) return { content, citations: [] }
+
+  const ordered = [...citations].sort((a, b) => a.index - b.index)
+  const remap = new Map<number, number>()
+  ordered.forEach((citation, position) => remap.set(citation.index, position + 1))
+
+  // 一次性替换：逐个 replace 会连环覆盖（[2]→[1] 之后再处理 [1] 就找错了目标）
+  const rewritten = content.replace(/\[(\d{1,2})\]/g, (whole, digits) => {
+    const next = remap.get(Number(digits))
+    return next === undefined ? whole : `[${next}]`
+  })
+
+  return {
+    content: rewritten,
+    citations: ordered.map((citation, position) => ({ ...citation, index: position + 1 })),
+  }
+}

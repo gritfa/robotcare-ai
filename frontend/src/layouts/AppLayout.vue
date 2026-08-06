@@ -15,7 +15,20 @@ const menus = [
   { path: '/diagnostics/new', label: '开始诊断', icon: FirstAidKit },
   { path: '/history', label: '诊断历史', icon: Clock },
 ]
-async function logout() { try { await auth.logout() } finally { await router.push('/login') } }
+async function logout() {
+  // 头像按钮就在侧栏底部，此前点一下立即退出——正在排查故障的用户误触一次，
+  // 未提交的输入和当前会话上下文就没了。加一次确认。
+  try {
+    await ElMessageBox.confirm('退出后需要重新登录才能继续查看诊断记录。', '确认退出登录', {
+      type: 'warning',
+      confirmButtonText: '退出登录',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try { await auth.logout() } finally { await router.push('/login') }
+}
 </script>
 <template>
   <div class="shell" :class="{ 'nav-open': navOpen }">

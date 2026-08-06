@@ -4,9 +4,14 @@ import { Aim, CircleCheck, CircleClose, Document, InfoFilled, Link, Reading, Ref
 import { apiError, deviceApi, knowledgeApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import { refusalPresentation } from '../answerDisplay'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
+import { useAuthStore } from '../stores'
 import type { Device, KnowledgeAnswer, KnowledgeHealth, KnowledgeModelStatus, KnowledgeSearchResult, RobotModel } from '../types'
 
 const TOP_K = 3
+// 深度探测会真发一次 embedding/检索/生成调用（后端 D2 已收权到 read_operations，
+// 普通用户点了只会拿到 403）；文档/分片/向量数也是内部运维口径，
+// 对普通用户既没用又容易被误读成"资料只有这么点"。两者一起按能力位隐藏。
+const auth = useAuthStore()
 const devices = ref<Device[]>([])
 const models = ref<RobotModel[]>([])
 const statuses = ref<KnowledgeModelStatus[]>([])
@@ -265,7 +270,7 @@ function safeSourceUrl(value: string) {
           :closable="false"
           show-icon
         />
-        <div class="probe-block">
+        <div v-if="auth.canViewOperations" class="probe-block">
           <el-button class="probe-button" size="small" :icon="Aim" :loading="probing" @click="runProbe">深度探测</el-button>
           <p class="probe-hint">对向量模型、检索链路、生成模型各发一次真实请求，确认"配置正常"之外是否真的可用（约需数秒）。</p>
           <ul v-if="probeItems.length" class="probe-list">
@@ -287,15 +292,15 @@ function safeSourceUrl(value: string) {
         <template v-if="selectedModel">
           <div class="model-code">{{ selectedModel.code }}</div>
           <strong>{{ selectedModel.name }}</strong>
-          <div v-if="selectedStatus" class="status-stats">
+          <div v-if="selectedStatus && auth.canViewOperations" class="status-stats">
             <div><b>{{ selectedStatus.document_count }}</b><span>文档</span></div>
             <div><b>{{ selectedStatus.chunk_count }}</b><span>分片</span></div>
             <div><b>{{ selectedStatus.vector_count }}</b><span>向量</span></div>
           </div>
-          <el-alert v-else-if="!statusLoading && !statusError" title="该型号尚未报告知识库状态" type="info" :closable="false" show-icon />
+          <el-alert v-else-if="!statusLoading && !statusError && auth.canViewOperations" title="该型号尚未报告知识库状态" type="info" :closable="false" show-icon />
         </template>
         <el-alert v-if="statusError" :title="statusError" type="error" :closable="false" show-icon />
-        <p class="status-note"><el-icon><InfoFilled /></el-icon>数量来自服务端实时状态，不代表资料已覆盖所有问题。</p>
+        <p v-if="auth.canViewOperations" class="status-note"><el-icon><InfoFilled /></el-icon>数量来自服务端实时状态，不代表资料已覆盖所有问题。</p>
       </aside>
     </div>
 

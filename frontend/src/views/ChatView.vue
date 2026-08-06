@@ -5,14 +5,17 @@ import { ChatDotRound, CopyDocument, Delete, Edit, FirstAidKit, Plus, Promotion,
 import { apiError, conversationApi, deviceApi, knowledgeApi, modelApi, parseApiError, userFacingApiError, type ApiErrorInfo } from '../api'
 import { ChatStreamAborted, streamChatMessage } from '../chatStream'
 import { SKIPPED, createLatestOnly, createSingleFlight } from '../requestGuard'
-import { refusalPresentation } from '../answerDisplay'
+import { refusalPresentation, renumberCitations } from '../answerDisplay'
+import { isPinnedToBottom } from '../autoScroll'
 import { resolveComposerKey } from '../composerKeys'
 import { OFFICIAL_SUPPORT_NAME, OFFICIAL_SUPPORT_URL, supportHandoffHint } from '../supportChannels'
 import SafetyBlockCard from '../components/SafetyBlockCard.vue'
+import { useIsNarrow } from '../viewport'
 import type { AnswerCitation, ChatMessage, Conversation, Device, FeedbackReason, MessageActionCode, QuickAction, RobotModel, SuggestedQuestion } from '../types'
 
 const route = useRoute()
 const router = useRouter()
+const isNarrow = useIsNarrow()
 
 const conversations = ref<Conversation[]>([])
 const devices = ref<Device[]>([])
@@ -137,7 +140,7 @@ async function openConversation(id: number, { syncRoute = true } = {}) {
   }
   activeId.value = detail.id
   activeModelCode.value = detail.robot_model_code
-  messages.value = detail.messages
+  messages.value = normalizeMessages(detail.messages)
   historyTruncated.value = Boolean(detail.truncated)
   totalMessages.value = detail.total_messages ?? detail.messages.length
   if (syncRoute) await router.push({ name: 'chat', params: { id: String(id) } })
@@ -227,7 +230,7 @@ async function send() {
       },
       onDelta: async (text) => {
         streamingText.value += text
-        await scrollToBottom()
+        await scrollToBottom({ onlyIfPinned: true })
       },
       onDiscard: () => {
         // 服务端判定已下发内容不能作数（拒答或答案被改写）——立刻清屏，
@@ -237,7 +240,7 @@ async function send() {
       },
       signal: controller.signal,
     })
-    messages.value = [...messages.value, assistant]
+    messages.value = [...messages.value, normalizeMessage(assistant)]
     refreshConversationSummary(conversationId, content)
     await scrollToBottom()
   } catch (error) {
@@ -298,7 +301,7 @@ async function reloadActiveConversation() {
     ElMessage.error(apiError(error, '会话刷新失败，请手动重新打开'))
     return
   }
-  messages.value = detail.messages
+  messages.value = normalizeMessages(detail.messages)
   historyTruncated.value = Boolean(detail.truncated)
   totalMessages.value = detail.total_messages ?? detail.messages.length
   await scrollToBottom()
@@ -578,7 +581,27 @@ function actionButton(code: MessageActionCode | null | undefined) {
   return code ? ACTION_BUTTONS[code] : null
 }
 
-async function scrollToBottom() {
+/** 统一入口：所有进入 messages 的助手消息都要把引用编号压成连续的。
+ *
+ * 后端的 index 是检索片段序号，模型只引用第 1、2、3、5 条时角标就是
+ * [1][2][3][5]。正文里的标记同样是 [5]，所以必须成对重排（见 renumberCitations）。
+ */
+function normalizeMessage(message: ChatMessage): ChatMessage {
+  if (!message.citations?.length) return message
+  const { content, citations } = renumberCitations(message.content, message.citations)
+  return { ...message, content, citations }
+}
+
+function normalizeMessages(list: ChatMessage[]): ChatMessage[] {
+  return list.map(normalizeMessage)
+}
+
+async function scrollToBottom({ onlyIfPinned = false } = {}) {
+  // 增量刷新时只在用户本来就贴着底部才跟随；他上滑看历史时抢滚等于把他拽回来。
+  // 主动动作（发消息、切会话）仍然无条件滚到底——那是用户自己要求看最新的。
+  const area = messageArea.value
+  if (!area) return
+  if (onlyIfPinned && !isPinnedToBottom(area)) return
   await nextTick()
   messageArea.value?.scrollTo({ top: messageArea.value.scrollHeight })
 }
@@ -857,7 +880,7 @@ async function scrollToBottom() {
       </section>
     </div>
 
-    <el-dialog v-model="dialogVisible" title="新会话" width="420px">
+    <el-dialog v-model="dialogVisible" title="新会话" :width="isNarrow ? '92vw' : '420px'">
       <p class="dialog-hint">选择设备或型号，回答将严格限定在该型号的资料范围内。</p>
       <el-select v-model="dialogSelection" placeholder="选择设备或型号" style="width:100%" size="large">
         <el-option-group v-if="devices.length" label="我的设备">
@@ -884,7 +907,7 @@ async function scrollToBottom() {
     </el-dialog>
 
     <!-- 证据抽屉：引用要能核验，光给页码等于让用户自己去信 -->
-    <el-drawer v-model="evidenceVisible" title="引用证据" size="440px">
+    <el-drawer v-model="evidenceVisible" title="引用证据" :size="isNarrow ? '88%' : '440px'">
       <div v-if="evidence" class="evidence">
         <dl>
           <dt>文档</dt>

@@ -216,6 +216,19 @@ def main() -> None:
             "backend keeps burning tokens",
         )
 
+    # 流式的最坏耗时是 budget + read，不是 budget：越界只能在拿到一块之后
+    # 发现，阻塞在读上是打断不了的（见 llm_transport.stream_with_budget）。
+    # 反代必须给到这个上界，否则预算闸永远轮不到生效（2026-08-06 体检 #4）。
+    worst_case_stream = config_default("llm_budget_seconds") + config_default(
+        "llm_read_timeout_seconds"
+    )
+    require(
+        worst_case_stream < proxy_seconds,
+        f"streaming worst case (llm_budget + llm_read = {worst_case_stream:g}s) must stay "
+        f"below Nginx proxy_read_timeout ({proxy_seconds:g}s), otherwise the reverse proxy "
+        "cuts the user off before the backend's own budget gate can fire",
+    )
+
     require(
         "127.0.0.1:${BACKEND_PORT:-8000}:8000" in backend["ports"],
         "backend must bind to host loopback instead of a public interface",

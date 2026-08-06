@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Callable, TypeVar
 
@@ -178,3 +179,53 @@ def call_with_budget(
         error_type=type(last_error).__name__ if last_error else None,
     )
     raise LLMBudgetExceededError(message) from last_error
+
+
+def stream_with_budget(
+    chunks: "Iterable[T]",
+    policy: TimeoutPolicy,
+    *,
+    op_name: str,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> "Iterator[T]":
+    """给流式响应套上总墙钟预算。
+
+    为什么单靠 read_seconds 不够（2026-08-06 体检 #4）：流式下的 read 超时只
+    约束"两个数据块之间"的间隔。上游每 39 秒吐一个 token，40s 的 read 超时
+    一次都不会触发，而总耗时可以无限延长——nginx 60s 早已把用户断开，后端
+    仍在读、仍在计费。这正是本模块开头第 1 条要消灭的失效模式，非流式路径走
+    call_with_budget 已经覆盖，流式路径此前是从它下面绕过去的。
+
+    两道闸各管一段，缺一不可：单块间隔由 read_seconds 管，总时长由这里管。
+    流式不重试——已经有内容下发给用户了，重来一遍只会让答案自相矛盾。
+
+    **已知上界**：越界只能在"拿到一块"之后发现，阻塞在 next() 里是打断不了的
+    （能打断它的是底层 read 超时）。所以最坏耗时是 budget + read，而不是 budget。
+    部署校验因此断言 budget + read < 反代 proxy_read_timeout——否则用户会先
+    收到反代 504，我们自己的预算闸就永远轮不到生效，等于白装。
+    """
+    deadline = monotonic() + policy.budget_seconds
+
+    def over_budget() -> bool:
+        if monotonic() <= deadline:
+            return False
+        emit_json_log(
+            logging.ERROR,
+            "llm_stream_budget_exceeded",
+            trace_id=current_trace_id(),
+            op_name=op_name,
+            budget_seconds=policy.budget_seconds,
+        )
+        return True
+
+    iterator = iter(chunks)
+    while True:
+        if over_budget():
+            raise LLMBudgetExceededError(
+                f"{op_name} exceeded its {policy.budget_seconds:g}s streaming budget"
+            )
+        try:
+            chunk = next(iterator)
+        except StopIteration:
+            return
+        yield chunk

@@ -32,6 +32,7 @@ from .llm_transport import (
     TimeoutPolicy,
     call_with_budget,
     is_retryable_status,
+    stream_with_budget,
 )
 from .models import GenerationRecord
 from .observability import current_trace_id, emit_json_log
@@ -243,14 +244,21 @@ class DashScopeGenerationProvider:
         api_key: str | None,
         model: str = "qwen-plus",
         base_url: str | None = None,
+        max_tokens: int = 4096,
         timeout_policy: TimeoutPolicy | None = None,
     ) -> None:
         self.api_key = api_key
         self.model_name = model
         self.base_url = (base_url or "").strip().rstrip("/") or None
+        self.max_tokens = max_tokens
         self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
         # 最近一次调用的 token 用量，供调用方记账；取不到保持 None
         self.last_usage: TokenUsage = TokenUsage()
+
+    def _budgeted(self, chunks: Iterator[object]) -> Iterator[object]:
+        return stream_with_budget(
+            chunks, self.timeout_policy, op_name=f"generation.stream.{self.model_name}"
+        )
 
     def generate(self, *, system: str, prompt: str) -> str:
         return call_with_budget(
@@ -281,6 +289,9 @@ class DashScopeGenerationProvider:
             "temperature": 0.1,
             "stream": True,
             "incremental_output": True,
+            # 没有 max_tokens 的话，一个不肯收尾的模型可以一直吐到预算被耗光；
+            # 非流式分支本来就有，流式这边此前漏了。
+            "max_tokens": self.max_tokens,
             "request_timeout": (
                 self.timeout_policy.connect_seconds,
                 self.timeout_policy.read_seconds,
@@ -289,7 +300,7 @@ class DashScopeGenerationProvider:
         if self.api_key:
             kwargs["api_key"] = self.api_key
         self.last_usage = TokenUsage()
-        for response in dashscope.Generation.call(**kwargs):
+        for response in self._budgeted(dashscope.Generation.call(**kwargs)):
             status_code = getattr(response, "status_code", None)
             if status_code != 200:
                 message = getattr(response, "message", "DashScope streaming failed")
@@ -425,7 +436,11 @@ class OpenAICompatGenerationProvider:
                     retryable=False,  # 已经开始下发，不能重试
                     status_code=response.status_code,
                 )
-            for line in response.iter_lines():
+            for line in stream_with_budget(
+                response.iter_lines(),
+                self.timeout_policy,
+                op_name="generation.stream.openai_compat",
+            ):
                 if not line.startswith("data:"):
                     continue
                 data = line[len("data:") :].strip()

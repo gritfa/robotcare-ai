@@ -19,6 +19,7 @@ from app.llm_transport import (
     call_with_budget,
     is_retryable_exception,
     is_retryable_status,
+    stream_with_budget,
 )
 
 
@@ -217,3 +218,60 @@ def test_settings_reject_budget_smaller_than_connect():
         Settings(llm_connect_timeout_seconds=20.0, llm_budget_seconds=22.0)
     with pytest.raises(ValueError):
         Settings(embedding_connect_timeout_seconds=20.0, embedding_budget_seconds=22.0)
+
+
+def test_slow_stream_is_cut_at_the_budget_even_if_no_single_read_times_out():
+    """每块间隔都在 read 超时之内，但总时长超预算——必须在预算点砍断。
+
+    这正是 2026-08-06 体检 #4 的失效模式：流式下 read timeout 只约束
+    "两块数据之间"，上游每 39 秒吐一个 token，40s 的 read 超时一次都不会
+    触发，而 nginx 60s 早已断开用户，后端还在读、还在计费。
+    """
+    clock = FakeClock()
+
+    def slow_chunks():
+        for index in range(100):
+            clock.advance(39.0)  # 单块间隔 < read_seconds(40)，read 超时永不触发
+            yield f"chunk-{index}"
+
+    received: list[str] = []
+    with pytest.raises(LLMBudgetExceededError):
+        for chunk in stream_with_budget(
+            slow_chunks(), _policy(), op_name="test.stream", monotonic=clock.monotonic
+        ):
+            received.append(chunk)
+
+    # 预算 50s：0s 检查通过取到 chunk-0（39s），39s 检查仍未越界取到 chunk-1（78s），
+    # 78s 检查越界抛出。最坏耗时因此是 budget + 一次 read，而不是 budget——
+    # 阻塞在读上是打断不了的，这条上界由 nginx proxy_read_timeout 兜底
+    # （verify_deployment_config.py 有交叉断言）。
+    assert received == ["chunk-0", "chunk-1"]
+    assert clock.now == pytest.approx(78.0)
+
+
+def test_stream_within_budget_passes_everything_through():
+    clock = FakeClock()
+
+    def quick_chunks():
+        for index in range(5):
+            clock.advance(1.0)
+            yield index
+
+    got = list(
+        stream_with_budget(
+            quick_chunks(), _policy(), op_name="test.stream", monotonic=clock.monotonic
+        )
+    )
+    assert got == [0, 1, 2, 3, 4]
+
+
+def test_empty_stream_is_not_an_error():
+    clock = FakeClock()
+    assert (
+        list(
+            stream_with_budget(
+                iter([]), _policy(), op_name="test.stream", monotonic=clock.monotonic
+            )
+        )
+        == []
+    )

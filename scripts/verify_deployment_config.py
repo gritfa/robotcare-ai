@@ -32,6 +32,30 @@ def settings_field_names() -> list[str]:
     ]
 
 
+def _int_expression(node: ast.AST) -> int:
+    """求值形如 30 * 1024 * 1024 的常量算式。
+
+    literal_eval 不接受 BinOp，而这类上限常量在仓库里就是写成乘法的；
+    只支持乘法与整数字面量，不引入 eval。
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+        return _int_expression(node.left) * _int_expression(node.right)
+    raise AssertionError(f"unsupported constant expression: {ast.dump(node)}")
+
+
+def module_constant(path: Path, name: str) -> int:
+    """静态解析某个模块里的整数常量（含 30 * 1024 * 1024 这类算式）。"""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
+        ):
+            return _int_expression(node.value)
+    raise AssertionError(f"{name} not found in {path.name}")
+
+
 def config_default(field: str) -> float:
     """取 Settings 中某个数值字段的默认值（支持 Field(default=...) 与裸字面量）。"""
     tree = ast.parse((ROOT / "backend" / "app" / "config.py").read_text(encoding="utf-8"))
@@ -274,11 +298,23 @@ def main() -> None:
         "frame-ancestors 'none'",
     ):
         require(token in nginx, f"Nginx security header missing: {token}")
-    for token in (
-        "location = /healthz",
-        "client_max_body_size 6m",
-    ):
-        require(token in nginx, f"Nginx config missing: {token}")
+    require("location = /healthz" in nginx, "Nginx config missing: location = /healthz")
+
+    # 上传上限必须与后端交叉校验，不能各写各的（2026-08-06 体检 #5：
+    # nginx 6m vs 后端 30MB，27MB 说明书永远传不进去，而当时的断言只检查
+    # "存在 client_max_body_size 6m 这一行"，对不一致完全免疫）。
+    body_size = re.search(r"client_max_body_size\s+(\d+)m", nginx)
+    require(body_size is not None, "Nginx client_max_body_size must be pinned in megabytes")
+    nginx_upload_bytes = int(body_size.group(1)) * 1024 * 1024
+    backend_upload_bytes = module_constant(
+        ROOT / "backend" / "app" / "routers" / "admin.py", "MAX_KNOWLEDGE_PDF_BYTES"
+    )
+    require(
+        backend_upload_bytes <= nginx_upload_bytes,
+        f"backend accepts uploads up to {backend_upload_bytes / 1048576:g}MB but Nginx caps the "
+        f"body at {nginx_upload_bytes / 1048576:g}MB — the reverse proxy would reject them with "
+        "an HTML 413 the frontend cannot parse",
+    )
     require(
         "location = /backend-healthz" not in nginx,
         "detailed backend readiness must not be exposed through public Nginx",

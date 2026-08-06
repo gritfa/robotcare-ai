@@ -193,6 +193,26 @@ def supports_streaming(provider: GenerationProvider) -> bool:
     return callable(getattr(provider, "generate_stream", None))
 
 
+def _generate_capturing_usage(
+    provider: GenerationProvider, *, system: str, prompt: str
+) -> tuple[str, "TokenUsage | None"]:
+    """整段生成，并把本次调用的 token 用量随返回值带出。
+
+    为什么不读 provider.last_usage（2026-08-06 体检 #8）：provider 是
+    app.state 上的**全局单例**，而 last_usage 是实例属性。两路请求并发时
+    A 写完、B 在记账前读到 A 的用量，账就串了；更糟的是 knowledge_gap 这类
+    **根本没调用模型**的拒答也会读到上一次请求的残留值，凭空记一笔幽灵账单。
+
+    用量必须属于"这一次调用"，所以由调用带出而不是挂在共享对象上。
+    provider 没实现 generate_with_usage 时（测试桩、离线评测）返回 None，
+    调用方据此记 usage 为空，而不是拿别人的数字凑数。
+    """
+    with_usage = getattr(provider, "generate_with_usage", None)
+    if callable(with_usage):
+        return with_usage(system=system, prompt=prompt)
+    return provider.generate(system=system, prompt=prompt), None
+
+
 # 句末边界：只有成句才过安全闸门。逐 token 检测没有意义——
 # "拆开外壳"这四个字在到齐之前，任何检测都判不出危险。
 _SENTENCE_BOUNDARY = re.compile(r"[。！？!?；;\n]")
@@ -277,8 +297,9 @@ class DashScopeGenerationProvider:
         self.base_url = (base_url or "").strip().rstrip("/") or None
         self.max_tokens = max_tokens
         self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
-        # 最近一次调用的 token 用量，供调用方记账；取不到保持 None
-        self.last_usage: TokenUsage = TokenUsage()
+        # 本次调用的用量落在这里，仅供 generate_with_usage 在同一次调用内取走。
+        # 绝不要跨调用读它——provider 是全局单例，跨调用读会串账（体检 #8）。
+        self._call_usage: TokenUsage = TokenUsage()
 
     def _budgeted(self, chunks: Iterator[object]) -> Iterator[object]:
         return stream_with_budget(
@@ -293,6 +314,10 @@ class DashScopeGenerationProvider:
             self.timeout_policy,
             op_name="generation.dashscope",
         )
+
+    def generate_with_usage(self, *, system: str, prompt: str) -> tuple[str, TokenUsage]:
+        text = self.generate(system=system, prompt=prompt)
+        return text, self._call_usage
 
     def generate_stream(self, *, system: str, prompt: str) -> Iterator[str]:
         """增量输出。DashScope 的 incremental_output 直接给增量片段。
@@ -324,7 +349,7 @@ class DashScopeGenerationProvider:
         }
         if self.api_key:
             kwargs["api_key"] = self.api_key
-        self.last_usage = TokenUsage()
+        stream_usage = TokenUsage()
         for response in self._budgeted(dashscope.Generation.call(**kwargs)):
             status_code = getattr(response, "status_code", None)
             if status_code != 200:
@@ -341,7 +366,7 @@ class DashScopeGenerationProvider:
                 else {"usage": getattr(response, "usage", None)}
             )
             if usage.prompt_tokens is not None or usage.completion_tokens is not None:
-                self.last_usage = usage
+                stream_usage = usage
             output = getattr(response, "output", None)
             if output is None and isinstance(response, dict):
                 output = response.get("output")
@@ -351,6 +376,9 @@ class DashScopeGenerationProvider:
                 continue
             if piece:
                 yield piece
+        # 用量随本次流返回（StopIteration.value），不挂在共享单例上——
+        # 单例 + 并发 = 串账，且未调用模型的拒答会读到残留值（体检 #8）。
+        return stream_usage
 
     def _generate_once(self, *, system: str, prompt: str, read_timeout: float) -> str:
         import dashscope
@@ -380,7 +408,7 @@ class DashScopeGenerationProvider:
                 retryable=isinstance(status_code, int) and is_retryable_status(status_code),
                 status_code=status_code if isinstance(status_code, int) else None,
             )
-        self.last_usage = _usage_from_payload(
+        self._call_usage = _usage_from_payload(
             response if isinstance(response, dict) else {"usage": getattr(response, "usage", None)}
         )
         output = getattr(response, "output", None)
@@ -414,7 +442,8 @@ class OpenAICompatGenerationProvider:
         # （2026-08-04 LLM 裁判评测 8/34 条 finish_reason=length 实锤），按调用方需要放大
         self.max_tokens = max_tokens
         self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
-        self.last_usage: TokenUsage = TokenUsage()
+        # 同 DashScope：仅在一次调用内部传递，绝不跨调用读（体检 #8）
+        self._call_usage: TokenUsage = TokenUsage()
 
     def generate(self, *, system: str, prompt: str) -> str:
         return call_with_budget(
@@ -425,6 +454,10 @@ class OpenAICompatGenerationProvider:
             op_name="generation.openai_compat",
         )
 
+    def generate_with_usage(self, *, system: str, prompt: str) -> tuple[str, TokenUsage]:
+        text = self.generate(system=system, prompt=prompt)
+        return text, self._call_usage
+
     def generate_stream(self, *, system: str, prompt: str) -> Iterator[str]:
         """OpenAI 兼容 SSE 增量输出。只取 content，忽略 reasoning_content。"""
         import httpx
@@ -432,7 +465,7 @@ class OpenAICompatGenerationProvider:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        self.last_usage = TokenUsage()
+        stream_usage = TokenUsage()
         with httpx.stream(
             "POST",
             f"{self.base_url}/chat/completions",
@@ -477,7 +510,7 @@ class OpenAICompatGenerationProvider:
                     continue
                 usage = _usage_from_payload(frame)
                 if usage.prompt_tokens is not None or usage.completion_tokens is not None:
-                    self.last_usage = usage
+                    stream_usage = usage
                 try:
                     delta = frame["choices"][0]["delta"]
                 except (KeyError, IndexError, TypeError):
@@ -485,6 +518,7 @@ class OpenAICompatGenerationProvider:
                 piece = delta.get("content")
                 if piece:
                     yield piece
+        return stream_usage
 
     def _generate_once(self, *, system: str, prompt: str, read_timeout: float) -> str:
         import httpx
@@ -518,7 +552,7 @@ class OpenAICompatGenerationProvider:
                 status_code=response.status_code,
             )
         payload = response.json()
-        self.last_usage = _usage_from_payload(payload)
+        self._call_usage = _usage_from_payload(payload)
         try:
             choice = payload["choices"][0]
             content = choice["message"]["content"]
@@ -746,6 +780,10 @@ def answer_events(
     db.commit()
 
     gate: StreamSafetyGate | None = None
+    # 本次调用的 token 用量，由生成调用带出。保持 None 直到模型真的被调用过——
+    # knowledge_gap 分支在此之前就 refuse 了，那种情况一分钱没花，必须记空账
+    # 而不是沿用别人的数字（体检 #8 的幽灵计费）。
+    call_usage: TokenUsage | None = None
 
     def refuse(reason: str, *, answer: str | None = None, snippet_count: int = len(results)) -> AnswerResult:
         # 内容缺口埋点。放在 _persist 之前：此刻 Session 里没有待提交的业务数据
@@ -761,8 +799,10 @@ def answer_events(
                 refusal_reason=reason,
                 trace_id=current_trace_id(),
             )
-        # 拒答同样烧了 token（模型已经跑完），成本必须照记，否则账单对不上
-        refuse_usage = getattr(generation_provider, "last_usage", None)
+        # 拒答同样烧了 token（模型已经跑完），成本必须照记，否则账单对不上。
+        # call_usage 是本次调用带出来的：模型没被调用过（knowledge_gap）时它是
+        # None，于是记空而不是记上一次请求的残留——那是幽灵账单（体检 #8）。
+        refuse_usage = call_usage
         record = _persist(
             db,
             user_id=user_id,
@@ -810,14 +850,25 @@ def answer_events(
         # 真流式：成句即过闸下发。首字延迟不再等于完整生成延迟。
         gate = StreamSafetyGate(snippet_count=len(results))
         pieces: list[str] = []
-        for piece in generation_provider.generate_stream(system=SYSTEM_PROMPT, prompt=prompt):
+        # usage 由 generate_stream 通过 return 带出（StopIteration.value），
+        # 所以这里必须手动迭代——for 会把返回值丢掉。
+        stream = generation_provider.generate_stream(system=SYSTEM_PROMPT, prompt=prompt)
+        while True:
+            try:
+                piece = next(stream)
+            except StopIteration as stop:
+                call_usage = stop.value if isinstance(stop.value, TokenUsage) else None
+                break
             pieces.append(piece)
             releasable = gate.feed(piece)
             if releasable:
                 yield ("delta", releasable)
         raw_answer = "".join(pieces).strip()
     else:
-        raw_answer = generation_provider.generate(system=SYSTEM_PROMPT, prompt=prompt).strip()
+        raw_answer, call_usage = _generate_capturing_usage(
+            generation_provider, system=SYSTEM_PROMPT, prompt=prompt
+        )
+        raw_answer = raw_answer.strip()
 
     if not raw_answer or REFUSE_TOKEN in raw_answer.split("\n", 1)[0][:20]:
         return refuse("model_refused")
@@ -846,7 +897,7 @@ def answer_events(
         )
         for index in cited_indexes
     ]
-    answered_usage = getattr(generation_provider, "last_usage", None)
+    answered_usage = call_usage
     record = _persist(
         db,
         user_id=user_id,

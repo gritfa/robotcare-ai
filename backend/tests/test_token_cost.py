@@ -27,16 +27,26 @@ from test_generation_service import SYNTHETIC_DIR
 
 
 class UsageReportingProvider:
-    """会报用量的假后端，模拟真实 provider 的 last_usage 约定。"""
+    """会报用量的假后端。
+
+    用量随调用返回（generate_with_usage），不再挂在实例上——provider 是全局
+    单例，实例属性在并发下会串账，未调用模型的拒答还会读到残留值记幽灵账
+    （2026-08-06 体检 #8）。
+    """
 
     model_name = "usage-test-model"
 
     def __init__(self, text: str, usage: TokenUsage) -> None:
         self.text = text
-        self.last_usage = usage
+        self.usage = usage
+        self.calls = 0
 
     def generate(self, *, system: str, prompt: str) -> str:
+        self.calls += 1
         return self.text
+
+    def generate_with_usage(self, *, system: str, prompt: str) -> tuple[str, TokenUsage]:
+        return self.generate(system=system, prompt=prompt), self.usage
 
 
 class SilentProvider:
@@ -182,3 +192,83 @@ def test_non_admin_cannot_read_overview(client):
     token = register(client, "cost-plain@example.com")["access_token"]
 
     assert client.get("/api/v1/admin/overview", headers=auth(token)).status_code == 403
+
+
+def test_gap_refusal_records_no_cost_when_model_was_never_called(client, monkeypatch):
+    """检索没命中就拒答——一分钱没花，绝不能记账。
+
+    2026-08-06 体检 #8：usage 此前挂在全局单例 provider 的 last_usage 上，
+    knowledge_gap 分支根本没调用模型，却会读到**上一次请求**的残留用量，
+    凭空记一笔幽灵账单。
+    """
+    from app.generation_service import answer_events
+
+    provider = UsageReportingProvider("不会被用到", TokenUsage(prompt_tokens=999, completion_tokens=999))
+    # 先跑一次正常调用，把 provider 内部的 _call_usage 填上真实数字
+    client.app.state.generation_provider = provider
+
+    with client.app.state.session_factory() as db:
+        model_id = db.scalar(select(RobotModel.id).where(RobotModel.code == "RC-X800"))
+        events = answer_events(
+            db,
+            user_id=None,
+            robot_model_id=model_id,  # 该型号未入库任何知识 → knowledge_gap
+            query="完全查不到的问题",
+            embedding_provider=HashingNgramEmbeddingProvider(),
+            generation_provider=provider,
+        )
+        result = None
+        while True:
+            try:
+                next(events)
+            except StopIteration as stop:
+                result = stop.value
+                break
+
+        assert result.status == "refused"
+        assert result.refusal_reason == "knowledge_gap"
+        assert provider.calls == 0, "检索没命中就不该调用模型"
+
+        record = db.get(GenerationRecord, result.record_id)
+        assert record.prompt_tokens is None, "没调用模型却记了 token"
+        assert record.completion_tokens is None
+        assert record.estimated_cost is None, "没花钱却记了成本＝幽灵账单"
+
+
+def test_usage_belongs_to_its_own_call_not_the_shared_provider(client):
+    """两次不同用量的调用，各记各的账。
+
+    provider 是 app.state 上的全局单例；用量若挂在实例属性上，并发下
+    后一次读到的可能是前一次的数字。
+    """
+    with client.app.state.session_factory() as db:
+        model_id = db.scalar(select(RobotModel.id).where(RobotModel.code == "RC-S200"))
+        ingest_pdf(
+            db,
+            robot_model_id=model_id,
+            pdf_path=SYNTHETIC_DIR / "RC-S200_manual.pdf",
+            source_url="synthetic://robotcare-demo/rc-s200/manual",
+            provider=HashingNgramEmbeddingProvider(),
+        )
+
+        first = UsageReportingProvider(
+            "先清空尘盒 [1]。", TokenUsage(prompt_tokens=100, completion_tokens=10)
+        )
+        second = UsageReportingProvider(
+            "再清理滤网 [1]。", TokenUsage(prompt_tokens=700, completion_tokens=70)
+        )
+        records = []
+        for provider in (first, second):
+            result = generate_answer(
+                db,
+                user_id=None,
+                robot_model_id=model_id,
+                query="吸力变小了怎么办",
+                embedding_provider=HashingNgramEmbeddingProvider(),
+                generation_provider=provider,
+                min_score=0.0,
+            )
+            records.append(db.get(GenerationRecord, result.record_id))
+
+    assert [r.prompt_tokens for r in records] == [100, 700]
+    assert [r.completion_tokens for r in records] == [10, 70]

@@ -7,8 +7,8 @@ from fastapi import HTTPException, Request, Response
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-import app.api as api_module
 import app.auth_service as auth_service_module
+import app.routers.auth as auth_router_module
 from app.auth_service import (
     REFRESH_COOKIE_NAME,
     cleanup_expired_login_throttles,
@@ -222,7 +222,7 @@ def test_wrong_password_and_unknown_user_each_verify_once_with_identical_respons
         verified_hashes.append(password_hash)
         return False
 
-    monkeypatch.setattr(api_module, "verify_password", reject_password)
+    monkeypatch.setattr(auth_router_module, "verify_password", reject_password)
     trace_headers = {"X-Request-ID": "7dc61147-996c-4e99-b434-7c66690a8397"}
 
     existing_response = client.post(

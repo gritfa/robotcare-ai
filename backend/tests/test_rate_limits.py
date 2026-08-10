@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, Request
 from sqlalchemy import select
 
-import app.api as api_module
+import app.routers.auth as auth_router_module
+import app.routers.diagnostics as diagnostics_router_module
+import app.routers.knowledge as knowledge_router_module
 from app.config import Settings
 from app.models import ApiRateLimit
 from app.rate_limit_service import (
@@ -257,10 +259,23 @@ def test_all_six_high_cost_routes_are_wired_to_the_expected_limit_action(
         del settings
         registration_calls.append(email)
 
-    monkeypatch.setattr(api_module, "enforce_business_rate_limit", record_business)
-    monkeypatch.setattr(api_module, "enforce_registration_rate_limit", record_registration)
-    monkeypatch.setattr(api_module, "enforce_embedding_rate_limit", lambda *args, **kwargs: None)
-    monkeypatch.setattr(api_module, "search_knowledge", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        knowledge_router_module, "enforce_business_rate_limit", record_business
+    )
+    monkeypatch.setattr(
+        diagnostics_router_module, "enforce_business_rate_limit", record_business
+    )
+    monkeypatch.setattr(
+        auth_router_module, "enforce_registration_rate_limit", record_registration
+    )
+    monkeypatch.setattr(
+        knowledge_router_module,
+        "enforce_embedding_rate_limit",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        knowledge_router_module, "search_knowledge", lambda *args, **kwargs: []
+    )
 
     token = register(client, "wired-routes@example.com")["access_token"]
     assert registration_calls == ["wired-routes@example.com"]

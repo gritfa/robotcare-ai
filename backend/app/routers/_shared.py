@@ -21,8 +21,25 @@ from ..models import (
 )
 from ..observability import request_trace_id
 from ..schemas import RegisterRequest, TokenResponse
+from ..safety import SafetyBlock
 
 LIKE_ESCAPE = "\\"
+
+
+def safety_block_http_exception(block: SafetyBlock) -> HTTPException:
+    """Build the single public API contract for high-risk safety blocks."""
+
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail={
+            "code": "SAFETY_BLOCKED",
+            "blocked": True,
+            "category": block.category,
+            "risk_level": block.risk_level,
+            "reason": block.reason,
+            "official_service_advice": block.advice,
+        },
+    )
 
 
 def escape_like(value: str) -> str:

@@ -43,6 +43,7 @@ from ..schemas import (
     KnowledgeSearchResult,
     KnowledgeStatusRead,
 )
+from ._shared import safety_block_http_exception
 from ..security import CAPABILITY_MESSAGES, get_current_user, has_capability
 
 router = APIRouter(prefix="/api/v1")
@@ -68,17 +69,7 @@ def knowledge_search(
             category=safety_block.category,
             risk_level=safety_block.risk_level,
         )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "SAFETY_BLOCKED",
-                "blocked": True,
-                "category": safety_block.category,
-                "risk_level": safety_block.risk_level,
-                "reason": safety_block.reason,
-                "official_service_advice": safety_block.advice,
-            },
-        )
+        raise safety_block_http_exception(safety_block)
     settings = get_settings()
     enforce_business_rate_limit(
         db,
@@ -229,17 +220,7 @@ def knowledge_answer(
             category=safety_block.category,
             risk_level=safety_block.risk_level,
         )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "SAFETY_BLOCKED",
-                "blocked": True,
-                "category": safety_block.category,
-                "risk_level": safety_block.risk_level,
-                "reason": safety_block.reason,
-                "official_service_advice": safety_block.advice,
-            },
-        )
+        raise safety_block_http_exception(safety_block)
     settings = get_settings()
     enforce_business_rate_limit(
         db,

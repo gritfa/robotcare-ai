@@ -262,7 +262,8 @@ def test_answer_api_end_to_end_with_safety_and_auth(client, monkeypatch):
 
     # hashing 嵌入是词面相似度，分数天然低于语义向量默认阈值，测试放低阈值
     monkeypatch.setattr(
-        "app.api.get_settings", lambda: Settings(knowledge_min_score=0.0, _env_file=None)
+        "app.routers.knowledge.get_settings",
+        lambda: Settings(knowledge_min_score=0.0, _env_file=None),
     )
     model_id = _prepare_model_with_knowledge(client)
     client.app.state.embedding_provider = HashingNgramEmbeddingProvider()
@@ -312,7 +313,7 @@ def test_answer_api_rate_limited(client, monkeypatch):
     from app.config import Settings
 
     monkeypatch.setattr(
-        "app.api.get_settings",
+        "app.routers.knowledge.get_settings",
         lambda: Settings(
             knowledge_min_score=0.0, knowledge_answer_user_per_minute=3, _env_file=None
         ),

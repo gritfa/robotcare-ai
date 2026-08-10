@@ -35,7 +35,7 @@ FastAPI /api/v1
 - 【已验证】管理员授权由 FastAPI 依赖在服务器端执行；`AuditLog` 记录型号启停、管理员创建/提升和敏感详情读取。敏感读取先提交审计再返回正文，审计失败关闭为 503；前端路由守卫不作为安全边界。
 - 【已验证】数据层为 **PostgreSQL 单方言**：`vector(256)` 列 + 数据库内余弦 Top-K SQL。早期的 SQLite/PostgreSQL 双方言分叉已在 `34d96fa` 整体删除——两种方言的检索代码路径已经不同，本地测过的不能代表线上行为。历史 SQLite 开发库的一次性迁入工具保留在 `backend/scripts/migrate_legacy_sqlite.py`。
 - 【已验证：实现与静态/单元验证】PostgreSQL 查询保持 HNSW 索引列无 CAST，并在数据库层完成型号过滤、阈值、排序和 LIMIT；迁移定义 `vector` 扩展和 `vector_cosine_ops` HNSW 索引。
-- 【已验证：GitHub Actions】PostgreSQL 16 + pgvector service 已运行迁移和集成测试，验证扩展、`vector(256)`、HNSW、数据库 Top-K、型号隔离和 `/ready`；本机 Docker、生产数据规模和查询计划调优仍未验证。
+- 【已验证：本机 + GitHub Actions】PostgreSQL 16 + pgvector 已运行迁移和集成测试，验证扩展、`vector(256)`、HNSW、数据库 Top-K、型号隔离和 `/ready`；生产数据规模、多实例压力和查询计划调优仍未验证。
 - 【已验证】附件开发期使用本地目录，已实现真实图片解码、格式一致性、大小/像素/数量/会话状态限制、随机文件名、所有权隔离和删除失败追踪；切换 MinIO 仍为【计划】。
 - 【已验证】诊断反馈分支使用 LangGraph StateGraph；数据库负责会话持久化。LangGraph checkpointer、中断恢复图和模型分类仍为【计划】。
 
@@ -101,10 +101,10 @@ FastAPI /api/v1
 - 【已验证】知识检索事件记录文档标题、文档 SHA256、来源页码、分数、结果数与耗时；embedding 事件记录模型、输入条数、维度、耗时和结果，不记录查询、分片内容、模型输入或 API Key。
 - 【已验证】`/health` 只表示进程存活；`/ready` 以数据库连通、Alembic head、附件目录和报告目录可写为合取条件，失败关闭并返回 503。本地迁移库实际启动得到 `/health 200` 与 `/ready 200`。
 - 【计划】接入外部日志聚合、指标系统、告警和 OpenTelemetry；当前 JSON 日志不是集中式监控，也没有 SLO、错误率/延迟告警或跨服务 Trace。当前未实现生成式调用，因而还没有可验证的生成模型 token/费用监控。
-- 【已验证：本机关键链路】Playwright 已在真实 Microsoft Edge 上完成 8 条 E2E：闭环、恢复、越权、分类、安全阻断以及注册/附件/报告与 PDF 限流；命令 `44.9s` 正常退出，自管服务脚本成功与失败路径均释放测试端口。隔离 SQLite 不替代生产 PostgreSQL/Alembic/Docker/HTTPS 验收。
+- 【已验证：本机关键链路】Playwright Chromium 已在隔离 PostgreSQL 测试库完成 10 条 E2E；早期真实 Microsoft Edge 8 条证据使用隔离 SQLite。两者都不替代生产 PostgreSQL、HTTPS 与浏览器矩阵验收。
 - 【已验证：静态契约】Docker Compose、Dockerfile、启动迁移、外部密钥、PostgreSQL/附件/报告持久卷、Noto CJK 字体、服务健康检查和 CI PostgreSQL job 已通过静态配置检查。
 - 【已验证：静态契约】Compose 前后端端口都只绑定主机回环地址；Nginx 配置 CSP、`nosniff`、Referrer Policy 与 Permissions Policy，并且不公开详细 backend readiness。真实 HTTPS 反向代理与浏览器响应头仍需 Docker/E2E 运行确认。
-- 【已验证：远端 CI】PostgreSQL + pgvector 集成、Chromium E2E、前后端测试/构建、知识校验和 Compose 配置解析已成功。【待验证：实际部署】本机没有 Docker/psql，镜像未构建、Compose 未启动，HTTPS 和持久化重建尚无证据。
+- 【已验证：本机 development】Docker 镜像、Compose 三服务健康、启动迁移、pgvector 就绪与重建后数据持久化已有证据；production 缺少 key 时按门禁拒绝启动。【已验证：远端 CI】PostgreSQL + pgvector 集成、Chromium E2E、前后端测试/构建、知识校验和 Compose 配置解析已成功。【待验证：production】带真实外部密钥的 HTTPS 部署、生产数据和多实例负载尚无证据。
 
 ## 6. 管理员边界
 

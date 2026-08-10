@@ -337,7 +337,7 @@ def test_public_knowledge_api_rejects_threshold_override_and_uses_server_setting
         db.commit()
 
     monkeypatch.setattr(
-        "app.api.get_settings",
+        "app.routers.knowledge.get_settings",
         lambda: Settings(knowledge_min_score=0.9, _env_file=None),
     )
     forbidden = client.post(

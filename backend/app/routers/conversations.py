@@ -34,7 +34,7 @@ from ..models import (
 )
 from ..observability import emit_json_log, request_trace_id
 from ..rate_limit_service import enforce_business_rate_limit, enforce_embedding_rate_limit
-from ._shared import LIKE_ESCAPE, escape_like
+from ._shared import LIKE_ESCAPE, escape_like, safety_block_http_exception
 from ..safety import detect_safety_block
 from ..schemas import (
     AnswerCitationRead,
@@ -290,17 +290,7 @@ def _prepare_turn(
             conversation_id=conversation.id,
             category=safety_block.category,
         )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "SAFETY_BLOCKED",
-                "blocked": True,
-                "category": safety_block.category,
-                "risk_level": safety_block.risk_level,
-                "reason": safety_block.reason,
-                "official_service_advice": safety_block.advice,
-            },
-        )
+        raise safety_block_http_exception(safety_block)
 
     settings = get_settings()
     enforce_business_rate_limit(

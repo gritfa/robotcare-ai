@@ -6,8 +6,10 @@
 
 > 状态说明：本仓库正在执行分阶段工程化改造。本文只把经过真实命令验证的能力标记为 `【已验证】`；其余内容均标记为 `【计划】` 或 `【待验证】`。
 
-> **第一次接触这个项目？先读 [`docs/PROJECT_STORY.md`](docs/PROJECT_STORY.md)。**
-> 完整项目历程：做了什么、踩过哪 18 个坑、换掉了哪三项技术、代码地图，附术语表与验收清单。
+> **要按 Python + Agent 开发路线系统学习？从 [`docs/LEARNING_PLAN.md`](docs/LEARNING_PLAN.md) 开始。**
+> 它按 8 周安排环境、FastAPI、PostgreSQL/pgvector、RAG、生成评测、LangGraph、SSE、Docker/CI 和毕业项目，每周都有代码入口、动手任务与通关证据。
+> **第一次了解项目经历？再读 [`docs/PROJECT_STORY.md`](docs/PROJECT_STORY.md)。**
+> 它负责解释做了什么、踩过哪 18 个坑、换掉了哪三项技术，以及当前代码地图。
 > **要拿这个项目求职的，读该文档第 10 章 +（必读）[`docs/resume_evidence.md`](docs/resume_evidence.md)**，
 > 后者列了可量化证据与「不能声称」的边界清单。本 README 是给已经上手的人查命令用的。
 
@@ -16,7 +18,7 @@
 | 子系统 | 状态 | 说明 |
 | --- | --- | --- |
 | FastAPI 后端 | `【已验证】` | 单方言重构后全部测试直接跑在 PostgreSQL 16 + pgvector 测试容器上：`508 passed (92.25s，2026-08-06 本机)`；原独立 PG 集成测试并入常规回归，不再有 skip |
-| Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康、会话流式、知识库后台运维及认证恢复共 `94 passed`；`vue-tsc + vite build` 通过，element-plus 已改为按需引入，入口包 `224.97 kB (gzip 83.78 kB)`，其余按页面/组件懒加载（改造前单主包 1.11 MB） |
+| Vue 3 前端 | `【已验证】` | 用户主链路、结构化错误、限流重试、附件保留、安全卡片、知识健康、会话流式、知识库后台运维及认证恢复共 `94 passed`；`vue-tsc + vite build` 通过，element-plus 已改为按需引入；2026-08-10 当前入口包 `309.32 kB (gzip 113.28 kB)`，其余按页面/组件懒加载（改造前单主包 1.11 MB） |
 | 智能客服会话层 | `【已验证：本地】` | 多轮会话（conversations/conversation_messages，迁移 `20260804_0010`）、SSE 流式回答（先校验引用后分片下发）、会话一键转分步诊断（`20260804_0011` 记录来源会话）、售后报告附带会话摘要；后端 pytest + 前端单测覆盖，真实浏览器长会话压力未测 |
 | 聊天消息路由层 | `【已验证：本地】` | `message_router.py` 在 RAG 之前分流四类消息：闲聊（"你好"）与产品操作（"生成报告""开始诊断""上传图片"）直接回复，不消耗 embedding 配额、不检索、不调生成模型；上下文追问与知识问题照常走完整链路。判定规则确定性可解释，`intent`/`routing_rule`/`action_code` 随消息持久化（迁移 `20260805_0012`），会话回放时操作按钮仍在。安全前置阻断永远排在路由之前，路由不是绕过安全检测的旁路。前端 Enter 发送 / Shift+Enter 换行，中文输入法组词期间的回车不发送（`composerKeys.ts`，Safari 个别输入法的 compositionend 顺序问题见文件内说明） |
 | 浏览器 E2E | `【已验证：本机关键链路，PostgreSQL 隔离库】` | 2026-08-05 本机 Chromium 在改造后的隔离 PostgreSQL 测试库（`ROBOTCARE_E2E_DATABASE_URL`）上重跑闭环、恢复、越权、分类、安全阻断以及注册/附件/报告/PDF 限流、管理员知识库后台，共 `10 passed (29.0s)`，远端 CI 的 Chromium E2E job 同版本 success；早前 Edge `8 passed (44.9s)` 的证据基于当时的隔离 SQLite 库，**Microsoft Edge 在 PG 库上尚未重跑**；两者都不代表 Docker/HTTPS |
@@ -36,7 +38,7 @@
 | LLM 生成层（强制引用/拒答/留痕） | `【已验证：本地 mock】` | `POST /knowledge/answer`：安全前置阻断→检索→生成；检索空/低于阈值不调模型直接拒答，引用缺失/越界拒答，回答命中安全规则拦截留痕；generation_records 全量留痕（prompt 版本/模型/片段 SHA/引用/耗时）；6 项 pytest 用 mock Provider 验证，真实 DashScope 生成调用未在本机执行 |
 | faithfulness 在线评测 | `【已验证：全量 34/34，已达发布阈值】` | 2026-08-05 prompt `answer-v5` 全量在线执行（`--scope all`）：主评测 34/34 通过、score `1.0`（结构化引用+输出安全+违禁论断防线，`docs/evidence/generation_online_eval.json`）；独立第三方裁判（deepseek-v4-flash）逐论断核对的语义忠实度 `0.9118`（judged 34/34、31 条 faithful、6 条 unsupported 论断、`run_errors` 为空），达到脚本阈值 0.9，`overall_status=passed_full`（`docs/evidence/llm_judge_faithfulness.json`）。迭代轨迹 v1 `0.6765` → v2 `0.7941` → v3 `0.8824` → v4 `0.8529`（**退步，未采用**）→ v5 `0.9118`（**当前线上版本**，`generation_service.py` 的 `PROMPT_VERSION = "answer-v5"`）→ v6 `0.8824`（**再次退步，`overall_status=below_threshold`，未采用**，报告留档 `llm_judge_faithfulness_v6.json`）。六版中两版为负优化并依据评测结果回退；失败版本报告一律原样保留，不删档。v5 首轮因 2 条网络故障只判到 32/34（`completed_with_errors`，score `0.9062`），按"分母不全不算达标"只补跑裁判段，首轮报告原样保留在 `docs/evidence/llm_judge_faithfulness_v5_run1_network_errors.json`。剩余 3 条不忠实（FF-002/003/004）均为提问自带说明书没有的预设概念，非模型编造知识 |
 | PostgreSQL + pgvector 实现 | `【已验证】` | 单方言：`vector(256)` 字段、无列 CAST 的数据库 Top-K SQL、型号过滤、HNSW 迁移和知识替换失败回滚全部直接在真实 PostgreSQL 上回归（SQLite 双方言分叉已删除） |
-| PostgreSQL + pgvector 真实运行 | `【已验证：GitHub Actions】` | PostgreSQL 16 + pgvector Job 已验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；本机 Docker、多实例压力与生产数据仍未验证 |
+| PostgreSQL + pgvector 真实运行 | `【已验证：本机 + GitHub Actions】` | PostgreSQL 16 + pgvector 已在 CI 与本机专用测试容器验证扩展、`vector(256)`、HNSW、迁移、Top-K、型号隔离和 `/ready`；多实例压力与生产数据仍未验证 |
 | 远端 CI | `【已验证】` | 单方言五 Job 工作流（PG16+pgvector 回归、前端、Chromium E2E、部署契约、知识校验）已在远端跑通：提交 `bd77ad5` run 30600605830 五个 Job 全部 success（2026-07-31，https://github.com/gritfa/robotcare-ai/actions/runs/30600605830） |
 | PDF 售后报告 | `【已验证】` | 并发请求返回同一报告；PDF 采用目标锁、临时文件和原子替换，验证 `%PDF-`/`%%EOF`；Edge 下载校验文件存在、非空和文件头 |
 | 管理员后端与审计 | `【已验证】` | 普通列表不返回故障正文、错误码、阻断原因或关联用户/设备 ID；报告、诊断和安全阻断详情按需读取并在返回前写入不含正文的 fail-closed 审计 |
@@ -66,7 +68,7 @@ cd frontend
 npm ci
 npm test          # 94 passed (14 test files)
 npm run build     # vue-tsc + vite build 通过
-# dist/assets/index-*.js  224.97 kB (gzip 83.78 kB)，element-plus 按需引入后
+# dist/assets/index-*.js  309.32 kB (gzip 113.28 kB，2026-08-10 当前构建)
 # 按组件/页面拆成 el-table-column 91.6 kB、el-popper 48.3 kB 等独立块
 ```
 
@@ -174,7 +176,7 @@ cd backend
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 
-API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260805_0016`：`0005` 数据库状态约束，`0006` 独立 IP 登录桶与可信代理配套，`0007` API/Embedding 配额表，`0008` 生成层留痕表 generation_records，`0009` 内容缺口事件表 knowledge_gap_events，`0010` 会话表 conversations/conversation_messages，`0011` 诊断来源会话字段，`0012` 消息路由字段，`0013` 会话体验包（快捷操作、消息反馈），`0014` 知识库后台（文档生命周期、版本历史、缺口闭环），`0015` 生成记录的 token 用量与成本，`0016` 角色分级 viewer/operator；`create_all()` 仅保留给显式开启的隔离测试。
+API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260806_0017`：`0005` 数据库状态约束，`0006` 独立 IP 登录桶与可信代理配套，`0007` API/Embedding 配额表，`0008` 生成层留痕表 generation_records，`0009` 内容缺口事件表 knowledge_gap_events，`0010` 会话表 conversations/conversation_messages，`0011` 诊断来源会话字段，`0012` 消息路由字段，`0013` 会话体验包（快捷操作、消息反馈），`0014` 知识库后台（文档生命周期、版本历史、缺口闭环），`0015` 生成记录的 token 用量与成本，`0016` 角色分级 viewer/operator，`0017` 会话知识缺口事件；`create_all()` 仅保留给显式开启的隔离测试。
 
 > 这一行的 head 号历史上多次过期（体检时停在 `0011`，实际已到 `0014`）。以数据库里的 `alembic_version` 为准，本行仅供人读；启动守卫本身不依赖它。
 
@@ -189,7 +191,7 @@ cd backend
 .\.venv\Scripts\python.exe -m app.knowledge_cli release --manifest <外部目录>\release.json
 ```
 
-清单格式参考 `knowledge/release_manifest.example.json`。命令要求数据库已处于 Alembic head，校验型号、来源、SHA256、`text-embedding-v4` 和 256 维；重复发布幂等，整包失败回滚。生产环境缺少 DashScope Key 时配置门禁拒绝启动完整知识能力；这些实现/测试证据不等于真实 PostgreSQL 或 Docker 发布已经运行。
+清单格式参考 `knowledge/release_manifest.example.json`。命令要求数据库已处于 Alembic head，校验型号、来源、SHA256、`text-embedding-v4` 和 256 维；重复发布幂等，整包失败回滚。生产环境缺少 DashScope Key 时配置门禁拒绝启动完整知识能力；本机 PostgreSQL/Docker 验证不等于生产知识包已经发布。
 
 ## 认证与可观测性基线
 
@@ -244,8 +246,7 @@ Remove-Item Env:ROBOTCARE_ADMIN_PASSWORD
 
 ### Docker 部署下的账号运维
 
-全仓此前只有本机 venv + PowerShell 的写法，Docker 场景一次都没出现过（2026-08-05 体检）。
-容器内执行：
+以下命令已补齐 Docker 场景，容器内执行：
 
 ```bash
 # 建管理员（密码只走进程环境变量，不落命令行历史）
@@ -277,9 +278,9 @@ docker compose exec backend python -m app.admin_cli set-role --email ops@example
 
 【计划】诊断流程审核发布、评测运行与结果持久化不在当前管理员接口范围内。
 
-## PostgreSQL / Docker 下一步验收
+## PostgreSQL / Docker 测试与生产验收
 
-【待验证】`docker-compose.yml` 默认使用 `ROBOTCARE_ENVIRONMENT=production` 与安全刷新 Cookie，因此必须部署在 HTTPS 反向代理之后。仅限本机 HTTP 调试时，复制 `.env.compose-local.example` 为本地环境文件，以 `development` 和 `ROBOTCARE_REFRESH_COOKIE_SECURE=false` 覆盖；不得把这套配置用于公网。
+【生产待验证】`docker-compose.yml` 默认使用 `ROBOTCARE_ENVIRONMENT=production` 与安全刷新 Cookie，因此必须部署在 HTTPS 反向代理之后。仅限本机 HTTP 调试时，复制 `.env.compose-local.example` 为本地环境文件，以 `development` 和 `ROBOTCARE_REFRESH_COOKIE_SECURE=false` 覆盖；不得把这套配置用于公网。本机 development Compose 已验证，不外推为 HTTPS 或生产可用。
 
 单方言测试基线：全部后端测试直接跑在专用 PostgreSQL 测试容器上。先起测试库容器（含 pgvector），再运行完整回归；测试会在该服务器上按需自建 `robotcare_migration` / `robotcare_eval` 库并执行 Alembic downgrade/upgrade，禁止指向开发库或生产库。
 

@@ -62,6 +62,7 @@ from ._shared import (
     current_step_for,
     owned_device,
     owned_diagnostic,
+    safety_block_http_exception,
     validate_image_content,
 )
 
@@ -122,17 +123,7 @@ def create_diagnostic(
             category=safety_block.category,
             risk_level=safety_block.risk_level,
         )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "SAFETY_BLOCKED",
-                "blocked": True,
-                "category": safety_block.category,
-                "risk_level": safety_block.risk_level,
-                "reason": safety_block.reason,
-                "official_service_advice": safety_block.advice,
-            },
-        )
+        raise safety_block_http_exception(safety_block)
     enforce_business_rate_limit(
         db,
         request,

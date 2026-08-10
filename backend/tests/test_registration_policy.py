@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-import app.api as api_module
+import app.routers.auth as auth_router_module
 from app.config import Settings
 
 
@@ -30,7 +30,7 @@ def _register(client, *, email: str, invite_code: str | None = None):
 
 
 def test_open_registration_remains_backward_compatible(client, monkeypatch):
-    monkeypatch.setattr(api_module, "get_settings", lambda: _settings("open"))
+    monkeypatch.setattr(auth_router_module, "get_settings", lambda: _settings("open"))
 
     response = _register(client, email="open-registration@example.com")
 
@@ -40,7 +40,7 @@ def test_open_registration_remains_backward_compatible(client, monkeypatch):
 
 def test_invite_registration_accepts_correct_code(client, monkeypatch):
     monkeypatch.setattr(
-        api_module,
+        auth_router_module,
         "get_settings",
         lambda: _settings("invite", VALID_INVITE_SECRET),
     )
@@ -61,7 +61,7 @@ def test_invite_registration_rejects_missing_or_wrong_code_without_reason(
     invite_code,
 ):
     monkeypatch.setattr(
-        api_module,
+        auth_router_module,
         "get_settings",
         lambda: _settings("invite", VALID_INVITE_SECRET),
     )
@@ -77,7 +77,7 @@ def test_invite_registration_rejects_missing_or_wrong_code_without_reason(
 
 
 def test_closed_registration_returns_generic_forbidden(client, monkeypatch):
-    monkeypatch.setattr(api_module, "get_settings", lambda: _settings("closed"))
+    monkeypatch.setattr(auth_router_module, "get_settings", lambda: _settings("closed"))
 
     response = _register(
         client,
@@ -90,7 +90,7 @@ def test_closed_registration_returns_generic_forbidden(client, monkeypatch):
 
 
 def test_invite_code_request_length_is_bounded(client, monkeypatch):
-    monkeypatch.setattr(api_module, "get_settings", lambda: _settings("open"))
+    monkeypatch.setattr(auth_router_module, "get_settings", lambda: _settings("open"))
 
     response = _register(
         client,

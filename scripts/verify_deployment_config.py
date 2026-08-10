@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
 from ipaddress import ip_address, ip_network
 from pathlib import Path
@@ -231,7 +232,10 @@ def main() -> None:
 
     # 真密钥文件不得对同机其他用户可读（2026-08-05 体检：0644 明文含真 key）
     env_file = ROOT / ".env"
-    if env_file.exists():
+    # Windows 的 stat 权限位是兼容层合成值，通常固定呈现为 0666，无法表达
+    # Unix 的 0600。Linux/macOS/CI 继续执行严格检查；Windows 的机密保护由
+    # NTFS ACL 与 .gitignore 负责，不能把平台差异误报成部署契约失败。
+    if env_file.exists() and os.name != "nt":
         mode = env_file.stat().st_mode & 0o077
         require(
             mode == 0,

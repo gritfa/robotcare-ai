@@ -61,7 +61,7 @@ def test_eval_cases_have_traceable_model_source_and_review_fields():
             "本用例措辞未逐条人工审核" in case["evidence_basis"]
             or "待人工抽检" in case["evidence_basis"]
             or "待生成层上线后执行" in case["evidence_basis"]
-            or "codex_expert_adjudication" in case["evidence_basis"]
+            or "automated_evidence_check" in case["evidence_basis"]
         )
         assert isinstance(case["expected"], dict)
 

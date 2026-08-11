@@ -25,10 +25,7 @@ class UserRead(ORMModel):
     role: str
     status: str
     created_at: datetime
-    # 后端把能力位算好下发，前端不要自己按 role 硬编码。
-    # 2026-08-06 体检 #9：后端四级角色齐全、测试全绿，前端却写死
-    # role === 'admin'——viewer/operator 登录后侧栏没有入口、手敲 /admin
-    # 还会被路由守卫弹回，"给运营看一眼看板"这个目标通过 UI 根本达不成。
+    # 权限能力由后端统一计算并下发，前端不应根据角色字符串重复实现授权规则。
     capabilities: list[str] = []
 
 
@@ -52,8 +49,7 @@ class AdminModelRead(ModelRead):
 class AdminModelCreate(BaseModel):
     """后台建型号。
 
-    此前型号只能改仓库里的 knowledge/diagnostic_flows.json 再重建镜像，
-    "售后主管接入自家型号"这个核心场景等于一次发版动作（2026-08-05 体检）。
+    型号可由管理员维护，无需修改流程目录并重新构建镜像。
     """
 
     # 型号码进 URL 与检索缓存键，限制成大小写字母/数字/短横线，避免歧义与转义问题
@@ -83,7 +79,7 @@ class AdminGenerationStatsRead(BaseModel):
 class AdminTokenCostRead(BaseModel):
     """近 N 天的 token 与成本。
 
-    体检发现：provider 拿到 usage 后直接丢弃，每月账单只能靠猜。
+    provider 用量用于生成成本统计。
     records_with_usage 单独给出来——它小于总调用数就说明有一部分后端
     没返回用量，此时成本是**低估**的，不能当准确账单用。
     """
@@ -363,7 +359,7 @@ class AdminFeedbackOverviewRead(BaseModel):
     """反馈读取入口：聚合决定先修哪类问题，明细能一路点到那次对话。
 
     reason 枚举本就是为"在管理端按原因聚合出优化优先级"设计的，
-    但直到 2026-08-05 体检为止全库没有任何读取入口。
+    管理端通过该字段聚合反馈原因和改进优先级。
     """
 
     window_days: int
@@ -658,7 +654,7 @@ class ConversationDetailRead(BaseModel):
     title: str
     messages: list[ConversationMessageRead]
     # 只回最近 N 条。长会话此前是全量加载：一次请求把整段历史读进内存再序列化，
-    # 而多轮上下文本来就只取最近若干条，多读的部分谁也没用上（体检 D5）。
+    # 多轮上下文只需要最近若干条，因此接口按需返回并同时提供总数。
     total_messages: int = 0
     truncated: bool = False
 

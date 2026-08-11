@@ -4,9 +4,8 @@ Revision ID: 20260805_0015
 Revises: 20260805_0014
 Create Date: 2026-08-05
 
-体检发现：generation_service 拿到 provider 响应后把 usage 段丢了，
-GenerationRecord 只有 latency_ms——每月账单靠猜，也无法回答
-"哪个型号/哪个用户在烧钱"。
+问题背景：generation_service 曾丢弃 provider 响应中的 usage 数据，
+GenerationRecord 只有 latency_ms，无法准确统计按型号或用户划分的生成成本。
 """
 
 from collections.abc import Sequence

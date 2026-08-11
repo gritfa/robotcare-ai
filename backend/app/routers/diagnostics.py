@@ -216,7 +216,7 @@ def list_diagnostics(
     user: User = Depends(get_current_user),
 ) -> list[DiagnosticSession]:
     # 每条诊断还要 selectinload 出全部步骤执行记录与报告，无 limit 的话
-    # 一个老账号打开「诊断历史」就是一次全表级读取（体检 D5）
+    # 限制返回数量，避免历史记录过多时产生大范围关联查询。
     stmt = (
         select(DiagnosticSession)
         .options(

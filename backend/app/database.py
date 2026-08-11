@@ -18,9 +18,8 @@ def build_session_factory(
 ) -> sessionmaker[Session]:
     """Build the PostgreSQL session factory; pgvector is the only vector type.
 
-    池参数必须显式给：SQLAlchemy 默认 5+10 条在「SSE 聊天占住连接」的形态下
-    15 路并发就会把池抽干，连登录一起挂（2026-08-06 体检）。CLI 侧不传 settings
-    时沿用默认值即可——它们是短命单连接进程。
+    池参数必须显式配置：SSE 聊天会在生成期间占用连接，容量不足会影响登录等
+    常规请求。CLI 未传入 settings 时沿用默认值，因为它们是短生命周期单连接进程。
     """
 
     from .config import get_settings

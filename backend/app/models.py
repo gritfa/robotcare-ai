@@ -31,7 +31,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         # 角色分级：viewer 只读运营数据，operator 可管知识库内容，
-        # admin 才有删除/回滚/型号增改等不可逆权限（2026-08-05 体检）
+        # admin 才有删除、回滚和型号增改等高影响权限。
         CheckConstraint(
             "role IN ('user', 'viewer', 'operator', 'admin')", name="ck_users_role"
         ),
@@ -47,12 +47,9 @@ class User(Base):
 
     @property
     def capabilities(self) -> list[str]:
-        """这个角色能做什么，随 UserRead 一起下发给前端。
+        """返回角色对应的权限能力，供前端统一控制功能入口。
 
-        前端不该按 role 硬编码判断（2026-08-06 体检 #9：前端写死
-        role === 'admin'，viewer/operator 后端全线放行、UI 却完全进不去）。
-        能力表是后端的事实源，前端只消费结论。
-        延迟 import：security 依赖 models，模块级导入会成环。
+        延迟导入用于避免 security 与 models 之间形成循环依赖。
         """
         from .security import ROLE_CAPABILITIES
 
@@ -584,7 +581,7 @@ class ContentGapResolution(Base):
     linked_document_id: Mapped[int | None] = mapped_column(
         ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
     )
-    # 复测结果：resolved 不该靠人拍脑袋，要有一次真实重放的证据
+    # resolved 状态必须由一次真实重放结果支撑。
     replay_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     replay_answer_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     replay_citation_count: Mapped[int | None] = mapped_column(Integer, nullable=True)

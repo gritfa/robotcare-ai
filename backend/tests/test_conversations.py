@@ -580,7 +580,7 @@ def test_message_feedback_records_reason_and_is_overwritable(client, monkeypatch
 def test_chat_refusal_writes_gap_event(client, monkeypatch):
     """聊天里答不上来，必须进内容缺口榜。
 
-    2026-08-06 体检 #2：缺口埋点此前只挂在 /knowledge/answer 上，而前端对该
+    缺口事件此前只由 /knowledge/answer 写入，而前端不调用该
     端点零调用——聊天（真正的主入口）拒答多少次，缺口表都是 0 行，运营永远
     不知道该补什么资料。这条守住"聊天拒答 → 缺口有记录"这条链。
     """

@@ -523,7 +523,7 @@ def test_gap_closure_loop_from_link_to_replay_to_resolved(client):
 
 
 def test_replay_failure_downgrades_a_previously_resolved_gap(client):
-    """复测不通过必须把"已解决"打回去，否则缺口榜开始骗人。"""
+    """复测失败时，已解决的缺口应恢复为处理中。"""
 
     token = setup_admin(client)
     robot_model_id = model_id_by_code(client, "RC-S200")

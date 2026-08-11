@@ -1,8 +1,8 @@
-"""token 用量与成本：每月账单不能靠猜。
+"""token 用量与成本统计。
 
-体检发现（2026-08-05）：generation_service 拿到 provider 响应后把 usage 段
+问题背景：generation_service 曾在处理 provider 响应时丢弃 usage 段，
 直接丢了，GenerationRecord 只有 latency_ms——既算不出账单，也答不出
-"哪个型号在烧钱"。
+按型号和用户分析生成成本。
 """
 
 from __future__ import annotations
@@ -30,8 +30,7 @@ class UsageReportingProvider:
     """会报用量的假后端。
 
     用量随调用返回（generate_with_usage），不再挂在实例上——provider 是全局
-    单例，实例属性在并发下会串账，未调用模型的拒答还会读到残留值记幽灵账
-    （2026-08-06 体检 #8）。
+    单例，实例属性在并发下会混淆用量，未调用模型的拒答也可能读到残留值。
     """
 
     model_name = "usage-test-model"
@@ -197,9 +196,8 @@ def test_non_admin_cannot_read_overview(client):
 def test_gap_refusal_records_no_cost_when_model_was_never_called(client, monkeypatch):
     """检索没命中就拒答——一分钱没花，绝不能记账。
 
-    2026-08-06 体检 #8：usage 此前挂在全局单例 provider 的 last_usage 上，
-    knowledge_gap 分支根本没调用模型，却会读到**上一次请求**的残留用量，
-    凭空记一笔幽灵账单。
+    usage 不应保存在全局单例 provider 上。knowledge_gap 分支没有调用模型，
+    因此不能读取上一次请求的残留用量。
     """
     from app.generation_service import answer_events
 
@@ -232,7 +230,7 @@ def test_gap_refusal_records_no_cost_when_model_was_never_called(client, monkeyp
         record = db.get(GenerationRecord, result.record_id)
         assert record.prompt_tokens is None, "没调用模型却记了 token"
         assert record.completion_tokens is None
-        assert record.estimated_cost is None, "没花钱却记了成本＝幽灵账单"
+        assert record.estimated_cost is None, "未调用模型时不应记录生成成本"
 
 
 def test_usage_belongs_to_its_own_call_not_the_shared_provider(client):

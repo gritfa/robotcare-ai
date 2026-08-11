@@ -202,7 +202,7 @@ def main() -> None:
         )
     # 全量透传契约：Settings 里的每个配置项都必须在 Compose 中出现。
     # 容器内没有 .env（根 .dockerignore 排掉了），漏一个就是"该配置在 Docker
-    # 部署下永久锁死为默认值"，且不会报任何错。2026-08-05 上线体检发现
+    # 部署下固定为默认值，且不会主动报错。历史检查发现
     # LLM_BACKEND / ALERT_WEBHOOK_URL 等 18 项处于这种静默失效状态，
     # 而同类问题在 generation_service 注释里刚修过一次——所以改成全量断言，
     # 让"新增配置项忘记透传"在 CI 阶段就失败。
@@ -230,7 +230,7 @@ def main() -> None:
         f".env.example must document every Settings field; missing: {', '.join(undocumented)}",
     )
 
-    # 真密钥文件不得对同机其他用户可读（2026-08-05 体检：0644 明文含真 key）
+    # 真实密钥文件不得对同机其他用户可读。
     env_file = ROOT / ".env"
     # Windows 的 stat 权限位是兼容层合成值，通常固定呈现为 0666，无法表达
     # Unix 的 0600。Linux/macOS/CI 继续执行严格检查；Windows 的机密保护由
@@ -244,7 +244,7 @@ def main() -> None:
         )
 
     # 外部模型总预算必须小于反向代理的读超时，否则用户已收到 504、
-    # 后端仍在跑并照常计费（2026-08-05 体检：旧值 180s vs 反代 60s）
+    # 后端仍在执行并可能继续计费。
     nginx_conf = (ROOT / "frontend" / "nginx.conf").read_text(encoding="utf-8")
     proxy_read_timeout = re.search(r"proxy_read_timeout\s+(\d+)s", nginx_conf)
     require(proxy_read_timeout is not None, "Nginx proxy_read_timeout must be pinned")
@@ -258,7 +258,7 @@ def main() -> None:
         )
 
     # 前端调生成的超时必须大于后端预算，否则前端先超时报"服务不可用"，
-    # 后端还在正常生成、还在计费，用户重试又是同样的假失败（体检 #6）。
+    # 后端仍在生成并可能继续计费，用户重试会产生重复请求。
     api_ts = (ROOT / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
     generation_timeout = re.search(r"GENERATION_TIMEOUT_MS\s*=\s*(\d+)", api_ts)
     require(
@@ -275,7 +275,7 @@ def main() -> None:
 
     # 流式的最坏耗时是 budget + read，不是 budget：越界只能在拿到一块之后
     # 发现，阻塞在读上是打断不了的（见 llm_transport.stream_with_budget）。
-    # 反代必须给到这个上界，否则预算闸永远轮不到生效（2026-08-06 体检 #4）。
+    # 反向代理超时必须覆盖该上界，确保后端预算控制可以生效。
     worst_case_stream = config_default("llm_budget_seconds") + config_default(
         "llm_read_timeout_seconds"
     )
@@ -333,7 +333,7 @@ def main() -> None:
         require(token in nginx, f"Nginx security header missing: {token}")
     require("location = /healthz" in nginx, "Nginx config missing: location = /healthz")
 
-    # 上传上限必须与后端交叉校验，不能各写各的（2026-08-06 体检 #5：
+    # 上传上限必须与后端交叉校验，避免不同层的限制不一致：
     # nginx 6m vs 后端 30MB，27MB 说明书永远传不进去，而当时的断言只检查
     # "存在 client_max_body_size 6m 这一行"，对不一致完全免疫）。
     body_size = re.search(r"client_max_body_size\s+(\d+)m", nginx)
@@ -353,7 +353,7 @@ def main() -> None:
         "detailed backend readiness must not be exposed through public Nginx",
     )
     # 追加而非覆盖：覆盖会在「宿主再放一层 HTTPS 反代」的拓扑下把所有用户
-    # 压成同一个地址，全站共用一个限流桶（体检 D1）。伪造风险由 client_ip()
+    # 压缩为同一个地址，导致所有用户共享限流桶。伪造风险由 client_ip()
     # 的右到左走链 + 下面的可信网段收敛共同挡住。
     require(
         "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;" in nginx,
@@ -377,9 +377,8 @@ def main() -> None:
     trusted_networks = [
         ip_network(item.strip()) for item in trusted_default.split(",") if item.strip()
     ]
-    # 空列表 = client_ip() 认不出 nginx 这一跳，直接返回它的容器地址：
-    # 追不追加 XFF 都白搭，还是全站一个桶。这是最容易被「顺手清空环境变量」
-    # 触发的静默退化，必须挡在部署前。
+    # 空列表会使 client_ip() 无法识别 nginx 代理层，并回退到容器地址，
+    # 导致所有用户共享同一个限流桶。部署检查必须阻止该静默退化。
     require(
         bool(trusted_networks),
         "ROBOTCARE_TRUSTED_PROXY_CIDRS must not be empty — the backend would treat the "
@@ -392,8 +391,7 @@ def main() -> None:
     )
     # 网关这一跳同样必须可信。前端端口只绑 127.0.0.1，对外只能靠宿主上的 TLS
     # 反代转发，而它经 loopback 进来后源地址一律是 Compose 网关。漏掉这一跳，
-    # 后端就把网关当客户端——全站一个限流桶（体检 D1 的完整根因，只改 Nginx
-    # 的 append 是不够的）。
+    # 后端会把网关当成客户端，导致所有用户共享限流桶；仅修改 Nginx 转发方式不足以解决。
     compose_subnet = ip_network(internal_network["ipam"]["config"][0]["subnet"])
     gateway = next(compose_subnet.hosts())
     require(

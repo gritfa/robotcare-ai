@@ -103,7 +103,7 @@ def login(
         raise HTTPException(status_code=403, detail="Account disabled")
     clear_login_failures(db, email, request)
     # 密码对了不等于可以无限刷：每次成功登录都要签发 token 并写 refresh_tokens，
-    # 成功路径此前完全没有速率约束（体检 D5）。放在清除失败计数之后，
+    # 成功登录同样需要速率约束。检查位于清除失败计数之后，
     # 保证合法用户不会因为限流而永远清不掉自己的失败记录。
     enforce_login_success_rate_limit(db, email, request)
     issued = issue_authentication(db, user)

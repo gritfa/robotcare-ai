@@ -39,7 +39,7 @@ def list_devices(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[UserDevice]:
-    # 无 limit 的列表接口迟早会被一个绑了几千台设备的账号拖垮（体检 D5）
+    # 限制返回数量，避免单个账户的超大设备列表影响接口性能。
     stmt = (
         select(UserDevice)
         .options(selectinload(UserDevice.robot_model))

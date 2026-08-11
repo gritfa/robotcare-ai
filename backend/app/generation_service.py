@@ -63,7 +63,7 @@ DEFAULT_GENERATION_TIMEOUT_POLICY = TimeoutPolicy(
     connect_seconds=5.0, read_seconds=40.0, budget_seconds=50.0, max_attempts=2
 )
 
-# v2（2026-08-04）：LLM 裁判评测实锤 11/34 条语义越界（docs/evidence/llm_judge_faithfulness.json），
+# v2（2026-08-04）：评测发现 11/34 条语义越界（docs/evidence/llm_judge_faithfulness.json），
 # 两大模式针对性加约束：补片段没有的因果/机制解释；把其他故障条目的步骤挪用到当前问题
 # v3（2026-08-04）：v2 复测剩 7 条不忠实中 2 条系"其余资料未提及"话术被滥用（片段其实有），
 # 2 条系步骤后自加"以确保/以避免"式目的说明——改为禁断言资料未提及、禁自加目的状语
@@ -104,7 +104,7 @@ SYSTEM_PROMPT = (
 )
 
 _CITATION_PATTERN = re.compile(r"\[(\d{1,2})\]")
-# 模型偶尔在完整回答末尾附加 REFUSE 控制标记（v3 在线评测 FF-001 实锤：
+# 模型偶尔在完整回答末尾附加 REFUSE 控制标记（v3 在线评测 FF-001：
 # 回答正文完整，结尾多一个 " REFUSE" 被原样发给用户）。标记属于内部协议，
 # 只在开头出现时才代表整体拒答；结尾残留必须剥掉，不能泄露到用户可见文本。
 #
@@ -139,9 +139,9 @@ class StreamingGenerationProvider(GenerationProvider, Protocol):
 class TokenUsage:
     """一次调用的 token 用量。
 
-    体检发现（2026-08-05）：provider 拿到响应后把 usage 段直接丢了，
-    GenerationRecord 只有 latency_ms——每月账单靠猜，也答不出
-    "哪个型号在烧钱"。取不到用量时保持 None，不要用 0 冒充。
+    问题背景：provider 拿到响应后曾丢弃 usage 段，
+    GenerationRecord 只有 latency_ms，无法准确计算生成成本，也无法回答
+    “哪个型号产生了主要成本”。取不到用量时保持 None，不使用 0 替代缺失值。
     """
 
     prompt_tokens: int | None = None
@@ -199,10 +199,10 @@ def _generate_capturing_usage(
 ) -> tuple[str, "TokenUsage | None"]:
     """整段生成，并把本次调用的 token 用量随返回值带出。
 
-    为什么不读 provider.last_usage（2026-08-06 体检 #8）：provider 是
+    不读取 provider.last_usage：provider 是
     app.state 上的**全局单例**，而 last_usage 是实例属性。两路请求并发时
     A 写完、B 在记账前读到 A 的用量，账就串了；更糟的是 knowledge_gap 这类
-    **根本没调用模型**的拒答也会读到上一次请求的残留值，凭空记一笔幽灵账单。
+    未调用模型的拒答也可能读取上一次请求的残留用量。
 
     用量必须属于"这一次调用"，所以由调用带出而不是挂在共享对象上。
     provider 没实现 generate_with_usage 时（测试桩、离线评测）返回 None，
@@ -299,7 +299,7 @@ class DashScopeGenerationProvider:
         self.max_tokens = max_tokens
         self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
         # 本次调用的用量落在这里，仅供 generate_with_usage 在同一次调用内取走。
-        # 绝不要跨调用读它——provider 是全局单例，跨调用读会串账（体检 #8）。
+        # 该值仅限当前调用使用；provider 是全局单例，跨调用读取会混淆用量。
         self._call_usage: TokenUsage = TokenUsage()
 
     def _budgeted(self, chunks: Iterator[object]) -> Iterator[object]:
@@ -378,7 +378,7 @@ class DashScopeGenerationProvider:
             if piece:
                 yield piece
         # 用量随本次流返回（StopIteration.value），不挂在共享单例上——
-        # 单例 + 并发 = 串账，且未调用模型的拒答会读到残留值（体检 #8）。
+        # 用量随当前流返回，避免并发调用之间相互污染。
         return stream_usage
 
     def _generate_once(self, *, system: str, prompt: str, read_timeout: float) -> str:
@@ -440,10 +440,10 @@ class OpenAICompatGenerationProvider:
         self.model_name = model
         self.base_url = base_url.strip().rstrip("/")
         # 推理型模型思维链计入 max_tokens，4096 会被长任务耗尽致 content 为空
-        # （2026-08-04 LLM 裁判评测 8/34 条 finish_reason=length 实锤），按调用方需要放大
+        # （2026-08-04 评测中 8/34 条 finish_reason=length），按调用方需要放大
         self.max_tokens = max_tokens
         self.timeout_policy = timeout_policy or DEFAULT_GENERATION_TIMEOUT_POLICY
-        # 同 DashScope：仅在一次调用内部传递，绝不跨调用读（体检 #8）
+        # 与 DashScope 实现一致：用量只在当前调用内部传递。
         self._call_usage: TokenUsage = TokenUsage()
 
     def generate(self, *, system: str, prompt: str) -> str:
@@ -750,8 +750,7 @@ def answer_events(
     commit: bool = True,
     history: list[dict] | None = None,
     streaming: bool = False,
-    # 缺口埋点的来源标签。默认 chat：聊天是主入口，也是此前唯一没被埋点
-    # 覆盖到的入口（体检 #2）。
+    # 缺口事件来源。默认 chat，因为聊天是主要用户入口。
     gap_source: str = "chat_refusal",
 ) -> Iterator[tuple[str, str]]:
     """检索增强作答，以事件流的形式产出过程、以返回值产出结果。
@@ -785,13 +784,12 @@ def answer_events(
     # 此刻没有任何待写数据（会话的用户消息延迟到落库阶段才写、限流计数自行提交），
     # 所以 commit 只是结束这个只读事务、把连接还给池子；sessionmaker 配了
     # expire_on_commit=False，已加载的 ORM 对象不会因此失效。
-    # 不这么做的话，一路 SSE 会从检索开始一直占住连接到生成结束（体检 #3）。
+    # 提前提交事务，避免 SSE 从检索开始持续占用数据库连接。
     db.commit()
 
     gate: StreamSafetyGate | None = None
     # 本次调用的 token 用量，由生成调用带出。保持 None 直到模型真的被调用过——
-    # knowledge_gap 分支在此之前就 refuse 了，那种情况一分钱没花，必须记空账
-    # 而不是沿用别人的数字（体检 #8 的幽灵计费）。
+    # knowledge_gap 分支不会调用模型，因此用量应保持为空，不能沿用其他请求的数据。
     call_usage: TokenUsage | None = None
 
     def refuse(reason: str, *, answer: str | None = None, snippet_count: int = len(results)) -> AnswerResult:
@@ -809,8 +807,7 @@ def answer_events(
                 trace_id=current_trace_id(),
             )
         # 拒答同样烧了 token（模型已经跑完），成本必须照记，否则账单对不上。
-        # call_usage 是本次调用带出来的：模型没被调用过（knowledge_gap）时它是
-        # None，于是记空而不是记上一次请求的残留——那是幽灵账单（体检 #8）。
+        # call_usage 仅来自本次调用；未调用模型时保持 None。
         refuse_usage = call_usage
         record = _persist(
             db,

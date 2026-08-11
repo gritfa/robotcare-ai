@@ -415,7 +415,7 @@ def test_two_hop_proxy_chain_keeps_the_real_client_and_ignores_spoofed_prefix():
 
     Nginx 从覆盖式 X-Forwarded-For 改成 $proxy_add_x_forwarded_for 之后，
     链上会有两个可信跳。原来的覆盖式写法在这个拓扑下把所有人压成同一个地址，
-    任意一人失败登录 30 次就能锁掉全站（2026-08-06 体检 D1）。
+    该配置会导致所有用户共享限流桶，并可能造成全站登录受限。
     """
 
     settings = Settings(trusted_proxy_cidrs="172.30.0.0/24", _env_file=None)
@@ -454,7 +454,7 @@ def test_two_hop_proxy_chain_keeps_the_real_client_and_ignores_spoofed_prefix():
 def test_empty_trusted_proxy_config_falls_back_to_the_peer_instead_of_trusting_headers():
     """没配可信网段时宁可退化成「全站一个桶」，也不能采信调用方的头。
 
-    这个退化本身是不可接受的运维状态（登录限流会被一个人拖垮），
+    该退化属于不可接受的运维状态，因为登录限流会影响其他用户。
     由 scripts/verify_deployment_config.py 在部署前拦下；这里锁住的是
     「退化的方向必须是保守的」——不能变成人人自选限流桶。
     """

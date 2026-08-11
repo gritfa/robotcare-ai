@@ -10,8 +10,7 @@ export { TOKEN_KEY } from './authSession'
 export const http = axios.create({ baseURL: '/api/v1', timeout: 20000, withCredentials: true })
 
 // 会真的调大模型的请求需要单独的超时。20s 的默认值小于后端的生成预算
-// （llm_budget 50s），慢的时候前端先超时报"服务暂不可用"，后端却还在正常
-// 生成、还在烧 token，用户重试一次又是同样的 20s 假失败（2026-08-06 体检 #6）。
+// （llm_budget 50s），避免前端提前超时，而后端请求仍继续执行和计费。
 // 这个值必须大于后端预算；verify_deployment_config.py 有交叉断言。
 export const GENERATION_TIMEOUT_MS = 65000
 

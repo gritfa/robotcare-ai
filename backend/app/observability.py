@@ -335,7 +335,7 @@ def readiness_status(application: FastAPI, trace_id: str) -> tuple[int, dict[str
         "required": production,
     }
     # 配置存在不等于服务可达（key 失效 / DNS / 权限都可能）。做一次**带缓存**的
-    # 轻量真实调用：/ready 被 healthcheck 每 10s 打一次，不缓存就是在烧钱。
+    # /ready 由健康检查高频调用，外部模型探测结果需要短时缓存以控制成本。
     probe = getattr(application.state, "embedding_reachability", None)
     if probe is not None and embedding_configured:
         reachable, error_type = probe.check(application.state.embedding_provider)

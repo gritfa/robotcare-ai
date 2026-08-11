@@ -7,7 +7,7 @@ from app.config import Settings
 
 PASSWORD = "StrongPass123"
 VALID_INVITE_SECRET = "7cYp9N2mK4qR8vTx"
-# 拒绝文案必须是中文且能指出下一步该做什么（2026-08-05 体检：
+# 拒绝文案必须使用中文并说明下一步操作：
 # 此前两种情况都返回英文 "Registration is not available"，前端原样显示，
 # 而表单上写着"开放环境可留空"，用户既不知错在哪也不知去哪要码）
 INVITE_DENIED_DETAIL = "邀请码不正确或已失效。本站点当前为邀请制注册，请向管理员索取有效邀请码后重试。"

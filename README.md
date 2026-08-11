@@ -4,14 +4,16 @@
 
 独立第三方海尔扫地机器人使用指导与安全故障排查平台。
 
-> 状态说明：本仓库正在执行分阶段工程化改造。本文只把经过真实命令验证的能力标记为 `【已验证】`；其余内容均标记为 `【计划】` 或 `【待验证】`。
+> 状态说明：本文只把经过真实命令验证的能力标记为 `【已验证】`；其余内容均标记为 `【计划】`、`【部分实现】` 或 `【待验证】`。
 
-> **要按 Python + Agent 开发路线系统学习？从 [`docs/LEARNING_PLAN.md`](docs/LEARNING_PLAN.md) 开始。**
-> 它按 8 周安排环境、FastAPI、PostgreSQL/pgvector、RAG、生成评测、LangGraph、SSE、Docker/CI 和毕业项目，每周都有代码入口、动手任务与通关证据。
-> **第一次了解项目经历？再读 [`docs/PROJECT_STORY.md`](docs/PROJECT_STORY.md)。**
-> 它负责解释做了什么、踩过哪 18 个坑、换掉了哪三项技术，以及当前代码地图。
-> **要拿这个项目求职的，读该文档第 10 章 +（必读）[`docs/resume_evidence.md`](docs/resume_evidence.md)**，
-> 后者列了可量化证据与「不能声称」的边界清单。本 README 是给已经上手的人查命令用的。
+## 文档
+
+- [架构说明](docs/architecture.md)
+- [API 契约](docs/api_contract.md)
+- [部署与运维](docs/ops.md)
+- [持续集成](docs/ci.md)
+- [演示数据](docs/demo_data.md)
+- [评测范围与口径](docs/online_eval_scope.md)
 
 ## 当前状态
 
@@ -58,7 +60,6 @@
 cd backend
 .venv/bin/pytest -p no:cacheprovider
 # 508 passed, 2 warnings in 92.25s（退出码 0）
-# 注意：加 -q 会吞掉统计行
 ```
 
 前端（2026-08-06 本机）：
@@ -72,7 +73,7 @@ npm run build     # vue-tsc + vite build 通过
 # 按组件/页面拆成 el-table-column 91.6 kB、el-popper 48.3 kB 等独立块
 ```
 
-自检脚本（2026-08-06 本机 Compose 生产栈，五个全部通过）。**凭据一律由环境变量/参数注入，脚本内不留默认值**——写死账号等同于随代码发布口令（本仓 2026-08-06 已转私有，但该规矩不变，历史一旦写入就难以清除）：
+自检脚本（2026-08-06 本机 Compose 生产栈，五个全部通过）。凭据一律由环境变量或参数注入，脚本内不保留真实账号、密码或令牌：
 
 ```bash
 # 1) 运行中的容器是否真含本轮代码（防「提交了但镜像没重建」）
@@ -127,8 +128,6 @@ faithfulness：全量 34/34（prompt answer-v5，主评 score 1.0 passed_full；
 
 PDF 视觉证据：`docs/evidence/sample_service_report.pdf`。该文件使用脱敏演示数据，已渲染检查中文字体、A4 页面、内容裁切和页脚。
 
-简历可用表述、量化证据和禁止夸大的边界：`docs/resume_evidence.md`。
-
 ## 隐私安全的全状态演示数据
 
 本地开发环境可加载一套确定性的合成消费者数据。它不包含真实姓名、手机号、地址、设备照片或真实序列号，所有账号均使用 `example.com` 保留域名，图片明确标记为 synthetic。工具在 `production` 环境会拒绝运行。
@@ -178,9 +177,7 @@ cd backend
 
 API 启动时会检查数据库 revision；不在 Alembic `head` 时直接拒绝启动。当前 head 为 `20260806_0017`：`0005` 数据库状态约束，`0006` 独立 IP 登录桶与可信代理配套，`0007` API/Embedding 配额表，`0008` 生成层留痕表 generation_records，`0009` 内容缺口事件表 knowledge_gap_events，`0010` 会话表 conversations/conversation_messages，`0011` 诊断来源会话字段，`0012` 消息路由字段，`0013` 会话体验包（快捷操作、消息反馈），`0014` 知识库后台（文档生命周期、版本历史、缺口闭环），`0015` 生成记录的 token 用量与成本，`0016` 角色分级 viewer/operator，`0017` 会话知识缺口事件；`create_all()` 仅保留给显式开启的隔离测试。
 
-> 这一行的 head 号历史上多次过期（体检时停在 `0011`，实际已到 `0014`）。以数据库里的 `alembic_version` 为准，本行仅供人读；启动守卫本身不依赖它。
-
-（历史记录，SQLite 时期，现已 PG 单方言）本地开发库曾备份为 `robotcare.db.pre-0007-20260722.bak` 并升级到 `0007`；当时的 4 条已发布流程、1 条草稿流程、2 份知识文档、53 个分片和 53 个向量均已保留，`PRAGMA integrity_check=ok` 且无外键异常。
+> 本行记录仅供参考，实际迁移版本以数据库中的 `alembic_version` 为准；启动守卫不依赖文档中的版本号。
 
 ## 生产知识发布
 
@@ -322,4 +319,4 @@ Invoke-WebRequest http://127.0.0.1:5173/healthz
 1. 对应代码和配置存在。
 2. 自动化测试通过。
 3. 真实运行命令及输出已记录。
-4. 已知限制写入 `docs/status_evidence.md`。
+4. 已知限制写入 README 对应状态项或专项证据文档。

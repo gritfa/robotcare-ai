@@ -666,8 +666,7 @@ def admin_feedback(
     """用户反馈的读取入口。
 
     MessageFeedback 的 reason 枚举当初就是为"在管理端按原因聚合出优化优先级"
-    设计的（models.py 注释原话），但直到 2026-08-05 体检为止，admin.py /
-    knowledge_admin.py / AdminView.vue 一次都没引用过它——数据进了库，
+    设计的。管理端使用该字段聚合反馈原因和改进优先级，
     运营却只能连 psql 才看得到。
 
     这里给两层：按原因/型号的聚合（决定先修哪类问题），以及最近的差评明细
@@ -772,8 +771,7 @@ def admin_list_conversations(
 ) -> list[AdminConversationSummaryRead]:
     """按关键词/型号/时间检索会话。
 
-    客诉"机器人让我拆电池"时，此前后台**找不到那次对话**——conversations 路由
-    全部按 user.id 过滤且没有 admin 变体，只能连 psql 查（2026-08-05 体检）。
+    管理员按需读取会话详情，用于处理安全投诉和审核回答记录。
 
     列表只返回定位信息与掩码邮箱；对话正文要点进详情才可见，且详情会写审计。
     """

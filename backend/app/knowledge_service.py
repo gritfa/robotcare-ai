@@ -123,7 +123,7 @@ class DashScopeEmbeddingProvider:
             "input": list(texts),
             "dimension": EMBEDDING_DIMENSION,
             "text_type": text_type,
-            # SDK 默认 300s，不显式传等于没有超时（2026-08-05 上线体检）
+            # 显式覆盖 SDK 的 300 秒默认超时。
             "request_timeout": (self.timeout_policy.connect_seconds, read_timeout),
         }
         if self.api_key:
@@ -569,9 +569,7 @@ def record_knowledge_gap_event(
 ) -> None:
     """内容缺口埋点：写入失败只记日志，绝不影响检索/回答主流程。
 
-    这个函数原本住在 routers/knowledge.py 里，于是「缺口闭环」只覆盖了
-    /knowledge/answer 这一个端点——而前端对它零调用（2026-08-06 体检 #2：
-    实测拒答 8 次、缺口表 0 行、缺口榜 0 条，卖点从上线起没产生过一条数据）。
+    该函数位于服务层，以便知识问答和聊天入口共用同一套缺口记录逻辑。
     下沉到这里是为了让生成层统一埋点，聊天、知识问答、诊断走的是同一条路。
 
     调用时机要求：此刻 Session 里不能有待提交的业务数据——本函数会 commit，

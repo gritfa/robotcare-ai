@@ -1,6 +1,6 @@
 # RobotCare AI 架构说明
 
-> 文档同时记录目标架构与当前已验证基线。每项状态以 `docs/status_evidence.md` 的运行证据为准。
+> 文档同时记录目标架构与当前已验证基线。最新实现状态以根目录 README 和 `docs/evidence/` 中的专项证据为准。
 
 ## 1. 产品边界
 

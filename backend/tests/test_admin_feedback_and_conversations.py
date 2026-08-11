@@ -1,6 +1,6 @@
 """运营可见性：反馈能读、客诉能查到那次对话。
 
-体检结论（2026-08-05）：
+问题背景：
 - MessageFeedback 的 reason 枚举注释写着"才能在管理端按原因聚合出优化优先级"，
   但 admin.py / knowledge_admin.py / AdminView.vue 一次都没引用过它——只能连 psql。
 - GenerationRecord 无 admin list/detail，conversations 路由全按 user.id 过滤且

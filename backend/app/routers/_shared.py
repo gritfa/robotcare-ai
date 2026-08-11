@@ -47,7 +47,7 @@ def escape_like(value: str) -> str:
 
     不转义时，一个 `%` 就退化成「匹配全部」——在会话正文上做全表 ILIKE 扫描，
     单个请求即可拖慢库；`_` 同理会放大匹配面。反斜杠必须先转，否则后面补的
-    转义符自己会被再转一次（体检 D5）。
+    转义符本身也需要优先转义。
     """
 
     return (
@@ -149,7 +149,7 @@ def current_step_for(diagnostic: DiagnosticSession) -> DiagnosticStep | None:
 def enforce_registration_policy(payload: RegisterRequest, settings: Settings) -> None:
     """注册准入。
 
-    文案要中文、要说清"接下来该做什么"（2026-08-05 体检）：
+    文案使用中文，并明确说明后续操作：
     此前两种情况都返回英文的 "Registration is not available"，前端原样显示，
     而表单上却写着"开放环境可留空"，用户既不知道自己错在哪，也不知道去哪要码。
     两种情况给不同提示不会泄漏敏感信息——注册模式本来就体现在表单上。

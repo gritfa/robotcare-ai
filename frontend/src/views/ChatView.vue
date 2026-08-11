@@ -429,7 +429,7 @@ function sourceUrlWithPage(url: string, page?: number | null) {
 function openSourcePage() {
   const url = evidence.value?.source_url
   if (!url) return
-  // synthetic:// 是演示数据的占位来源，不是可打开的网址，别让用户点了没反应
+  // synthetic:// 表示本地演示数据来源，不应渲染为可点击链接。
   if (!/^https?:\/\//i.test(url)) {
     ElMessage.info('这份资料是本地演示数据，没有可跳转的在线原页')
     return

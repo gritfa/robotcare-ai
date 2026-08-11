@@ -1,6 +1,6 @@
 """SSE 端点端到端：事件顺序、编码、落库时序、撤回、异常契约、断连回滚。
 
-体检发现（2026-08-06）：流式**端点**此前一个端到端用例都没有。
+问题背景：流式端点此前缺少端到端测试。
 `test_stream_safety_gate.py` 测的是 `answer_events` 这一层，证明不了
 "HTTP 上真的按这个顺序发出了这些事件"，更覆盖不到只存在于路由层的
 discard 两分支、异常兜底和断连回滚。
@@ -124,7 +124,7 @@ def test_event_order_encoding_and_persistence(client, monkeypatch):
     # 增量必须早于收尾事件，否则"边生成边显示"就是假的
     assert names.index("delta") < names.index("user_message")
 
-    # 编码：中文原样下发，不能被转成 \uXXXX（前端按 UTF-8 解，转义只会更长更慢）
+    # 编码：中文按 UTF-8 原样下发，避免转换为 Unicode 转义序列。
     assert "先清空尘盒" in response.text
     assert "\\u" not in response.text
 

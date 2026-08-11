@@ -181,7 +181,7 @@ def enforce_login_success_rate_limit(
 
     失败计数（enforce_login_rate_limit）只拦得住猜密码的人。拿着一副有效凭据
     的脚本可以无限次登录：每次都签发一对 token、写一行 refresh_tokens、跑一次
-    Argon2 校验——这三件事都不便宜，而此前成功路径上没有任何速率约束（体检 D5）。
+    Argon2 校验，因此成功登录路径同样需要速率约束。
     """
 
     resolved = settings or get_settings()

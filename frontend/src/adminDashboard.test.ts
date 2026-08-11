@@ -195,7 +195,7 @@ describe('createModel', () => {
     const dashboard = useAdminDashboard(createApi())
     await dashboard.load()
 
-    const result = await dashboard.createModel({ code: 'AA-01', name: '新接入型号', brand: '首如' })
+    const result = await dashboard.createModel({ code: 'AA-01', name: '新接入型号', brand: '示例品牌' })
 
     expect(result.ok).toBe(true)
     expect(dashboard.models.value.map((item) => item.code)).toEqual(['AA-01', 'JH69U1'])

@@ -1,6 +1,6 @@
 """外部大模型调用的传输层：超时预算 + 有限重试。
 
-背景（2026-08-05 上线前体检）：生成与 embedding 调用此前完全没有超时约束——
+问题背景：生成与 embedding 调用此前缺少统一的超时约束——
 OpenAI-compat 侧写死 180s、DashScope SDK 默认 300s，而 Nginx 的
 proxy_read_timeout 只有 60s。后果是用户 60s 就收到 504，后端却还在跑并照常
 计费；叠加单进程 uvicorn，几个 hang 住的请求就能把整个服务拖死。
@@ -119,7 +119,7 @@ def _as_transport_failure(
 ) -> BaseException:
     """把底层异常统一成 LLMTransportError（RuntimeError 子类）再抛。
 
-    为什么必须统一（2026-08-06 体检 #10）：调用方全都按 `except RuntimeError`
+    统一异常类型的原因：调用方都按 `except RuntimeError`
     接生成失败——同步端点靠它回滚并返回 503，流式端点靠它下发 error 事件。
     而这里此前是 `raise` 原样重抛，httpx.ConnectTimeout / ReadTimeout /
     RemoteProtocolError 都只是 Exception，不是 RuntimeError：
@@ -176,8 +176,7 @@ def call_with_budget(
             # （见上面 read_timeout 的算法）。只按剩余预算判断的话，出厂默认值
             # （connect 5 / read 40 / budget 50）下第一次超时后还剩约 10s，
             # 10 − 0.5 ≥ 8 成立于是重试，可实际 read_timeout = 10 − 5 = 5s，
-            # 一次 5 秒的大模型生成必然失败——正好是本模块第 3 条声明要避免的
-            # "发一个注定超时的请求"，只把账单翻倍（2026-08-06 体检 #11）。
+            # 剩余预算不足时不再重试，避免发起无法在预算内完成的计费请求。
             will_retry = (
                 retryable
                 and attempt < policy.max_attempts
@@ -226,7 +225,7 @@ def stream_with_budget(
 ) -> "Iterator[T]":
     """给流式响应套上总墙钟预算。
 
-    为什么单靠 read_seconds 不够（2026-08-06 体检 #4）：流式下的 read 超时只
+    单独使用 read_seconds 不足：流式下的 read 超时只
     约束"两个数据块之间"的间隔。上游每 39 秒吐一个 token，40s 的 read 超时
     一次都不会触发，而总耗时可以无限延长——nginx 60s 早已把用户断开，后端
     仍在读、仍在计费。这正是本模块开头第 1 条要消灭的失效模式，非流式路径走

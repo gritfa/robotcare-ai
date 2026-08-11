@@ -27,8 +27,7 @@ INSECURE_INVITE_SECRET_MARKERS = (
 class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://robotcare:robotcare@localhost:5432/robotcare"
     # 连接池此前完全用 SQLAlchemy 默认值（5 + 10 溢出，无 pre_ping、无 recycle）。
-    # 一路 SSE 聊天在生成期间会占住一条连接，15 路并发就能把池抽干，
-    # 之后连登录和健康检查一起 500——2026-08-06 体检的第 3 号问题。
+    # SSE 聊天在生成期间会占用数据库连接，池容量不足会影响登录和健康检查。
     # 池大小要按「并发聊天数 + 常规请求」估，不是按 CPU 核数。
     db_pool_size: int = Field(default=20, ge=1, le=200)
     db_max_overflow: int = Field(default=30, ge=0, le=200)
@@ -57,7 +56,7 @@ class Settings(BaseSettings):
     login_window_minutes: int = Field(default=15, ge=1, le=1440)
     login_lock_minutes: int = Field(default=15, ge=1, le=1440)
     # 登录成功也要限流：失败计数只拦得住猜密码的人，拦不住拿着有效凭据狂刷
-    # 令牌的脚本——每次成功登录都签发一对 token 并写一行 refresh_tokens（体检 D5）
+    # 令牌的脚本；每次成功登录都会签发 token 并写入 refresh_tokens。
     login_success_email_per_minute: int = Field(default=10, ge=1, le=1000)
     login_success_ip_per_minute: int = Field(default=30, ge=1, le=5000)
     # 每个用户的会话总数上限。会话表此前无上限，一个脚本可以无限建空会话
@@ -114,7 +113,7 @@ class Settings(BaseSettings):
     embedding_budget_seconds: float = Field(default=30.0, ge=5.0, le=600.0)
     embedding_max_attempts: int = Field(default=2, ge=1, le=4)
     # 每百万 token 单价（元）。默认按 qwen-plus 公开价填，换模型必须跟着改——
-    # 单价写死在代码里，换个模型账单就悄悄失真。
+    # 单价必须随模型配置更新，避免成本统计失真。
     # 形如 {"qwen-plus": {"prompt": 0.8, "completion": 2.0}}，按模型名精确匹配。
     llm_token_prices: str = "{}"
     llm_default_prompt_price_per_million: float = Field(default=0.8, ge=0, le=10000)

@@ -498,7 +498,7 @@ def test_ready_probes_embedding_reachability_in_production(tmp_path, monkeypatch
 
 
 def test_embedding_reachability_caches_result(tmp_path, monkeypatch):
-    """/ready 被容器 healthcheck 每 10s 打一次，不缓存就是在烧钱。"""
+    """/ready 的高频健康检查应复用短时缓存，避免重复调用外部模型。"""
     from app.observability import EmbeddingReachability
 
     class CountingProvider:

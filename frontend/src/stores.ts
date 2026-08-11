@@ -9,8 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(readStoredUser())
   const profileLoaded = ref(false)
   const isAuthenticated = computed(() => Boolean(token.value))
-  // 能力位由后端算好下发，前端只消费结论。此前这里写死 role === 'admin'，
-  // 于是 viewer/operator 后端全线放行、UI 却完全进不去（体检 #9）。
+  // 权限能力由后端下发，前端只消费授权结果。
   const capabilities = computed(() => user.value?.capabilities ?? [])
   const can = (capability: Capability) => capabilities.value.includes(capability)
   // 能看运营数据就该有后台入口，不必是 admin

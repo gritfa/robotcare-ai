@@ -420,7 +420,7 @@ onMounted(async () => {
         </div>
       </section>
 
-      <!-- token 成本：此前 provider 的 usage 段被直接丢弃，账单只能靠猜 -->
+      <!-- token 成本基于 provider 返回的 usage 数据统计。 -->
       <section class="panel section-panel cost-panel">
         <div class="section-head">
           <div>
@@ -1054,13 +1054,13 @@ onMounted(async () => {
     <el-dialog v-model="createModelVisible" title="新增型号" width="440px">
       <el-form label-position="top">
         <el-form-item label="型号编码">
-          <el-input v-model="newModel.code" placeholder="如 SR-X1；仅字母数字与 - _，创建后不可改" />
+          <el-input v-model="newModel.code" placeholder="如 DEMO-X1；仅字母数字与 - _，创建后不可改" />
         </el-form-item>
         <el-form-item label="型号名称">
-          <el-input v-model="newModel.name" placeholder="如 首如 X1 扫拖一体机" />
+          <el-input v-model="newModel.name" placeholder="如 DEMO-X1 扫拖一体机" />
         </el-form-item>
         <el-form-item label="品牌">
-          <el-input v-model="newModel.brand" placeholder="如 首如" />
+          <el-input v-model="newModel.brand" placeholder="如示例品牌" />
         </el-form-item>
       </el-form>
       <p class="dialog-hint">

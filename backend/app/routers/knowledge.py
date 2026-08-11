@@ -417,7 +417,7 @@ def read_citation_page(
 ) -> StreamingResponse:
     """取出引用命中的**那一页**原件。
 
-    体检发现（2026-08-05）：证据抽屉里点"打开说明书原页"跳的是官方外链，
+    问题背景：证据抽屉中的“打开说明书原页”此前使用官方外链，
     而海尔那份是 27MB 的整本 PDF——等于让手机用户下完整本书自己翻到第 15 页。
     引用不可核验，"每条回答都标注资料页码"这个卖点就只剩一个角标。
 
@@ -473,7 +473,7 @@ def read_citation_page(
             else:
                 payload = _extract_pdf_page(path, page_number)
         except CitationPageCacheFull:
-            # 并发解析已排满：让客户端稍后重试，好过把内存吃爆拖垮整个进程
+            # 并发解析已达到上限；要求客户端稍后重试以保护进程内存。
             raise HTTPException(
                 status_code=503,
                 detail="原件读取繁忙，请稍后重试",

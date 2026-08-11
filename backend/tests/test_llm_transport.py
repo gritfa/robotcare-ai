@@ -1,6 +1,6 @@
 """外部模型调用的超时预算与重试策略。
 
-守住三条上线约束（2026-08-05 体检发现调用完全没有超时）：
+验证以下三项上线约束：
 1. 单次尝试的 read 超时不得超出剩余预算；
 2. 只重试传输层可恢复错误，4xx 不重试（重试只是双倍账单）；
 3. 总耗时不得超过预算——否则用户早已收到反代 504，后端还在空转计费。
@@ -227,7 +227,7 @@ def test_settings_reject_budget_smaller_than_connect():
 def test_slow_stream_is_cut_at_the_budget_even_if_no_single_read_times_out():
     """每块间隔都在 read 超时之内，但总时长超预算——必须在预算点砍断。
 
-    这正是 2026-08-06 体检 #4 的失效模式：流式下 read timeout 只约束
+    流式下 read timeout 只约束
     "两块数据之间"，上游每 39 秒吐一个 token，40s 的 read 超时一次都不会
     触发，而 nginx 60s 早已断开用户，后端还在读、还在计费。
     """
@@ -284,7 +284,7 @@ def test_empty_stream_is_not_an_error():
 def test_underlying_exception_is_wrapped_into_the_runtime_contract():
     """底层异常必须包成 RuntimeError 子类再抛。
 
-    2026-08-06 体检 #10：调用方全都 `except RuntimeError`——同步端点靠它
+    调用方统一捕获 `RuntimeError`：同步端点依赖它
     回滚并返回 503，流式端点靠它下发 error 事件。而 httpx.ConnectTimeout
     只是 Exception，此前被原样重抛：同步端点返回 500 而非 503，流式端点
     SSE 直接被掐断、连 error 事件都发不出去。
@@ -345,7 +345,7 @@ def test_keyboard_interrupt_is_not_disguised_as_a_transport_error():
 def test_no_retry_when_remaining_budget_cannot_cover_connect_plus_useful_read():
     """默认配置下不再发那个注定超时的重试。
 
-    体检 #11：门槛此前只看剩余预算，没扣 connect。默认值下第一次 40s 超时后
+    重试门槛需要同时扣除连接预算。默认值下第一次 40s 超时后
     还剩约 10s，10 − 0.5 ≥ 8 成立于是重试，而真正给模型的 read_timeout 只有
     10 − 5 = 5s，一次 5 秒的大模型生成必然失败，纯粹把账单翻倍。
     """

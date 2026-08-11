@@ -32,7 +32,7 @@ services:
       ROBOTCARE_REGISTRATION_INVITE_SECRET: ${ROBOTCARE_REGISTRATION_INVITE_SECRET:-}
       ROBOTCARE_DATABASE_URL: ${ROBOTCARE_DATABASE_URL:?Set the PostgreSQL SQLAlchemy URL in the external environment}
       # 池要按「并发聊天数 + 常规请求」估。默认 5+10 时约 15 路并发 SSE
-      # 就能抽干池子，连登录一起 500（2026-08-06 体检 #3）。
+      # 可能耗尽连接池并影响登录等常规请求。
       ROBOTCARE_DB_POOL_SIZE: ${ROBOTCARE_DB_POOL_SIZE:-20}
       ROBOTCARE_DB_MAX_OVERFLOW: ${ROBOTCARE_DB_MAX_OVERFLOW:-30}
       ROBOTCARE_DB_POOL_TIMEOUT_SECONDS: ${ROBOTCARE_DB_POOL_TIMEOUT_SECONDS:-10}
@@ -52,15 +52,15 @@ services:
       ROBOTCARE_LOGIN_IP_MAX_FAILURES: ${ROBOTCARE_LOGIN_IP_MAX_FAILURES:-30}
       ROBOTCARE_LOGIN_WINDOW_MINUTES: ${ROBOTCARE_LOGIN_WINDOW_MINUTES:-15}
       ROBOTCARE_LOGIN_LOCK_MINUTES: ${ROBOTCARE_LOGIN_LOCK_MINUTES:-15}
-      # 成功登录也要限流：失败计数拦不住拿着有效凭据狂刷令牌的脚本（体检 D5）
+      # 成功登录同样限流，防止有效凭据被用于高频签发令牌。
       ROBOTCARE_LOGIN_SUCCESS_EMAIL_PER_MINUTE: ${ROBOTCARE_LOGIN_SUCCESS_EMAIL_PER_MINUTE:-10}
       ROBOTCARE_LOGIN_SUCCESS_IP_PER_MINUTE: ${ROBOTCARE_LOGIN_SUCCESS_IP_PER_MINUTE:-30}
       ROBOTCARE_MAX_CONVERSATIONS_PER_USER: ${ROBOTCARE_MAX_CONVERSATIONS_PER_USER:-200}
-      # 两跳都要信任，缺一不可（2026-08-06 体检 D1）：
+      # 两层代理均需加入可信网段：
       #   172.30.0.10 = 本栈的 Nginx 容器
       #   172.30.0.1  = Compose 网络网关。前端端口只绑 127.0.0.1，对外必须靠宿主
       #     上的 TLS 反代转发，而它经 loopback 进来后源地址一律是网关。不信任这一跳，
-      #     后端就把网关当成客户端——全站共用一个限流桶，任意一人失败登录 30 次锁全站。
+      #     后端会把网关当成客户端，导致所有用户共享同一限流桶。
       # 信任网关的前提是端口只绑 loopback（见 frontend.ports），因此能打到这一跳的
       # 只有宿主上受控的反代进程。交叉断言见 scripts/verify_deployment_config.py。
       ROBOTCARE_TRUSTED_PROXY_CIDRS: ${ROBOTCARE_TRUSTED_PROXY_CIDRS:-172.30.0.10/32,172.30.0.1/32}
@@ -99,7 +99,7 @@ services:
       ROBOTCARE_DASHSCOPE_API_KEY: ${ROBOTCARE_DASHSCOPE_API_KEY:-}
       ROBOTCARE_DASHSCOPE_BASE_URL: ${ROBOTCARE_DASHSCOPE_BASE_URL:-}
       # 生成后端：不透传时容器内永远只能用 DashScope 默认值，
-      # llm_backend 配置形同虚设（2026-08-05 上线体检）
+      # 否则 llm_backend 配置在容器中不会生效。
       ROBOTCARE_LLM_BACKEND: ${ROBOTCARE_LLM_BACKEND:-dashscope}
       ROBOTCARE_LLM_API_KEY: ${ROBOTCARE_LLM_API_KEY:-}
       ROBOTCARE_LLM_BASE_URL: ${ROBOTCARE_LLM_BASE_URL:-}
@@ -118,7 +118,7 @@ services:
       ROBOTCARE_LLM_DEFAULT_PROMPT_PRICE_PER_MILLION: ${ROBOTCARE_LLM_DEFAULT_PROMPT_PRICE_PER_MILLION:-0.8}
       ROBOTCARE_LLM_DEFAULT_COMPLETION_PRICE_PER_MILLION: ${ROBOTCARE_LLM_DEFAULT_COMPLETION_PRICE_PER_MILLION:-2.0}
       # 告警通道：不透传时容器内 alert_webhook_url 恒为 None，
-      # 告警静默失效且不报错（2026-08-05 上线体检实锤）
+      # 否则告警通道会在容器中保持关闭。
       ROBOTCARE_ALERT_WEBHOOK_URL: ${ROBOTCARE_ALERT_WEBHOOK_URL:-}
       ROBOTCARE_ALERT_WEBHOOK_FORMAT: ${ROBOTCARE_ALERT_WEBHOOK_FORMAT:-wecom}
       ROBOTCARE_ALERT_COOLDOWN_SECONDS: ${ROBOTCARE_ALERT_COOLDOWN_SECONDS:-14400}

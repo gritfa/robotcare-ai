@@ -75,7 +75,7 @@ def test_answer_with_valid_citations_is_persisted(client):
 
 
 def test_trailing_refuse_marker_is_stripped_from_delivered_answer(client):
-    # v3 在线评测 FF-001 实锤：模型在完整回答末尾附加 REFUSE 控制标记，
+    # v3 在线评测 FF-001：模型在完整回答末尾附加 REFUSE 控制标记，
     # 旧逻辑只看首行前 20 字，标记被原样发给用户并写进留痕。
     model_id = _prepare_model_with_knowledge(client)
     provider = ScriptedGenerationProvider(["先清空尘盒并清理滤网 [1]。 REFUSE"])

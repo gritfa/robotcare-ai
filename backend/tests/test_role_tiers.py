@@ -1,8 +1,8 @@
 """角色分级：给运营看一眼看板，不该顺带给出删知识库的权限。
 
-体检发现（2026-08-05）：角色只有 user/admin 两级（models.py CheckConstraint 硬约束），
+问题背景：角色曾只有 user/admin 两级（models.py CheckConstraint 约束），
 想让运营看内容缺口榜就得给 admin，而 admin 能删文档、回滚版本、读任意用户报告。
-另：管理员密码丢了 admin_cli 救不回来（create 对已存在 admin 返回 unchanged）。
+此外，admin_cli 需要为已有管理员提供受控的密码重置能力。
 """
 
 from __future__ import annotations
@@ -193,12 +193,7 @@ def test_revoked_sessions_are_marked_with_reason(client):
 
 
 def test_auth_me_exposes_capabilities_for_the_frontend(client):
-    """/auth/me 必须下发能力位——前端不该按 role 字符串硬编码。
-
-    2026-08-06 体检 #9：后端四级角色齐全、本文件其余用例全绿，但前端写死
-    role === 'admin'，viewer/operator 登录后 UI 完全进不去。能力表是后端的
-    事实源，前端只消费结论。
-    """
+    """/auth/me 下发权限能力，供前端统一控制管理入口。"""
     for role, expected in (
         ("user", []),
         ("viewer", ["read_operations"]),

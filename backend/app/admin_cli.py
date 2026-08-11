@@ -82,8 +82,8 @@ def create_or_promote_admin(
 def reset_password(db: Session, *, email: str, password: str | None) -> User:
     """重置已有账号的密码。
 
-    体检发现（2026-08-05）：create 对已存在的 admin 返回 unchanged，
-    管理员密码丢了 CLI **救不回来**，只能手改数据库。一个自称可运维的系统
+    问题背景：create 对已存在的 admin 返回 unchanged，
+    管理员密码遗失时缺少受控恢复入口，只能直接修改数据库。可运维系统
     不该在"忘记密码"这种日常事件上要求人去写 SQL。
 
     重置密码同时吊销该用户的全部会话——密码之所以要重置，通常正是因为

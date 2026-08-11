@@ -175,9 +175,7 @@ describe('auth store session lifecycle', () => {
   })
 
   it('drives admin access from backend capabilities, not from the role string', () => {
-    // 2026-08-06 体检 #9：前端此前写死 role === 'admin'，于是后端四级角色
-    // 全线放行、测试全绿，viewer/operator 登录后侧栏却没有入口、
-    // 手敲 /admin 还被路由守卫弹回——"给运营看一眼看板"根本达不成。
+    // 管理入口应由后端能力列表控制，而不是依赖具体角色名称。
     const store = useAuthStore()
 
     store.user = {

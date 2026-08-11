@@ -73,8 +73,7 @@ def _owned_conversation(db: Session, conversation_id: int, user: User) -> Conver
     """按 id 取会话并校验归属。
 
     **不要**在这里 selectinload(messages)。原来这么写，等于每个用到会话的接口
-    （发消息、流式、反馈、改标题）都把整段历史读进内存——发一条消息只需要最近
-    6 条上下文，却要先把几百条全读出来（体检 D5）。需要消息的地方各自按需分页。
+    发消息、流式、反馈和改标题等操作不应加载完整历史；需要消息的入口按需分页。
     """
 
     conversation = db.scalar(
@@ -109,7 +108,7 @@ def create_conversation(
     robot_model = db.scalar(select(RobotModel).where(RobotModel.id == payload.robot_model_id))
     if robot_model is None:
         raise HTTPException(status_code=404, detail="Robot model not found")
-    # 会话表此前无上限：一个脚本可以无限建空会话，把库和列表接口一起撑坏（体检 D5）。
+    # 限制单个用户的会话数量，避免空会话持续增长影响存储和列表性能。
     # 用 409 而不是 429——这不是"太快了等一会儿"，是"你的会话太多了，删掉一些"。
     settings = get_settings()
     existing = db.scalar(
@@ -236,8 +235,7 @@ def get_conversation(
     """只回最近 `limit` 条消息。
 
     此前是 `conversation.messages` 全量加载：一条会话问上几百轮之后，每次打开
-    都要把整段历史读进内存再序列化，而多轮上下文本来只取最近若干条——多读的
-    部分谁也没用上，纯粹是内存和带宽（体检 D5）。
+    历史消息按需分页，避免加载和序列化不需要的完整会话内容。
     """
 
     conversation = _owned_conversation(db, conversation_id, user)
@@ -343,8 +341,8 @@ def _prepare_turn(
         )
         min_score = settings.knowledge_score_threshold(robot_model.code, threshold_version)
 
-    # 用户消息在这里只构造、不落库（体检 #3）。此前是 add+flush 挂着一个未提交
-    # 事务跑完整个生成，一路 SSE 就占住一条连接与一把行锁，~15 路并发打死全站。
+    # 用户消息在这里只构造、不落库。避免 add+flush 后持有未提交事务，
+    # 若事务覆盖完整生成过程，SSE 会持续占用连接和行锁，影响其他请求。
     # created_at 显式取"提问时刻"，否则延迟到生成之后落库会让它比实际晚几秒。
     user_message = ConversationMessage(
         conversation_id=conversation.id,
@@ -609,7 +607,7 @@ def post_message_stream(
 
     def event_stream() -> Iterator[str]:
         # user_message 事件此前在流开头下发，靠的是"进流之前已 flush 用户消息"——
-        # 而那正是让一条连接被整场生成占住的原因（体检 #3）。改为延迟落库后，
+        # 改为延迟落库后，生成期间不再持续占用数据库连接，
         # 用户消息在这里还没有 id，事件顺延到落库之后下发。
         # 前端本就先渲染一条乐观消息（ChatView「乐观展示用户消息」），
         # 收到本事件时把它替换成真实记录，所以时机后移对用户无感。

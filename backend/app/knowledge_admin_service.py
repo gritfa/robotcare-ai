@@ -51,8 +51,8 @@ def store_knowledge_file(storage_dir: Path, content: bytes) -> tuple[str, int, b
 
     用 sha256 命名而不是 uuid：同一份 PDF 无论被哪个型号引用都只存一份，
     且覆盖上传时旧版本文件天然保留下来——这正是版本回滚要依赖的东西。
-    返回"是否新建"是为了让入库失败时只清理本次产生的文件，
-    绝不能顺手删掉别的文档正在用的同名存档。
+    返回"是否新建"用于在入库失败时只清理本次产生的文件，
+    避免删除其他文档仍在使用的同名存档。
     """
 
     digest = hashlib.sha256(content).hexdigest()
@@ -406,8 +406,7 @@ def replay_gap_query(
         resolution.status = "resolved"
         resolution.resolved_at = utcnow()
     elif outcome.status == "failed" and resolution.status == "resolved":
-        # 复测失败必须把状态打回去：留着一个通不过复测的"已解决"，
-        # 缺口榜就开始骗人了。
+        # 复测失败时恢复为处理中，避免保留没有重放证据的“已解决”状态。
         resolution.status = "investigating"
         resolution.resolved_at = None
     return outcome

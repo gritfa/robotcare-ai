@@ -1,6 +1,6 @@
 """引用原件按页抽取：缓存、内存闸与错误兜底。
 
-体检发现（2026-08-06）：`/knowledge/citations/{sha}/pages/{n}` 每次请求都用
+问题背景：`/knowledge/citations/{sha}/pages/{n}` 每次请求都用
 pypdf 把整本 PDF（海尔那份 27MB）解析进内存再抽一页，既无缓存也无并发上限，
 且 pypdf 抛的解析异常没人接 —— 损坏文件直接 500。
 

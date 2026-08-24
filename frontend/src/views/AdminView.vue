@@ -387,6 +387,12 @@ function fillAIForm(value: AdminAIConfig) {
   aiForm.embedding_api_key = ''
 }
 
+function aiConfigSourceLabel(source: AdminAIConfig['source'] | undefined) {
+  if (source === 'database') return '管理员后台（含密钥）'
+  if (source === 'mixed') return '后台参数 + 服务器密钥'
+  return '服务器环境变量'
+}
+
 async function loadAIConfig() {
   if (!auth.isAdmin) return
   aiLoading.value = true
@@ -617,7 +623,7 @@ onMounted(async () => {
           </div>
           <div class="ai-config-actions">
             <span>
-              配置来源：{{ aiConfig?.source === 'database' ? '管理员后台' : '服务器环境变量' }}；保存配置不会自动执行付费测试。
+              配置来源：{{ aiConfigSourceLabel(aiConfig?.source) }}；保存配置不会自动执行付费测试。
             </span>
             <div class="section-actions">
               <el-button :loading="aiTesting" :disabled="!aiConfig" @click="testAIConnection">连接测试</el-button>

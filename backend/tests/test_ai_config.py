@@ -45,6 +45,7 @@ def test_admin_can_save_encrypted_keys_and_never_read_them_back(client, monkeypa
     body = response.json()
     assert body["generation_api_key_configured"] is True
     assert body["embedding_api_key_configured"] is True
+    assert body["source"] == "database"
     assert "secret-generation-key" not in response.text
 
     with client.app.state.session_factory() as db:
@@ -107,6 +108,24 @@ def test_admin_can_disable_and_enable_runtime_without_restart(client, monkeypatc
     assert enabled.json()["runtime_ready"] is True
     assert client.app.state.generation_provider.model_name == "qwen3.7-max"
     assert probe.clear_calls == 2
+
+
+def test_status_marks_database_metadata_with_environment_keys_as_mixed(client, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "llm_backend", "dashscope")
+    monkeypatch.setattr(settings, "dashscope_api_key", "environment-only-key")
+    token = make_admin(client, "ai-mixed-source-admin@example.com")
+
+    response = client.patch(
+        "/api/v1/admin/ai-config/status",
+        headers=auth(token),
+        json={"enabled": False},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "mixed"
+    assert response.json()["generation_api_key_configured"] is True
+    assert response.json()["embedding_api_key_configured"] is True
 
 
 def test_ai_config_rejects_private_or_non_https_base_urls(client, monkeypatch):

@@ -73,7 +73,7 @@ class AdminModelUpdate(BaseModel):
 class AdminAIConfigRead(BaseModel):
     enabled: bool
     runtime_ready: bool
-    source: Literal["environment", "database"]
+    source: Literal["environment", "database", "mixed"]
     llm_backend: Literal["dashscope", "openai-compat"]
     generation_model: str
     generation_base_url: str | None

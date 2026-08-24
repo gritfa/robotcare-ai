@@ -311,8 +311,10 @@ def config_status(db: Session, settings, *, runtime_ready: bool) -> dict[str, ob
         generation_configured = bool(config.generation_api_key)
         embedding_configured = bool(config.embedding_api_key)
     else:
+        generation_secret_in_database = bool(row.generation_api_key_encrypted)
+        embedding_secret_in_database = bool(row.embedding_api_key_encrypted)
         generation_configured = bool(
-            row.generation_api_key_encrypted
+            generation_secret_in_database
             or _clean(
                 settings.llm_api_key
                 if row.llm_backend == "openai-compat"
@@ -320,11 +322,15 @@ def config_status(db: Session, settings, *, runtime_ready: bool) -> dict[str, ob
             )
         )
         embedding_configured = bool(
-            row.embedding_api_key_encrypted or _clean(settings.dashscope_api_key)
+            embedding_secret_in_database or _clean(settings.dashscope_api_key)
         )
         config = EffectiveAIConfig(
             enabled=row.enabled,
-            source="database",
+            source=(
+                "database"
+                if generation_secret_in_database and embedding_secret_in_database
+                else "mixed"
+            ),
             llm_backend=row.llm_backend,
             generation_model=row.generation_model,
             generation_base_url=_clean(row.generation_base_url),

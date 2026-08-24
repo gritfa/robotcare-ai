@@ -99,7 +99,7 @@ export interface AdminOverview {
 export interface AdminAIConfig {
   enabled: boolean
   runtime_ready: boolean
-  source: 'environment' | 'database'
+  source: 'environment' | 'database' | 'mixed'
   llm_backend: 'dashscope' | 'openai-compat'
   generation_model: string
   generation_base_url: string | null

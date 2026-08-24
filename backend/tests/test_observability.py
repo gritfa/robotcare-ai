@@ -481,12 +481,14 @@ def test_ready_probes_embedding_reachability_in_production(tmp_path, monkeypatch
             raise ConnectionError("dns failure")
 
     client, app = _migrated_client(tmp_path, monkeypatch)
-    app.state.environment = "production"
-    app.state.embedding_configured = True
-    app.state.embedding_provider = DeadProvider()
-    app.state.embedding_reachability = EmbeddingReachability()
-
     with client:
+        # Lifespan now loads the administrator-managed provider configuration.
+        # Install the fault after startup so this test continues to exercise
+        # reachability rather than the configuration loader.
+        app.state.environment = "production"
+        app.state.embedding_configured = True
+        app.state.embedding_provider = DeadProvider()
+        app.state.embedding_reachability = EmbeddingReachability()
         response = client.get("/ready")
 
     assert response.status_code == 503

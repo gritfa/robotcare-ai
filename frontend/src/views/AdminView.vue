@@ -364,6 +364,9 @@ const aiLoading = ref(false)
 const aiSaving = ref(false)
 const aiTesting = ref(false)
 const aiError = ref('')
+const secureAISecretTransport = computed(() =>
+  window.isSecureContext || ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname),
+)
 const aiForm = reactive({
   llm_backend: 'openai-compat' as 'dashscope' | 'openai-compat',
   generation_model: '',
@@ -398,6 +401,10 @@ async function loadAIConfig() {
 }
 
 async function saveAIConfig() {
+  if (!secureAISecretTransport.value) {
+    ElMessage.warning('当前页面不是 HTTPS，禁止提交 API Key；请先配置域名和 HTTPS')
+    return
+  }
   if (!aiForm.generation_model.trim()) {
     ElMessage.warning('请填写生成模型 ID')
     return
@@ -556,6 +563,14 @@ onMounted(async () => {
           :closable="false"
           show-icon
         />
+        <el-alert
+          v-else-if="!secureAISecretTransport"
+          class="load-alert"
+          title="当前页面不是 HTTPS，已禁止提交 API Key；请先配置域名和 HTTPS。"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
 
         <el-form label-position="top" class="ai-config-form">
           <div class="ai-config-grid">
@@ -606,7 +621,7 @@ onMounted(async () => {
             </span>
             <div class="section-actions">
               <el-button :loading="aiTesting" :disabled="!aiConfig" @click="testAIConnection">连接测试</el-button>
-              <el-button type="primary" :loading="aiSaving" :disabled="!aiConfig?.encryption_ready" @click="saveAIConfig">加密保存配置</el-button>
+              <el-button type="primary" :loading="aiSaving" :disabled="!aiConfig?.encryption_ready || !secureAISecretTransport" @click="saveAIConfig">加密保存配置</el-button>
             </div>
           </div>
         </el-form>

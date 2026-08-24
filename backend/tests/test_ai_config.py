@@ -127,6 +127,28 @@ def test_ai_config_rejects_private_or_non_https_base_urls(client, monkeypatch):
         assert response.status_code == 422
 
 
+def test_production_rejects_api_keys_over_plain_http(client, monkeypatch):
+    _enable_encryption(monkeypatch)
+    token = make_admin(client, "ai-transport-admin@example.com")
+    monkeypatch.setattr(get_settings(), "environment", "production")
+
+    response = client.put(
+        "/api/v1/admin/ai-config",
+        headers=auth(token),
+        json={
+            "llm_backend": "openai-compat",
+            "generation_model": "qwen3.7-max",
+            "generation_base_url": "https://model.example.com/v1",
+            "generation_api_key": "must-not-cross-plain-http",
+            "embedding_api_key": "must-not-cross-plain-http",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "HTTPS" in response.json()["detail"]
+    assert "must-not-cross-plain-http" not in response.text
+
+
 def test_connection_test_uses_saved_config_and_writes_no_secret(monkeypatch, client):
     _enable_encryption(monkeypatch)
     token = make_admin(client, "ai-test-admin@example.com")

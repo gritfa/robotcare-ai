@@ -1,4 +1,5 @@
 import logging
+from ipaddress import ip_address
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -27,6 +28,21 @@ from ..security import require_admin
 
 
 router = APIRouter(prefix="/api/v1")
+
+
+def _secure_secret_transport(request: Request, settings) -> bool:
+    if request.url.scheme == "https":
+        return True
+    peer = request.client.host if request.client is not None else ""
+    try:
+        trusted_peer = any(
+            ip_address(peer) in network for network in settings.trusted_proxy_networks
+        )
+    except ValueError:
+        trusted_peer = False
+    # Only a configured trusted reverse proxy may assert the original scheme.
+    # Reject comma-separated or ambiguous values instead of guessing.
+    return trusted_peer and request.headers.get("x-forwarded-proto", "").strip().lower() == "https"
 
 
 def _audit(db: Session, admin: User, action: str, details: dict[str, object]) -> None:
@@ -65,6 +81,19 @@ def update_ai_config(
     admin: User = Depends(require_admin),
 ) -> AdminAIConfigRead:
     settings = get_settings()
+    submits_secret = any(
+        secret is not None and bool(secret.get_secret_value().strip())
+        for secret in (payload.generation_api_key, payload.embedding_api_key)
+    )
+    if (
+        settings.environment.strip().lower() == "production"
+        and submits_secret
+        and not _secure_secret_transport(request, settings)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="生产环境只允许通过 HTTPS 提交 API Key",
+        )
     try:
         row = save_config(db, payload, settings, admin_id=admin.id)
         _audit(

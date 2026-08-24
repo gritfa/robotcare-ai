@@ -372,6 +372,11 @@ class KnowledgeSearchCache:
         with self._guard:
             return len(self._values)
 
+    def clear(self) -> None:
+        """Drop cached vectors/results after the active provider changes."""
+        with self._guard:
+            self._values.clear()
+
     @contextmanager
     def singleflight(self, key: str) -> Iterator[None]:
         with self._guard:

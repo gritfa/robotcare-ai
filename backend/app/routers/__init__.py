@@ -9,6 +9,7 @@ from fastapi import APIRouter
 
 from . import (
     admin,
+    ai_config,
     auth,
     catalog,
     conversations,
@@ -23,6 +24,7 @@ router.include_router(auth.router)
 router.include_router(knowledge.router)
 router.include_router(catalog.router)
 router.include_router(admin.router)
+router.include_router(ai_config.router)
 router.include_router(knowledge_admin.router)
 router.include_router(devices.router)
 router.include_router(diagnostics.router)
@@ -31,6 +33,7 @@ router.include_router(conversations.router)
 __all__ = [
     "router",
     "admin",
+    "ai_config",
     "auth",
     "catalog",
     "conversations",

@@ -123,6 +123,7 @@ def test_upgrade_head_creates_complete_schema_and_supports_seed(
     inspector = inspect(engine)
     expected_tables = {
         "alembic_version",
+        "ai_provider_configs",
         "api_rate_limits",
         "attachments",
         "auth_sessions",

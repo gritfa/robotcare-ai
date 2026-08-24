@@ -96,6 +96,27 @@ export interface AdminOverview {
   content_gap_count: number
 }
 
+export interface AdminAIConfig {
+  enabled: boolean
+  runtime_ready: boolean
+  source: 'environment' | 'database'
+  llm_backend: 'dashscope' | 'openai-compat'
+  generation_model: string
+  generation_base_url: string | null
+  embedding_model: string
+  embedding_base_url: string | null
+  generation_api_key_configured: boolean
+  embedding_api_key_configured: boolean
+  encryption_ready: boolean
+  updated_at: string | null
+}
+
+export interface AdminAIConnectionTest {
+  generation_service: boolean
+  embedding_service: boolean
+  errors: string[]
+}
+
 export type ContentGapStatus = 'open' | 'investigating' | 'resolved' | 'wont_fix'
 export type GapReplayStatus = 'passed' | 'failed' | 'error'
 

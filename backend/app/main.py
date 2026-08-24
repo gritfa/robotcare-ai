@@ -26,6 +26,12 @@ from .observability import (
 from .citation_page_service import CitationPageCache
 from .rate_limit_service import KnowledgeSearchCache
 from .seed import seed_database
+from .ai_config_service import (
+    AIConfigurationError,
+    DisabledEmbeddingProvider,
+    DisabledGenerationProvider,
+    apply_runtime_config,
+)
 
 
 def create_app(
@@ -52,6 +58,20 @@ def create_app(
             ensure_database_at_head(engine)
         with session_factory() as db:
             seed_database(db)
+            if embedding_provider is None and generation_provider is None:
+                try:
+                    apply_runtime_config(application, db, settings)
+                except AIConfigurationError as exc:
+                    application.state.embedding_provider = DisabledEmbeddingProvider()
+                    application.state.generation_provider = DisabledGenerationProvider()
+                    application.state.embedding_configured = False
+                    application.state.generation_configured = False
+                    application.state.ai_runtime_ready = False
+                    emit_json_log(
+                        logging.ERROR,
+                        "ai_runtime_configuration_failed",
+                        error_type=type(exc).__name__,
+                    )
         yield
         engine.dispose()
 
@@ -82,6 +102,9 @@ def create_app(
     application.state.environment = settings.environment.strip().lower()
     application.state.embedding_configured = bool(
         embedding_provider is not None or (settings.dashscope_api_key or "").strip()
+    )
+    application.state.ai_runtime_ready = bool(
+        application.state.embedding_configured and application.state.generation_configured
     )
     application.state.attachment_dir = Path(attachment_dir or settings.attachment_dir).resolve()
     application.state.attachment_dir.mkdir(parents=True, exist_ok=True)

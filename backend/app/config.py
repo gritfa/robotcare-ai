@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     llm_backend: str = "dashscope"  # dashscope | openai-compat
     llm_api_key: str | None = None
     llm_base_url: str | None = None
+    # 后台保存的模型密钥使用独立 Fernet 密钥加密。它不能写入数据库或 Git，
+    # 也不能复用 JWT 密钥，否则 JWT 轮换会让已保存的模型配置无法解密。
+    ai_config_encryption_key: str | None = None
     # 外部模型超时预算。默认值必须小于 frontend/nginx.conf 的 proxy_read_timeout
     # （当前 60s），否则用户已收到 504、后端还在跑并照常计费；
     # 该约束由 scripts/verify_deployment_config.py 静态断言守住。

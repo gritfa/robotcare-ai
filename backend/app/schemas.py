@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr
 
 
 class ORMModel(BaseModel):
@@ -68,6 +68,43 @@ class AdminModelUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     brand: str | None = Field(default=None, min_length=1, max_length=50)
     active: bool | None = None
+
+
+class AdminAIConfigRead(BaseModel):
+    enabled: bool
+    runtime_ready: bool
+    source: Literal["environment", "database"]
+    llm_backend: Literal["dashscope", "openai-compat"]
+    generation_model: str
+    generation_base_url: str | None
+    embedding_model: str = "text-embedding-v4"
+    embedding_base_url: str | None
+    generation_api_key_configured: bool
+    embedding_api_key_configured: bool
+    encryption_ready: bool
+    updated_at: datetime | None = None
+
+
+class AdminAIConfigUpdate(BaseModel):
+    llm_backend: Literal["dashscope", "openai-compat"]
+    generation_model: str = Field(min_length=1, max_length=100)
+    generation_base_url: str | None = Field(default=None, max_length=2000)
+    embedding_base_url: str | None = Field(default=None, max_length=2000)
+    generation_api_key: SecretStr | None = None
+    embedding_api_key: SecretStr | None = None
+    reuse_generation_key_for_embedding: bool = False
+    clear_generation_api_key: bool = False
+    clear_embedding_api_key: bool = False
+
+
+class AdminAIStatusUpdate(BaseModel):
+    enabled: bool
+
+
+class AdminAIConnectionTestRead(BaseModel):
+    generation_service: bool
+    embedding_service: bool
+    errors: list[str]
 
 
 class AdminGenerationStatsRead(BaseModel):

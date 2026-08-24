@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
-import type { AdminAuditLog, AdminContentGap, AdminContentGapReplay, AdminContentGapResolution, AdminDiagnosticDetail,
+import type { AdminAIConfig, AdminAIConnectionTest, AdminAuditLog, AdminContentGap, AdminContentGapReplay, AdminContentGapResolution, AdminDiagnosticDetail,
   AdminKnowledgeChunkPage, AdminKnowledgeDiffPreview, AdminKnowledgeDocument, AdminKnowledgeDocumentDetail,
   AdminConversationDetail, AdminConversationSummary, AdminFeedbackOverview,
   AdminKnowledgeUploadResult, AdminModel, AdminOverview, AdminSafetyBlock, AdminSafetyBlockDetail, AdminServiceReportDetail, AdminUnresolvedReport, Attachment, AuthResult, ChatMessagePair, Conversation, ConversationDetail, Device, Diagnostic, DiagnosticOption, DiagnosticStep, EntityId, KnowledgeHealth, KnowledgeModelStatus, KnowledgeAnswer,
@@ -397,6 +397,22 @@ export const adminApi = {
   diagnosticDetail: async (id: EntityId) => payload<AdminDiagnosticDetail>((await http.get(`/admin/diagnostics/${id}`)).data),
   reportDetail: async (id: EntityId) => payload<AdminServiceReportDetail>((await http.get(`/admin/reports/${id}`)).data),
   auditLogs: async (limit = 20) => listPayload<AdminAuditLog>((await http.get('/admin/audit-logs', { params: { limit } })).data),
+
+  // AI 服务配置：密钥只写入、不回读；空密钥表示保留已保存值。
+  aiConfig: async () => payload<AdminAIConfig>((await http.get('/admin/ai-config')).data),
+  updateAIConfig: async (body: {
+    llm_backend: 'dashscope' | 'openai-compat'
+    generation_model: string
+    generation_base_url?: string | null
+    embedding_base_url?: string | null
+    generation_api_key?: string
+    embedding_api_key?: string
+    reuse_generation_key_for_embedding?: boolean
+  }) => payload<AdminAIConfig>((await http.put('/admin/ai-config', body)).data),
+  setAIEnabled: async (enabled: boolean) =>
+    payload<AdminAIConfig>((await http.patch('/admin/ai-config/status', { enabled })).data),
+  testAIConfig: async () =>
+    payload<AdminAIConnectionTest>((await http.post('/admin/ai-config/test', {}, { timeout: GENERATION_TIMEOUT_MS })).data),
 
   // 知识库后台
   knowledgeDocuments: async (params: { model_code?: string; status?: string } = {}) =>

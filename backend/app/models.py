@@ -171,6 +171,39 @@ class AuditLog(Base):
     )
 
 
+class AIProviderConfig(Base):
+    """管理员维护的单例 AI 服务配置。
+
+    密钥只保存 Fernet 密文；空密文表示继续使用服务器环境变量中的密钥。
+    id 固定为 1，避免多个配置同时声称自己已启用。
+    """
+
+    __tablename__ = "ai_provider_configs"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_ai_provider_configs_singleton"),
+        CheckConstraint(
+            "llm_backend IN ('dashscope', 'openai-compat')",
+            name="ck_ai_provider_configs_backend",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    llm_backend: Mapped[str] = mapped_column(String(30), default="dashscope")
+    generation_model: Mapped[str] = mapped_column(String(100), default="qwen-plus")
+    generation_base_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    embedding_base_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    generation_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class RobotModel(Base):
     __tablename__ = "robot_models"
 

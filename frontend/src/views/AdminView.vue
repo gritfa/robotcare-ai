@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import type { UploadFile, UploadInstance } from 'element-plus'
 import {
   CircleCheckFilled,
@@ -17,9 +17,10 @@ import {
   Warning,
 } from '@element-plus/icons-vue'
 import { useAdminDashboard } from '../adminDashboard'
+import { adminApi, userFacingApiError } from '../api'
 import { useAuthStore } from '../stores'
 import { CHUNK_PAGE_SIZE, describeDiff, useKnowledgeConsole } from '../knowledgeConsole'
-import type { AdminContentGap, AdminKnowledgeDocument, AdminModel } from '../types'
+import type { AdminAIConfig, AdminContentGap, AdminKnowledgeDocument, AdminModel } from '../types'
 
 const auth = useAuthStore()
 const dashboard = useAdminDashboard()
@@ -356,11 +357,136 @@ async function updateModel(model: AdminModel, value: string | number | boolean) 
   }
 }
 
+// --- AI 服务配置（仅 admin）---
+
+const aiConfig = ref<AdminAIConfig | null>(null)
+const aiLoading = ref(false)
+const aiSaving = ref(false)
+const aiTesting = ref(false)
+const aiError = ref('')
+const aiForm = reactive({
+  llm_backend: 'openai-compat' as 'dashscope' | 'openai-compat',
+  generation_model: '',
+  generation_base_url: '',
+  embedding_base_url: '',
+  generation_api_key: '',
+  embedding_api_key: '',
+  reuse_generation_key_for_embedding: true,
+})
+
+function fillAIForm(value: AdminAIConfig) {
+  aiConfig.value = value
+  aiForm.llm_backend = value.llm_backend
+  aiForm.generation_model = value.generation_model
+  aiForm.generation_base_url = value.generation_base_url ?? ''
+  aiForm.embedding_base_url = value.embedding_base_url ?? ''
+  aiForm.generation_api_key = ''
+  aiForm.embedding_api_key = ''
+}
+
+async function loadAIConfig() {
+  if (!auth.isAdmin) return
+  aiLoading.value = true
+  aiError.value = ''
+  try {
+    fillAIForm(await adminApi.aiConfig())
+  } catch (error) {
+    aiError.value = userFacingApiError(error, 'AI 服务配置加载失败')
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+async function saveAIConfig() {
+  if (!aiForm.generation_model.trim()) {
+    ElMessage.warning('请填写生成模型 ID')
+    return
+  }
+  if (aiForm.llm_backend === 'openai-compat' && !aiForm.generation_base_url.trim()) {
+    ElMessage.warning('OpenAI 兼容模式必须填写生成 Base URL')
+    return
+  }
+  aiSaving.value = true
+  aiError.value = ''
+  try {
+    const value = await adminApi.updateAIConfig({
+      llm_backend: aiForm.llm_backend,
+      generation_model: aiForm.generation_model.trim(),
+      generation_base_url: aiForm.generation_base_url.trim() || null,
+      embedding_base_url: aiForm.embedding_base_url.trim() || null,
+      generation_api_key: aiForm.generation_api_key.trim() || undefined,
+      embedding_api_key: aiForm.reuse_generation_key_for_embedding
+        ? undefined
+        : (aiForm.embedding_api_key.trim() || undefined),
+      reuse_generation_key_for_embedding: aiForm.reuse_generation_key_for_embedding,
+    })
+    fillAIForm(value)
+    ElMessage.success('AI 配置已加密保存')
+  } catch (error) {
+    aiError.value = userFacingApiError(error, 'AI 配置保存失败')
+  } finally {
+    aiSaving.value = false
+  }
+}
+
+async function toggleAIService() {
+  if (!aiConfig.value) return
+  const next = !aiConfig.value.enabled
+  if (!next) {
+    try {
+      await ElMessageBox.confirm(
+        '停用后，智能客服、智能回答、资料检索和知识库向量化会立即停止调用外部模型。',
+        '确认停用 AI 服务？',
+        { type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消' },
+      )
+    } catch {
+      return
+    }
+  }
+  aiSaving.value = true
+  aiError.value = ''
+  try {
+    fillAIForm(await adminApi.setAIEnabled(next))
+    ElMessage.success(next ? 'AI 服务已启用，无需重启' : 'AI 服务已停用')
+  } catch (error) {
+    aiError.value = userFacingApiError(error, next ? 'AI 服务启用失败' : 'AI 服务停用失败')
+  } finally {
+    aiSaving.value = false
+  }
+}
+
+async function testAIConnection() {
+  try {
+    await ElMessageBox.confirm(
+      '连接测试会真实调用一次向量模型和一次生成模型，可能产生少量 API 费用。',
+      '执行付费连接测试？',
+      { type: 'warning', confirmButtonText: '开始测试', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  aiTesting.value = true
+  aiError.value = ''
+  try {
+    const result = await adminApi.testAIConfig()
+    if (result.embedding_service && result.generation_service) {
+      ElMessage.success('连接成功：向量模型与生成模型均可用')
+    } else {
+      aiError.value = result.errors.join('；') || '连接测试未全部通过'
+    }
+  } catch (error) {
+    aiError.value = userFacingApiError(error, 'AI 连接测试失败')
+  } finally {
+    aiTesting.value = false
+  }
+}
+
 onMounted(async () => {
   await dashboard.load()
   await dashboard.loadFeedback()
   await dashboard.loadConversations()
   await console_.loadDocuments()
+  await loadAIConfig()
 })
 </script>
 
@@ -397,6 +523,93 @@ onMounted(async () => {
             <small>{{ card.label }}</small>
           </span>
         </article>
+      </section>
+
+      <section v-if="auth.isAdmin" class="panel section-panel ai-config-panel" v-loading="aiLoading">
+        <div class="section-head">
+          <div>
+            <h2>AI 服务配置</h2>
+            <p>密钥加密保存在数据库中，保存后不会再次返回明文；启停立即生效，无需重启服务。</p>
+          </div>
+          <div class="section-actions">
+            <el-tag :type="aiConfig?.runtime_ready ? 'success' : 'info'">
+              {{ aiConfig?.runtime_ready ? '运行中' : '未运行' }}
+            </el-tag>
+            <el-button
+              :type="aiConfig?.enabled ? 'danger' : 'primary'"
+              plain
+              :loading="aiSaving"
+              :disabled="!aiConfig"
+              @click="toggleAIService"
+            >
+              {{ aiConfig?.enabled ? '一键停用 API' : '一键启用 API' }}
+            </el-button>
+          </div>
+        </div>
+
+        <el-alert v-if="aiError" class="load-alert" :title="aiError" type="error" :closable="false" show-icon />
+        <el-alert
+          v-else-if="aiConfig && !aiConfig.encryption_ready"
+          class="load-alert"
+          title="服务器尚未配置 AI 密钥加密键，不能从后台保存新 API Key。"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+
+        <el-form label-position="top" class="ai-config-form">
+          <div class="ai-config-grid">
+            <el-form-item label="生成接口协议">
+              <el-select v-model="aiForm.llm_backend">
+                <el-option label="OpenAI 兼容接口" value="openai-compat" />
+                <el-option label="阿里云 DashScope SDK" value="dashscope" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="生成模型 ID">
+              <el-input v-model="aiForm.generation_model" placeholder="例如 qwen3.7-max" maxlength="100" />
+            </el-form-item>
+            <el-form-item label="生成 Base URL">
+              <el-input v-model="aiForm.generation_base_url" placeholder="https://.../compatible-mode/v1" />
+            </el-form-item>
+            <el-form-item label="生成 API Key">
+              <el-input
+                v-model="aiForm.generation_api_key"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                :placeholder="aiConfig?.generation_api_key_configured ? '已配置，留空保持不变' : '请输入 API Key'"
+              />
+            </el-form-item>
+            <el-form-item label="向量模型">
+              <el-input :model-value="aiConfig?.embedding_model ?? 'text-embedding-v4'" disabled />
+            </el-form-item>
+            <el-form-item label="向量 Base URL">
+              <el-input v-model="aiForm.embedding_base_url" placeholder="https://.../api/v1" />
+            </el-form-item>
+            <el-form-item label="向量 API Key">
+              <el-input
+                v-model="aiForm.embedding_api_key"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                :disabled="aiForm.reuse_generation_key_for_embedding"
+                :placeholder="aiConfig?.embedding_api_key_configured ? '已配置，留空保持不变' : '请输入 API Key'"
+              />
+            </el-form-item>
+            <el-form-item label="密钥复用">
+              <el-checkbox v-model="aiForm.reuse_generation_key_for_embedding">向量模型使用本次填写的生成 API Key</el-checkbox>
+            </el-form-item>
+          </div>
+          <div class="ai-config-actions">
+            <span>
+              配置来源：{{ aiConfig?.source === 'database' ? '管理员后台' : '服务器环境变量' }}；保存配置不会自动执行付费测试。
+            </span>
+            <div class="section-actions">
+              <el-button :loading="aiTesting" :disabled="!aiConfig" @click="testAIConnection">连接测试</el-button>
+              <el-button type="primary" :loading="aiSaving" :disabled="!aiConfig?.encryption_ready" @click="saveAIConfig">加密保存配置</el-button>
+            </div>
+          </div>
+        </el-form>
       </section>
 
       <section class="panel section-panel generation-stats" aria-label="生成回答统计">
@@ -1082,7 +1295,9 @@ onMounted(async () => {
 
 <style scoped>
 .admin-page{max-width:1600px}.load-alert{margin-bottom:20px}.generation-stats{margin-bottom:18px}.refusal-tags{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.refusal-empty{color:var(--muted);font-size:12px}.upload-box{margin-top:16px;padding-top:14px;border-top:1px solid #edf1ef}.upload-box h3{margin:0;font-size:14px}.upload-box p{margin:6px 0 10px;color:var(--muted);font-size:12px;line-height:1.5}.upload-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.upload-model{width:140px;flex-shrink:0}.overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric-card{padding:19px 20px;display:flex;align-items:center;gap:14px}.metric-card>.el-icon{box-sizing:content-box;padding:11px;border-radius:11px;background:var(--soft);color:var(--brand);font-size:22px}.metric-card b,.metric-card small{display:block}.metric-card b{font-size:24px;line-height:1}.metric-card small{margin-top:7px;color:var(--muted);font-size:12px}.two-column{display:grid;grid-template-columns:1fr 1fr;gap:18px}.section-panel{padding:22px;overflow:hidden}.table-section{margin-top:18px}.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:17px}.section-head p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.sensitive-detail{line-height:1.7}.sensitive-detail pre{white-space:pre-wrap;word-break:break-word;padding:14px;background:#f7faf8;border-radius:8px;max-height:55vh;overflow:auto}:deep(.el-table){--el-table-border-color:#edf1ef;--el-table-header-bg-color:#f7faf8;font-size:12px}:deep(.el-table th.el-table__cell){color:#52635d;font-weight:700}:deep(.el-alert__content){width:100%}:deep(.el-alert__description){display:flex;justify-content:flex-end}.preview-alert{margin-top:10px}.preview-text{margin:4px 0 2px;font-size:12px;line-height:1.6}.preview-meta{margin:0;font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.section-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.section-head-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}.cost-panel{margin-bottom:18px}.cost-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:14px}.cost-grid div{padding:14px 16px;background:#f7faf8;border-radius:10px}.cost-grid b{display:block;font-size:20px}.cost-grid small{display:block;margin-top:5px;color:var(--muted);font-size:12px}.clickable-tag{cursor:pointer}.conversation-detail{padding:0 4px}.conversation-message{margin-bottom:14px;padding:12px;border-radius:10px;background:#f7faf8}.conversation-message.user{background:#eef6f2}.conversation-message p{margin:6px 0 0;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word}.role-tag{font-size:11px;font-weight:700;color:var(--brand)}.dialog-hint{margin:4px 0 0;font-size:12px;line-height:1.6;color:var(--muted)}.filter-select{width:130px}.archive-hint{margin-bottom:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.gap-loop-hint{margin:-6px 0 14px;padding:10px 12px;background:#f7faf8;border-radius:8px;color:var(--muted);font-size:12px;line-height:1.6}.linked-doc{font-size:12px}.gap-doc-select{width:100%}.replay-cell{display:flex;flex-direction:column;gap:3px}.replay-meta{font-size:11px;color:var(--muted)}.replay-excerpt{margin:2px 0 0;font-size:11px;color:#52635d;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.muted{color:var(--muted);font-size:12px}.doc-detail{padding:0 4px}.doc-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:0 0 18px}.doc-meta div{display:flex;gap:8px;font-size:12px}.doc-meta dt{color:var(--muted);flex-shrink:0}.doc-meta dd{margin:0}.wrap{word-break:break-all}.doc-detail h4{margin:18px 0 10px;font-size:14px}.chunk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.chunk-controls{display:flex;align-items:center;gap:8px}.page-filter{width:110px}.chunk-range{font-size:11px;color:var(--muted)}.chunk-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}.chunk-list li{padding:12px;background:#f7faf8;border-radius:8px}.chunk-head-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}.chunk-index{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}.chunk-text{margin:0;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word}@media(max-width:1250px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column{grid-template-columns:1fr}.doc-meta{grid-template-columns:1fr}}
+.ai-config-panel{margin-bottom:18px}.ai-config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}.ai-config-actions{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-top:12px;border-top:1px solid #edf1ef}.ai-config-actions>span{color:var(--muted);font-size:12px;line-height:1.6}
 /* 640px 以下：概览卡与成本卡退成单列（原 cost-grid 三列在任何宽度都没有断点），
    section-head 的标题与按钮改上下排，上传行的固定 140px 型号选择器改整行。 */
 @media(max-width:640px){.overview-grid,.cost-grid{grid-template-columns:minmax(0,1fr)}.section-panel{padding:16px 14px}.section-head{flex-direction:column;gap:12px}.section-actions,.section-head-actions{flex-wrap:wrap}.upload-row{flex-direction:column}.upload-model,.filter-select{width:100%}.chunk-head{gap:8px}.chunk-controls{flex-wrap:wrap}}
+@media(max-width:640px){.ai-config-grid{grid-template-columns:minmax(0,1fr)}.ai-config-actions{align-items:flex-start;flex-direction:column}}
 </style>

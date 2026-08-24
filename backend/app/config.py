@@ -190,10 +190,14 @@ class Settings(BaseSettings):
             return self
         if self.registration_mode == "open":
             raise ValueError("ROBOTCARE_REGISTRATION_MODE must not be open in production")
-        if not (self.dashscope_api_key or "").strip():
+        if not (
+            (self.dashscope_api_key or "").strip()
+            or (self.ai_config_encryption_key or "").strip()
+        ):
             raise ValueError(
-                "ROBOTCARE_DASHSCOPE_API_KEY is required in production; "
-                "knowledge capability must not start silently disabled"
+                "ROBOTCARE_DASHSCOPE_API_KEY or ROBOTCARE_AI_CONFIG_ENCRYPTION_KEY "
+                "is required in production; the latter permits administrator bootstrap "
+                "while /ready remains not_ready until provider credentials are saved"
             )
         if self.dashscope_base_url and not self.dashscope_base_url.startswith("https://"):
             raise ValueError("ROBOTCARE_DASHSCOPE_BASE_URL must use HTTPS in production")

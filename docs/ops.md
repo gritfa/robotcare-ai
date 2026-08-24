@@ -11,6 +11,7 @@ ROBOTCARE_AI_CONFIG_ENCRYPTION_KEY=<Fernet.generate_key() 生成的值>
 ```
 
 - 该密钥只能存放在服务器密钥管理或未纳入 Git 的 `.env` 中，不得复用 JWT 密钥。
+- 全新生产部署可只配置该加密主密钥后启动后台，再由管理员录入 Provider 凭据；在凭据保存并启用前，业务 `/ready` 会保持 `not_ready`，不会把缺少模型能力伪装成可用。
 - API Key 加密后保存到 `ai_provider_configs`；读取接口只返回 `*_key_configured` 布尔值，不返回明文或密文。
 - 输入框留空表示保留原密钥；勾选「向量服务复用生成 Key」时不会复制明文到浏览器。
 - 一键停用会立即把当前进程的生成/向量 Provider 替换为禁用实现并清空检索缓存；一键启用会按已保存配置（缺失时回退环境变量）重建 Provider，无需重启。

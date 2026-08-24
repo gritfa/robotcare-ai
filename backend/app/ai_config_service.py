@@ -201,12 +201,18 @@ def build_runtime_providers(config: EffectiveAIConfig, settings):
 
 def apply_runtime_config(application, db: Session, settings) -> EffectiveAIConfig:
     config = effective_config(db, settings)
+    reachability = getattr(application.state, "embedding_reachability", None)
+    if reachability is not None:
+        reachability.clear()
     if not config.enabled:
         application.state.embedding_provider = DisabledEmbeddingProvider()
         application.state.generation_provider = DisabledGenerationProvider()
         application.state.embedding_configured = False
         application.state.generation_configured = False
         application.state.ai_runtime_ready = False
+        cache = getattr(application.state, "knowledge_search_cache", None)
+        if cache is not None:
+            cache.clear()
         return config
     embedding_provider, generation_provider = build_runtime_providers(config, settings)
     application.state.embedding_provider = embedding_provider

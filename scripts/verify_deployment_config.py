@@ -127,6 +127,11 @@ def main() -> None:
         backend_env["ROBOTCARE_DASHSCOPE_API_KEY"] == "${ROBOTCARE_DASHSCOPE_API_KEY:-}",
         "DashScope key must be injected externally",
     )
+    require(
+        backend_env["ROBOTCARE_AI_CONFIG_ENCRYPTION_KEY"]
+        == "${ROBOTCARE_AI_CONFIG_ENCRYPTION_KEY:-}",
+        "AI configuration encryption key must be injected externally",
+    )
     require(backend_env["ROBOTCARE_AUTO_CREATE_SCHEMA"] == "false", "Alembic must own schema")
     require(
         backend_env["ROBOTCARE_ENVIRONMENT"] == "${ROBOTCARE_ENVIRONMENT:-production}",

@@ -76,6 +76,16 @@ def test_admin_can_disable_and_enable_runtime_without_restart(client, monkeypatc
     )
     assert saved.status_code == 200, saved.text
 
+    class ReachabilityProbe:
+        def __init__(self):
+            self.clear_calls = 0
+
+        def clear(self):
+            self.clear_calls += 1
+
+    probe = ReachabilityProbe()
+    client.app.state.embedding_reachability = probe
+
     disabled = client.patch(
         "/api/v1/admin/ai-config/status",
         headers=auth(token),
@@ -85,6 +95,7 @@ def test_admin_can_disable_and_enable_runtime_without_restart(client, monkeypatc
     assert disabled.json()["enabled"] is False
     assert disabled.json()["runtime_ready"] is False
     assert client.app.state.generation_provider.model_name == "disabled"
+    assert probe.clear_calls == 1
 
     enabled = client.patch(
         "/api/v1/admin/ai-config/status",
@@ -95,6 +106,7 @@ def test_admin_can_disable_and_enable_runtime_without_restart(client, monkeypatc
     assert enabled.json()["enabled"] is True
     assert enabled.json()["runtime_ready"] is True
     assert client.app.state.generation_provider.model_name == "qwen3.7-max"
+    assert probe.clear_calls == 2
 
 
 def test_ai_config_rejects_private_or_non_https_base_urls(client, monkeypatch):

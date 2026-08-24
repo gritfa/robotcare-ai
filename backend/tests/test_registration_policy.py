@@ -112,8 +112,8 @@ def test_production_rejects_open_registration():
         )
 
 
-def test_production_rejects_missing_embedding_configuration():
-    with pytest.raises(ValidationError, match="DASHSCOPE_API_KEY"):
+def test_production_rejects_missing_embedding_and_admin_bootstrap_configuration():
+    with pytest.raises(ValidationError, match="DASHSCOPE_API_KEY or ROBOTCARE_AI_CONFIG_ENCRYPTION_KEY"):
         Settings(
             environment="production",
             jwt_secret="s" * 40,
@@ -121,6 +121,19 @@ def test_production_rejects_missing_embedding_configuration():
             dashscope_api_key=None,
             _env_file=None,
         )
+
+
+def test_production_accepts_admin_ai_configuration_bootstrap():
+    settings = Settings(
+        environment="production",
+        jwt_secret="s" * 40,
+        registration_mode="closed",
+        dashscope_api_key=None,
+        ai_config_encryption_key="server-side-fernet-key-is-validated-when-used",
+        _env_file=None,
+    )
+
+    assert settings.dashscope_api_key is None
 
 
 def test_production_rejects_insecure_dashscope_base_url():

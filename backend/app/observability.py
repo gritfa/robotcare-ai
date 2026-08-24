@@ -259,6 +259,13 @@ class EmbeddingReachability:
         ttl = self.success_ttl_seconds if self._reachable else self.failure_ttl_seconds
         return (now - self._checked_at) < ttl
 
+    def clear(self) -> None:
+        """Discard a result after the administrator replaces or toggles providers."""
+        with self._lock:
+            self._checked_at = None
+            self._reachable = False
+            self._error_type = None
+
     def check(self, provider: Any) -> tuple[bool, str | None]:
         now = monotonic()
         with self._lock:

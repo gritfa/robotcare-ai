@@ -30,7 +30,7 @@ def test_admin_can_save_encrypted_keys_and_never_read_them_back(client, monkeypa
     _enable_encryption(monkeypatch)
     token = make_admin(client, "ai-config-admin@example.com")
     response = client.put(
-        "/api/v1/admin/ai-config",
+        "https://testserver/api/v1/admin/ai-config",
         headers=auth(token),
         json={
             "llm_backend": "openai-compat",
@@ -63,7 +63,7 @@ def test_admin_can_disable_and_enable_runtime_without_restart(client, monkeypatc
     _enable_encryption(monkeypatch)
     token = make_admin(client, "ai-toggle-admin@example.com")
     saved = client.put(
-        "/api/v1/admin/ai-config",
+        "https://testserver/api/v1/admin/ai-config",
         headers=auth(token),
         json={
             "llm_backend": "openai-compat",
@@ -114,7 +114,7 @@ def test_ai_config_rejects_private_or_non_https_base_urls(client, monkeypatch):
     token = make_admin(client, "ai-url-admin@example.com")
     for base_url in ("http://model.example.com/v1", "https://127.0.0.1/v1"):
         response = client.put(
-            "/api/v1/admin/ai-config",
+            "https://testserver/api/v1/admin/ai-config",
             headers=auth(token),
             json={
                 "llm_backend": "openai-compat",
@@ -153,7 +153,7 @@ def test_connection_test_uses_saved_config_and_writes_no_secret(monkeypatch, cli
     _enable_encryption(monkeypatch)
     token = make_admin(client, "ai-test-admin@example.com")
     saved = client.put(
-        "/api/v1/admin/ai-config",
+        "https://testserver/api/v1/admin/ai-config",
         headers=auth(token),
         json={
             "llm_backend": "dashscope",

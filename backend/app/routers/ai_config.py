@@ -35,14 +35,27 @@ def _secure_secret_transport(request: Request, settings) -> bool:
         return True
     peer = request.client.host if request.client is not None else ""
     try:
+        peer_address = ip_address(peer)
         trusted_peer = any(
-            ip_address(peer) in network for network in settings.trusted_proxy_networks
+            peer_address in network for network in settings.trusted_proxy_networks
         )
+        peer_is_loopback = peer_address.is_loopback
     except ValueError:
         trusted_peer = False
+        peer_is_loopback = False
     # Only a configured trusted reverse proxy may assert the original scheme.
     # Reject comma-separated or ambiguous values instead of guessing.
-    return trusted_peer and request.headers.get("x-forwarded-proto", "").strip().lower() == "https"
+    if trusted_peer and request.headers.get("x-forwarded-proto", "").strip().lower() == "https":
+        return True
+    # Permit direct loopback HTTP only for local development. A reverse-proxied
+    # public request carries X-Forwarded-For, even when nginx itself is loopback.
+    hostname = (request.url.hostname or "").lower()
+    return bool(
+        settings.environment.strip().lower() != "production"
+        and not request.headers.get("x-forwarded-for")
+        and hostname in {"localhost", "127.0.0.1", "::1"}
+        and peer_is_loopback
+    )
 
 
 def _audit(db: Session, admin: User, action: str, details: dict[str, object]) -> None:
@@ -85,14 +98,10 @@ def update_ai_config(
         secret is not None and bool(secret.get_secret_value().strip())
         for secret in (payload.generation_api_key, payload.embedding_api_key)
     )
-    if (
-        settings.environment.strip().lower() == "production"
-        and submits_secret
-        and not _secure_secret_transport(request, settings)
-    ):
+    if submits_secret and not _secure_secret_transport(request, settings):
         raise HTTPException(
             status_code=403,
-            detail="生产环境只允许通过 HTTPS 提交 API Key",
+            detail="只允许通过 HTTPS 提交 API Key",
         )
     try:
         row = save_config(db, payload, settings, admin_id=admin.id)

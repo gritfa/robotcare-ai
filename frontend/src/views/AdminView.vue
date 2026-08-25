@@ -495,11 +495,13 @@ async function testAIConnection() {
 }
 
 onMounted(async () => {
-  await dashboard.load()
-  await dashboard.loadFeedback()
-  await dashboard.loadConversations()
-  await console_.loadDocuments()
-  await loadAIConfig()
+  await Promise.all([
+    dashboard.load(),
+    dashboard.loadFeedback(),
+    dashboard.loadConversations(),
+    console_.loadDocuments(),
+    loadAIConfig(),
+  ])
 })
 </script>
 
